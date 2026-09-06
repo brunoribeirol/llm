@@ -1,0 +1,30 @@
+{
+  "description": "Agent Workspace deterministic safety and lifecycle hooks.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/runtime/agent_workspace.py\"",
+            "timeout": 5,
+            "statusMessage": "Classifying task risk"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/runtime/agent_workspace.py\"",
+            "timeout": 5,
+            "statusMessage": "Checking workspace safety policy"
+          }
+        ]
+      }
+    ]
+  }
+}
