@@ -6,12 +6,17 @@ What this project is for and who it serves. Fill in once; agents load this when 
 
 ## Goal
 
-<one paragraph: what problem this solves and for whom>
+Personal study workspace for the course *Grandes Modelos de Linguagem* (CESAR, 2026.2). It keeps
+the course material organized, turns each lesson into an explanatory HTML study page under
+`study/`, mirrors the professor's portal for offline use, and supports graded work. The standing
+expectation: whenever new lesson material arrives, produce or update its study page.
 
 ## Non-goals
 
-<what this project explicitly does not try to do>
+- Writing graded answers. Assessments are individual: explain, quiz and review, never ghostwrite.
+- Redistributing the professor's material. The repository stays private.
+- Becoming an application: no backend, no build step, no dependencies beyond the standard library.
 
 ## Primary users
 
-<internal team / external customers / public -- see .agents/state/risk-answers.json>
+One student (the repository owner).
