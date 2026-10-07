@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aula 6 · Self-attention</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="assets/study.css">
+<style>
+  .heat td.w { text-align: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+  .heat td.blocked { color: var(--muted); }
+  .heat td.sum { font-family: var(--font-mono); text-align: right; }
+  .heat td.bad { color: var(--bad); font-weight: 500; }
+</style>
+</head>
+<body data-lesson="aula-06">
+<main class="page">
+
+<header class="masthead">
+  <div class="chips"><a href="index.html">caderno</a><span>aula</span><span>06</span><span>self</span><span>attention</span><span>AV1 · casos 6 e 7</span></div>
+  <h1>Transformer I: self-attention e a arquitetura</h1>
+  <p class="lede">“O banco do rio estava cheio” e “O banco do centro estava fechado”: o vetor inicial de “banco” é o mesmo nas duas frases. Esta aula mostra a operação que faz o contexto entrar no cálculo, e o que precisa ser bloqueado para que um modelo aprenda a prever o próximo token sem ver a resposta.</p>
+  <p class="meta">leitura: 35 min · fontes: slides <a href="../class/slides/aula06.pdf">aula06.pdf</a> (23 p.), o <a href="../class/notebooks/aula06.ipynb">notebook da aula</a>, o <a href="../reference/portal_gml_262/docs/aula-06/index.html">guia do portal</a> e a <a href="../reference/portal_gml_262/docs/aula-06/transformer-arquitetura-estudante.html">arquitetura interativa do professor</a> · os números de slide são as páginas do PDF; a numeração impressa nos slides é duas a menos (três no apêndice)</p>
+  <ul class="toc">
+    <li><a href="#resumo">Resumo</a></li>
+    <li><a href="#ideia">A ideia</a></li>
+    <li><a href="#qkv">Q, K, V</a></li>
+    <li><a href="#formula">A fórmula</a></li>
+    <li><a href="#mascara">Máscara causal</a></li>
+    <li><a href="#multihead">Multi-head</a></li>
+    <li><a href="#custo">Custo</a></li>
+    <li><a href="#arquitetura">Arquitetura</a></li>
+    <li><a href="#autoteste">Autoteste</a></li>
+    <li><a href="#av1">Ponte para a AV1</a></li>
+  </ul>
+</header>
+
+<section class="block" id="resumo">
+  <h2>A aula em um minuto</h2>
+  <ul>
+    <li>Self-attention recalcula a representação de cada token como uma <strong>média ponderada</strong> dos conteúdos da própria sequência. Os pesos são calculados a partir da entrada.</li>
+    <li>Q, K e V são três projeções da <strong>mesma entrada</strong>. Q e K calculam os pesos; V fornece o conteúdo que é combinado.</li>
+    <li>A fórmula tem quatro passos: comparar, ajustar a escala, normalizar, combinar.</li>
+    <li>A <strong>máscara causal</strong> bloqueia as posições futuras <em>antes</em> do softmax. Sem ela, um modelo treinado para prever o próximo token consulta a resposta.</li>
+    <li>Várias cabeças calculam combinações diferentes em paralelo. Isso não quer dizer que cada cabeça tenha uma tarefa definida.</li>
+    <li>O preço do acesso direto é a matriz de atenção: dobrar o contexto quadruplica o número de entradas.</li>
+    <li>Sem máscara e sem informação de posição, a self-attention não distingue a ordem das palavras.</li>
+  </ul>
+  <p class="keyidea">A fórmula compara os tokens, calcula os pesos e combina os conteúdos.</p>
+  <p><span class="src">Aula 6 · slide 7</span></p>
+</section>
+
+<section class="block" id="ideia">
+  <h2>A ideia: uma ligação direta entre posições</h2>
+  <p>O problema de partida é o da Aula 3. O vetor de “banco” que sai da tabela de embeddings é idêntico nas duas frases; o contexto precisa entrar no cálculo de uma nova representação. <span class="src">Aula 6 · slide 3</span></p>
+  <p>A RNN já fazia isso, passo a passo: para a informação da posição 1 chegar à posição 50 são 49 atualizações. Na self-attention, uma posição consulta qualquer outra na mesma camada, com uma única ligação. <span class="src">Aula 6 · slide 4</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>Caminho entre duas posições</th><th>Passos sequenciais</th><th>Memória</th></tr></thead>
+      <tbody>
+        <tr><td>RNN</td><td>O(n)</td><td>O(n)</td><td>O(n)</td></tr>
+        <tr><td>Self-attention (uma camada)</td><td>O(1)</td><td>O(1)</td><td>O(n²)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><span class="src">Aula 6 · A.5 (slide 22)</span> O apêndice faz uma ressalva: O(1) descreve dependências entre posições, e não tempo de execução.</p>
+  <p>O que a operação calcula: a nova representação de “banco” é uma média ponderada dos conteúdos da sequência, por exemplo 0,6 de “rio”, 0,3 de “do”, 0,1 de “estava”. Os pesos saem da própria entrada, então outro contexto produz outra representação. O slide marca esses números como ilustrativos, e não medidos. <span class="src">Aula 6 · slide 5</span></p>
+  <p>Isso resolve a dívida que a Aula 3 deixou aberta: a representação passa a ser uma <strong>função da frase</strong>, e não uma linha de tabela.</p>
+</section>
+
+<section class="block" id="qkv">
+  <h2>Q, K, V: três papéis, uma entrada</h2>
+  <div class="formula">Q = X·W_Q        K = X·W_K        V = X·W_V</div>
+  <p>A matriz X tem uma linha por token. Três matrizes aprendidas projetam a <strong>mesma</strong> X em três versões, cada uma com um papel. <span class="src">Aula 6 · slide 6</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Papel</th><th>O que é</th><th>Onde entra</th></tr></thead>
+      <tbody>
+        <tr><td>Query (consulta)</td><td>O que esta posição está procurando</td><td>Comparação: calcula os pesos</td></tr>
+        <tr><td>Key (chave)</td><td>Como cada posição se apresenta para ser encontrada</td><td>Comparação: calcula os pesos</td></tr>
+        <tr><td>Value (valor)</td><td>O conteúdo que cada posição entrega</td><td>Combinação: é o que entra na média</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Por que as três podem sair da mesma entrada</h3>
+  <p>É isso que define <em>self</em>-attention: a sequência consulta a si mesma. Cada token aparece nos três papéis, como quem procura, como quem pode ser encontrado e como quem entrega conteúdo. Na cross-attention, em contraste, a consulta vem de uma sequência e as chaves e valores vêm de outra. <span class="src">Aula 6 · A.1 (slide 18)</span></p>
+  <p>As projeções são separadas porque os papéis são diferentes. Aprender W_Q, W_K e W_V separadamente permite que uma posição se anuncie por uma característica e entregue outra. <span class="src">Aula 5 · A.6 (slide 22)</span></p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Descrever Q, K e V como três entradas diferentes ou três tabelas. Em self-attention são três <em>vistas</em> da mesma matriz, produzidas por três projeções aprendidas.</p>
+  </div>
+</section>
+
+<section class="block" id="formula">
+  <h2>Lendo a fórmula</h2>
+  <div class="formula">Attention(Q, K, V) = softmax(Q·Kᵀ / √d_k) · V</div>
+  <p><span class="src">Aula 6 · slide 7</span> <span class="src">Aula 6 · A.1 (slide 18)</span></p>
+  <ol>
+    <li><strong>Comparar:</strong> <code>Q·Kᵀ</code> é uma matriz n × n. A entrada [i, j] é o produto escalar entre a consulta da posição i e a chave da posição j: um escore de afinidade.</li>
+    <li><strong>Ajustar a escala:</strong> dividir por <code>√d_k</code>, onde d_k é a dimensão de Q e K.</li>
+    <li><strong>Normalizar:</strong> softmax em cada linha. Os pesos ficam não negativos e somam 1 por linha.</li>
+    <li><strong>Combinar:</strong> multiplicar por V. A saída da posição i é a média dos valores, ponderada pela linha i.</li>
+  </ol>
+  <p>Dois casos-limite ajudam a ler a fórmula. Com escores iguais, os pesos viram 1/n e a saída é a média simples de todos os valores. Com um escore dominante, o peso dele vai a 1, a saída vira praticamente aquele valor, e as derivadas do softmax vão a zero.</p>
+  <h3>Por que dividir por √d_k</h3>
+  <p>O produto escalar soma d_k parcelas. Sob as hipóteses do slide (componentes independentes, média zero, variância um), a variância dessa soma é d_k, e o desvio-padrão é √d_k: 8 para d_k = 64, cerca de 22,6 para d_k = 512. <span class="src">Aula 6 · slide 8</span> <span class="src">Aula 6 · A.2 (slide 19)</span></p>
+  <p>Escores muito dispersos concentram os pesos: um perto de 1, os demais perto de 0. Nessa região saturada os pesos respondem pouco a pequenos ajustes, e o sinal de treino que chega a Q e K fica muito pequeno. Dividir por √d_k devolve os escores a uma escala parecida em qualquer dimensão.</p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Dizer que √d_k “normaliza os vetores”. Ele normaliza a escala do produto escalar, e não os vetores q e k. O slide também separa valores teóricos de medidos: as hipóteses são simplificadoras, e Q e K de uma rede treinada não precisam satisfazê-las.</p>
+  </div>
+</section>
+
+<section class="block" id="mascara">
+  <h2>Máscara causal: só o contexto disponível</h2>
+  <p>Em um modelo treinado para prever o próximo token, a saída da posição i é usada para prever o token i + 1. A máscara permite consultar o presente e o passado, e bloqueia o futuro. <span class="src">Aula 6 · slide 10</span></p>
+  <div class="formula">A = softmax(Q·Kᵀ / √d_k + M)      M[i, j] = 0 se j ≤ i,   −∞ se j &gt; i</div>
+  <p>Os escores das posições futuras recebem −∞ <strong>antes</strong> do softmax. Como exp(−∞) = 0, os pesos futuros ficam exatamente zero e cada linha continua somando 1: a massa que iria para o futuro é redistribuída entre as posições permitidas. <span class="src">Aula 6 · A.3 (slide 20)</span></p>
+  <h3>Treino e geração veem coisas diferentes</h3>
+  <p>No treino, a sequência inteira está disponível de uma vez, e todas as posições são calculadas em paralelo. Sem máscara, a posição i consegue consultar a posição i + 1, que é justamente o token que ela deveria prever. O modelo aprende a copiar, e a perda vai a quase zero. Na geração, os tokens futuros ainda não existem: o atalho some, e o que sobra é um modelo que nunca aprendeu a prever. É a situação 2 do exercício da aula: perda quase zero no treino, texto incoerente na geração, e o programa termina sem erro. <span class="src">Aula 6 · slide 15</span></p>
+
+  <div class="demo" id="mask-demo">
+    <h3>Aplique a máscara e confira as linhas</h3>
+    <div class="row">
+      <button type="button" data-mode="none" aria-pressed="false">sem máscara</button>
+      <button type="button" data-mode="before" aria-pressed="true">−∞ antes do softmax</button>
+      <button type="button" data-mode="after" aria-pressed="false">zerar depois do softmax</button>
+    </div>
+    <label for="mask-scale">Multiplicar os escores por: <output id="mask-scale-out" for="mask-scale"></output>
+      <input type="range" id="mask-scale" min="0.5" max="8" step="0.5" value="1"></label>
+    <div class="scroll">
+      <table class="heat">
+        <thead id="mask-head"></thead>
+        <tbody id="mask-body"></tbody>
+      </table>
+    </div>
+    <p class="verdict" id="mask-verdict"></p>
+  </div>
+  <p class="meta">Cada linha é uma posição calculando sua saída; cada coluna é uma posição consultada. Os escores de partida são ilustrativos, e não medidos.</p>
+
+  <div class="callout">
+    <strong>Como verificar uma implementação</strong>
+    <p>Do apêndice: zeros nas posições proibidas e soma aproximadamente 1 em cada linha. A primeira posição só pode consultar a si mesma, então o peso dela é 1. E o teste definitivo: com o dropout desativado, altere o último token e compare as saídas das posições anteriores. Elas devem permanecer iguais; qualquer diferença indica dependência do futuro.</p>
+  </div>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Zerar os pesos futuros depois do softmax. O denominador ainda inclui os escores futuros, então as linhas passam a somar menos que 1. A ordem das operações faz parte do mecanismo.</p>
+  </div>
+</section>
+
+<section class="block" id="multihead">
+  <h2>Multi-head: várias combinações em paralelo</h2>
+  <p>Um conjunto de projeções Q, K, V é uma cabeça. Na multi-head attention há vários conjuntos, calculados em paralelo; as saídas são concatenadas e passam por mais uma projeção linear. O exemplo do slide: dimensão total 512, oito cabeças de dimensão 64. <span class="src">Aula 6 · slide 11</span> <span class="src">Aula 6 · A.4 (slide 21)</span></p>
+  <p>Uma única cabeça produz um único padrão de pesos por posição. Com várias, a mesma camada pode combinar a informação de várias maneiras ao mesmo tempo: cada cabeça pode dar pesos diferentes às posições. Mantida a dimensão total, o custo das multiplicações principais é da mesma ordem que o de uma cabeça larga.</p>
+  <div class="callout trap">
+    <strong>O cuidado que a aula pede</strong>
+    <p>Isso não significa que cada cabeça receba uma tarefa definida, como “encontrar o sujeito”. Essa divisão não vem pronta. O mapa de atenção mostra pesos; se uma cabeça costuma ligar um verbo a um substantivo, isso sugere um padrão, mas concluir qual papel ela tem na resposta do modelo exige outros testes. A aula deixa essa discussão para a Aula 27.</p>
+  </div>
+</section>
+
+<section class="block" id="custo">
+  <h2>O preço: a matriz de atenção cresce com n²</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="num">Tokens (n)</th><th class="num">Entradas (n × n)</th><th class="num">A 2 bytes por entrada</th></tr></thead>
+      <tbody>
+        <tr><td class="num">2.000</td><td class="num">4 milhões</td><td class="num">≈ 8 MB</td></tr>
+        <tr><td class="num">4.000</td><td class="num">16 milhões</td><td class="num">≈ 32 MB</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Isso é por cabeça e por sequência, só para a matriz de atenção. Dobrar o contexto quadruplica o número de entradas. A memória total segue <code>lote × cabeças × n² × bytes por elemento</code>. <span class="src">Aula 6 · slide 12</span> <span class="src">Aula 6 · A.5 (slide 22)</span></p>
+  <p>O custo de cálculo de uma camada tem dois termos, os mesmos da Aula 2: projeções em O(n·d²) e atenção em O(n²·d). A atenção domina quando n é maior que d. Guardar a matriz inteira não é exigência matemática: há implementações que calculam por blocos.</p>
+</section>
+
+<section class="block" id="arquitetura">
+  <h2>Encoder, decoder e geração</h2>
+  <p><span class="src">Aula 6 · slide 13</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Bloco</th><th>Atenção que usa</th><th>Para quê</th></tr></thead>
+      <tbody>
+        <tr><td>Encoder</td><td>Self-attention sem máscara</td><td>Representar a sequência de entrada, com acesso aos dois lados</td></tr>
+        <tr><td>Decoder</td><td>Self-attention causal</td><td>Consultar a saída já produzida</td></tr>
+        <tr><td>Decoder</td><td>Cross-attention: Q do decoder, K e V do encoder</td><td>Consultar a entrada enquanto escreve</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>A cross-attention é a atenção de Bahdanau na forma nova: o decoder faz a consulta e o encoder fornece chaves e valores. Residuais, normalização e feed-forward completam o bloco e são assunto da <a href="aula-07.html">Aula 7</a>.</p>
+  <h3>Geração token a token e KV cache</h3>
+  <p>Gerar é um laço: calcular as probabilidades do próximo token, escolher um, acrescentá-lo à sequência, repetir com o contexto atualizado. Em um modelo decoder-only, prompt e continuação ficam na mesma sequência. <span class="src">Aula 6 · slide 14</span></p>
+  <p>Como a máscara causal impede que posições antigas dependam das novas, as chaves e valores já calculados não mudam quando um token é acrescentado. O <strong>KV cache</strong> guarda esses K e V para reutilizá-los, e só os do token novo são calculados. O custo de memória dessa economia é o assunto da <a href="aula-08.html">Aula 8</a>.</p>
+  <h3>A pergunta que fica: e a ordem?</h3>
+  <p>“O cachorro morde o homem” e “O homem morde o cachorro” têm a mesma coleção de tokens em outra ordem. Sem máscara e sem informação posicional, permutar a entrada só permuta a saída: nenhum valor muda, só a posição em que aparece. <span class="src">Aula 6 · slide 16</span> <span class="src">Aula 6 · A.6 (slide 23)</span></p>
+  <div class="formula">Attention(P·X) = P · Attention(X)</div>
+  <p>O mecanismo não distingue as duas frases. A RNN tinha a ordem de graça; a self-attention precisa que a posição seja injetada de fora. É a abertura da Aula 7.</p>
+</section>
+
+<section class="block" id="pratica">
+  <h2>Pratique: hipótese, verificação, resultado esperado</h2>
+  <p>As respostas abaixo são a tabela de correção do guia do professor. <span class="src">Aula 6 · slide 15</span></p>
+  <details class="q" id="p1">
+    <summary>Um modelo com d_model = 1024 tem perda de validação maior que a versão com 256, mesmos dados e mesmos passos, sem valores inválidos</summary>
+    <div class="answer">
+      <p>Hipótese: escores muito dispersos e saturação do softmax, caso a dimensão por cabeça tenha aumentado. Verificação: conferir d_k e a divisão por √d_k; comparar a dispersão dos escores e a concentração dos pesos. Se a escala estava incorreta, corrigi-la deve reduzir a concentração. Comparar também as curvas de treino e validação.</p>
+    </div>
+  </details>
+  <details class="q" id="p2">
+    <summary>Um modelo de linguagem tem perda quase zero no treino e gera texto incoerente; o programa termina sem erro</summary>
+    <div class="answer">
+      <p>Hipótese: vazamento de futuro por máscara ausente ou incorreta. Verificação: desativar o dropout e alterar o último token; as saídas anteriores devem permanecer iguais. Verificar também os pesos futuros e a soma das linhas.</p>
+    </div>
+  </details>
+  <details class="q" id="p3">
+    <summary>O contexto passa de 2.000 para 4.000 tokens, mesmo modelo e mesmo lote, e o treino excede a memória da GPU</summary>
+    <div class="answer">
+      <p>Hipótese: crescimento da matriz de atenção armazenada. Verificação: conferir o formato da matriz e a memória que ela ocupa; ao dobrar n, o número de elementos quadruplica. O consumo total da GPU inclui outras parcelas e pode crescer em outra proporção.</p>
+    </div>
+  </details>
+</section>
+
+<section class="block" id="autoteste">
+  <h2>Autoteste</h2>
+  <p>Responda antes de abrir. <span class="meta" data-quiz-progress></span></p>
+  <details class="q" id="q1">
+    <summary>Em uma frase: o que a self-attention calcula para cada token?</summary>
+    <div class="answer"><p>Uma nova representação que é a média ponderada dos conteúdos (valores) de todos os tokens da sequência, com pesos calculados a partir da própria entrada.</p><p><span class="src">Aula 6 · slide 5</span></p></div>
+  </details>
+  <details class="q" id="q2">
+    <summary>Quais das três projeções participam do cálculo dos pesos, e qual fornece o conteúdo?</summary>
+    <div class="answer"><p>Q e K calculam os pesos, pela comparação entre consulta e chave. V fornece o conteúdo que será combinado.</p><p><span class="src">Aula 6 · slide 6</span></p></div>
+  </details>
+  <details class="q" id="q3">
+    <summary>O que diferencia self-attention de cross-attention em termos de Q, K e V?</summary>
+    <div class="answer"><p>Em self-attention as três projeções partem da mesma sequência. Em cross-attention a consulta vem de uma sequência (o decoder) e as chaves e valores vêm de outra (o encoder).</p><p><span class="src">Aula 6 · slide 13</span></p></div>
+  </details>
+  <details class="q" id="q4">
+    <summary>Por que a máscara soma −∞ antes do softmax em vez de zerar os pesos depois?</summary>
+    <div class="answer"><p>Antes do softmax, os pesos futuros ficam exatamente zero e as linhas continuam somando 1. Zerando depois, o denominador ainda inclui os escores futuros e as linhas somam menos que 1.</p><p><span class="src">Aula 6 · A.3 (slide 20)</span></p></div>
+  </details>
+  <details class="q" id="q5">
+    <summary>Como testar se um modelo causal está vazando informação do futuro?</summary>
+    <div class="answer"><p>Com o dropout desativado, alterar o último token e comparar as saídas das posições anteriores. Elas não podem mudar.</p><p><span class="src">Aula 6 · A.3 (slide 20)</span></p></div>
+  </details>
+  <details class="q" id="q6">
+    <summary>O que acontece com os pesos de atenção se os escores ficam muito dispersos? Qual é a correção?</summary>
+    <div class="answer"><p>O softmax satura: um peso perto de 1, os demais perto de 0, e o gradiente por esse caminho fica muito pequeno. A divisão por √d_k compensa o crescimento da escala do produto escalar com a dimensão.</p><p><span class="src">Aula 6 · slide 8</span></p></div>
+  </details>
+  <details class="q" id="q7">
+    <summary>“A cabeça 3 da camada 2 é a cabeça que encontra o sujeito.” O que há de errado nessa afirmação?</summary>
+    <div class="answer"><p>Ela atribui uma função fixa a partir de um mapa de pesos. O mapa mostra pesos; um padrão recorrente é uma pista. Concluir o papel da cabeça na resposta do modelo exige outros testes. As cabeças não recebem tarefas prontas.</p><p><span class="src">Aula 6 · slide 11</span></p></div>
+  </details>
+  <details class="q" id="q8">
+    <summary>Dobrar o tamanho do contexto faz o quê com a matriz de atenção?</summary>
+    <div class="answer"><p>Quadruplica o número de entradas, porque a matriz é n × n. De 2.000 para 4.000 tokens: de 4 para 16 milhões de entradas por cabeça e por sequência.</p><p><span class="src">Aula 6 · slide 12</span></p></div>
+  </details>
+  <details class="q" id="q9">
+    <summary>Sem máscara e sem informação de posição, o que acontece com a saída quando a ordem dos tokens é trocada?</summary>
+    <div class="answer"><p>A saída é permutada do mesmo jeito, sem mudar nenhum valor. O mecanismo é equivariante a permutação e não distingue as duas ordens.</p><p><span class="src">Aula 6 · A.6 (slide 23)</span></p></div>
+  </details>
+</section>
+
+<section class="block" id="av1">
+  <h2>Ponte para a AV1: Caso 6</h2>
+  <p>O Caso 6 (“Bom no treinamento, ruim na geração”) descreve um modelo treinado para prever o próximo token cujas posições podiam consultar tokens posteriores. É a situação 2 do exercício desta aula, com três perguntas.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pergunta do caso</th><th>Conceito testado</th><th>Onde estudar</th></tr></thead>
+      <tbody>
+        <tr><td>1. Informação disponível no treino descrito e na geração; função da máscara</td><td>Sequência inteira disponível no treino; futuro inexistente na geração; bloqueio antes do softmax</td><td><a href="#mascara">Máscara causal</a> · slides 10, 15 e 20</td></tr>
+        <tr><td>2. Papéis de Q, K e V e por que saem da mesma entrada</td><td>Consulta, chave e valor; três projeções da mesma X; a sequência consulta a si mesma</td><td><a href="#qkv">Q, K, V</a> · slides 6 e 18; <a href="aula-05.html#qkv">Aula 5</a>, slides 13 e 22</td></tr>
+        <tr><td>3. O que múltiplas cabeças permitem representar</td><td>Combinações diferentes em paralelo; ausência de função fixa por cabeça</td><td><a href="#multihead">Multi-head</a> · slides 11 e 21</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Perguntas-guia para o seu rascunho</h3>
+  <ol>
+    <li>No treino descrito, que informação a posição i tinha à mão que não existe quando o modelo gera? O que o modelo aprendeu a fazer com ela?</li>
+    <li>Por que esse defeito produz um resultado <em>excelente</em> no treino, em vez de um erro visível?</li>
+    <li>O que exatamente a máscara altera na fórmula, e em que momento do cálculo?</li>
+    <li>Em Q, K e V, quais participam de “decidir para onde olhar” e qual participa de “o que trazer”? Por que faz sentido um mesmo token ocupar os três papéis?</li>
+    <li>O enunciado pede para não atribuir função fixa a cada cabeça. O que você pode afirmar sobre várias cabeças sem dizer o que cada uma faz?</li>
+  </ol>
+  <div class="callout exam">
+    <strong>O que a rubrica paga</strong>
+    <p>O caso tem três perguntas de natureza diferente em 100 a 180 palavras, então cada frase precisa carregar mecanismo. Na pergunta 1, o ponto que vale é ligar a causa (acesso ao futuro) ao sintoma (bom no treino, ruim na geração). Na pergunta 3, o próprio enunciado avisa onde está a generalização indevida.</p>
+  </div>
+  <p><strong>Como citar:</strong> “Aula 6 — trecho sobre máscara causal (slide 10 e Apêndice A.3)”, “Aula 6 — Q, K, V: três papéis, uma entrada (slide 6)”, “Aula 6 — multi-head (slide 11)”.</p>
+  <p><strong>Casos vizinhos:</strong> a segunda pergunta do Caso 3 (o que uma representação contextual permite) se apoia na seção <a href="#ideia">A ideia</a>. O Caso 7 parte da equivariância a permutação, no fim da seção <a href="#arquitetura">Encoder, decoder e geração</a>, e continua na <a href="aula-07.html">Aula 7</a>.</p>
+</section>
+
+<section class="block" id="glossario">
+  <h2>Glossário</h2>
+  <dl>
+    <dt>Self-attention</dt><dd>Atenção em que consultas, chaves e valores vêm da mesma sequência.</dd>
+    <dt>Query, Key, Value</dt><dd>Consulta, chave e valor: três projeções aprendidas da entrada, com papéis diferentes.</dd>
+    <dt>d_k</dt><dd>Dimensão das consultas e chaves. Aparece no fator de escala √d_k.</dd>
+    <dt>Saturação do softmax</dt><dd>Um peso perto de 1 e os demais perto de 0, com gradiente muito pequeno.</dd>
+    <dt>Máscara causal</dt><dd>Bloqueio das posições futuras, somando −∞ aos escores antes do softmax.</dd>
+    <dt>Vazamento de futuro</dt><dd>Posição consultando tokens posteriores durante o treino de um modelo causal.</dd>
+    <dt>Cabeça de atenção</dt><dd>Um conjunto de projeções Q, K, V com seu próprio padrão de pesos.</dd>
+    <dt>Cross-attention</dt><dd>Atenção em que a consulta vem do decoder e chaves e valores vêm do encoder.</dd>
+    <dt>Decoder-only</dt><dd>Modelo só com blocos de decoder causal. Prompt e continuação ficam na mesma sequência.</dd>
+    <dt>KV cache</dt><dd>Chaves e valores de tokens anteriores guardados para não serem recalculados na geração.</dd>
+    <dt>Equivariância a permutação</dt><dd>Permutar a entrada permuta a saída do mesmo jeito, sem alterar valores.</dd>
+  </dl>
+</section>
+
+<footer class="note">
+  As etiquetas “Aula N · slide X” marcam o que está no material do professor e pode ser citado. O restante é explicação escrita com apoio de IA: confira no material antes de usar em uma avaliação.
+</footer>
+
+</main>
+<script src="assets/study.js"></script>
+<script>
+// Causal mask on a toy 5-token attention matrix: no mask, -inf before softmax, or zeroing after.
+(function () {
+  const TOKENS = ["o", "gato", "dorme", "no", "sofá"];
+  const SCORES = [
+    [1.2, 0.8, 0.1, 0.3, 0.2],
+    [0.9, 1.5, 1.1, 0.2, 0.6],
+    [0.2, 1.8, 1.0, 0.4, 1.2],
+    [0.5, 0.3, 0.6, 1.0, 1.4],
+    [0.3, 0.9, 1.3, 1.1, 1.2],
+  ];
+  const $ = (id) => document.getElementById(id);
+  const scale = $("mask-scale");
+  const buttons = document.querySelectorAll("#mask-demo [data-mode]");
+  const fmt = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let mode = "before";
+
+  const headRow = document.createElement("tr");
+  [""].concat(TOKENS, ["soma"]).forEach((text) => {
+    const th = document.createElement("th");
+    th.textContent = text;
+    headRow.appendChild(th);
+  });
+  $("mask-head").appendChild(headRow);
+
+  function softmax(values) {
+    const max = Math.max(...values.filter(Number.isFinite));
+    const exps = values.map((v) => (Number.isFinite(v) ? Math.exp(v - max) : 0));
+    const total = exps.reduce((a, b) => a + b, 0);
+    return exps.map((e) => e / total);
+  }
+
+  function update() {
+    const k = Number(scale.value);
+    $("mask-scale-out").textContent = k.toLocaleString("pt-BR", { minimumFractionDigits: 1 });
+    const body = $("mask-body");
+    body.textContent = "";
+    let worstSum = 1, peak = 0;
+
+    SCORES.forEach((rowScores, i) => {
+      const scaled = rowScores.map((s) => s * k);
+      let weights;
+      if (mode === "before") {
+        weights = softmax(scaled.map((s, j) => (j > i ? -Infinity : s)));
+      } else {
+        weights = softmax(scaled);
+        if (mode === "after") weights = weights.map((w, j) => (j > i ? 0 : w));
+      }
+      const sum = weights.reduce((a, b) => a + b, 0);
+      worstSum = Math.min(worstSum, sum);
+      peak = Math.max(peak, i > 0 ? Math.max(...weights) : 0);
+
+      const row = document.createElement("tr");
+      const label = document.createElement("th");
+      label.textContent = TOKENS[i];
+      row.appendChild(label);
+      weights.forEach((w, j) => {
+        const cell = document.createElement("td");
+        const blocked = mode !== "none" && j > i;
+        cell.className = "w" + (blocked ? " blocked" : "");
+        cell.textContent = blocked ? "0" : fmt(w);
+        if (!blocked) cell.style.background = "color-mix(in srgb, var(--accent) " + Math.round(w * 70) + "%, transparent)";
+        row.appendChild(cell);
+      });
+      const total = document.createElement("td");
+      total.className = "sum" + (sum < 0.995 ? " bad" : "");
+      total.textContent = fmt(sum);
+      row.appendChild(total);
+      body.appendChild(row);
+    });
+
+    buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+    let text;
+    if (mode === "none") {
+      text = "Sem máscara, toda posição consulta todas, inclusive as que vêm depois. Em um modelo que prevê o próximo token, “gato” está consultando “dorme”, que é a resposta que ele deveria prever.";
+    } else if (mode === "before") {
+      text = "Com −∞ antes do softmax, o futuro tem peso exatamente zero e toda linha soma 1. A primeira posição só pode consultar a si mesma: peso 1.";
+    } else {
+      text = "Zerando depois do softmax, o futuro some, mas as linhas não somam mais 1 (a menor soma é " + fmt(worstSum) + "). Parte do orçamento de leitura foi jogada fora.";
+    }
+    if (peak > 0.95) text += " Com os escores nessa escala o softmax saturou: quase todo o peso de uma linha foi para uma única posição.";
+    $("mask-verdict").textContent = text;
+  }
+
+  buttons.forEach((button) => button.addEventListener("click", () => { mode = button.dataset.mode; update(); }));
+  scale.addEventListener("input", update);
+  update();
+})();
+</script>
+</body>
+</html>

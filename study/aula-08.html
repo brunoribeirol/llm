@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aula 8 · Famílias e eficiência</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="assets/study.css">
+</head>
+<body data-lesson="aula-08">
+<main class="page">
+
+<header class="masthead">
+  <div class="chips"><a href="index.html">caderno</a><span>aula</span><span>08</span><span>famílias</span><span>KV cache</span><span>AV1 · caso 8</span></div>
+  <h1>Famílias de modelos e atenção eficiente</h1>
+  <p class="lede">Três chamados na mesma semana, nenhum com erro no log. O serviço atende 10 usuários e estoura com 40. Um classificador de 2019 foi trocado por um LLM e a fatura multiplicou. A janela anunciada não é a janela útil. Os três se resolvem com duas contas: quem pode ler quem, e quanto o rascunho custa.</p>
+  <p class="meta">leitura: 35 min · fonte: <a href="../reference/portal_gml_262/docs/aula-08/index.html">guia de estudo do portal</a> · o PDF dos slides desta aula ainda não está em <span class="mono">class/slides/</span>; os números de slide abaixo são os do guia e devem ser conferidos quando o PDF chegar</p>
+  <ul class="toc">
+    <li><a href="#resumo">Resumo</a></li>
+    <li><a href="#mascara">A máscara é a arquitetura</a></li>
+    <li><a href="#familias">Três famílias</a></li>
+    <li><a href="#kvcache">KV cache</a></li>
+    <li><a href="#janelas">Atenção em janelas</a></li>
+    <li><a href="#gqa">MQA e GQA</a></li>
+    <li><a href="#destilacao">Destilação</a></li>
+    <li><a href="#alvos">Três propostas, três alvos</a></li>
+    <li><a href="#autoteste">Autoteste</a></li>
+    <li><a href="#av1">Ponte para a AV1</a></li>
+  </ul>
+</header>
+
+<section class="block" id="resumo">
+  <h2>A aula em um minuto</h2>
+  <ul>
+    <li>O mesmo bloco da Aula 7 vira três famílias trocando uma coisa só: <strong>quem pode ler quem</strong>. A máscara determina o objetivo de treino possível.</li>
+    <li><strong>Encoder-only</strong> lê dos dois lados e entrega rótulo, vetor ou escore em uma passada. Não gera.</li>
+    <li><strong>Decoder-only</strong> usa máscara causal, treina prevendo o próximo token em todas as posições e gera de forma nativa. Cada token gerado é uma passada pela pilha.</li>
+    <li><strong>Encoder-decoder</strong> lê uma entrada completa e escreve uma sequência nova, consultando a entrada por cross-attention.</li>
+    <li>Na geração, o <strong>KV cache</strong> troca computação por memória. Os pesos são constantes; o cache cresce com o contexto <em>e</em> com o número de conversas simultâneas.</li>
+    <li>Três formas de reduzir custo atacam alvos diferentes: compartilhar K/V entre cabeças (memória do cache), atenção em janelas (pares comparados), destilação (tamanho do modelo).</li>
+  </ul>
+  <p class="keyidea">O que estoura a GPU em serviço não é o peso do modelo. É o rascunho.</p>
+  <p><span class="src">Aula 8 · guia do portal, slide 8</span></p>
+</section>
+
+<section class="block" id="mascara">
+  <h2>A máscara é a arquitetura</h2>
+  <p>O time do segundo chamado comparou datas: trocou um classificador de 2019 por um LLM de 2024. Data não decide arquitetura. O que decide é o que muda quando se pega o bloco da Aula 7 e se troca uma única coisa. <span class="src">Aula 8 · guia do portal, slide 2</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Quem pode ler quem</th><th>Nome</th></tr></thead>
+      <tbody>
+        <tr><td>Máscara nenhuma: toda posição consulta todas, passado e futuro</td><td>Bidirecional, o encoder</td></tr>
+        <tr><td>Máscara causal: cada posição só consulta o próprio passado</td><td>O decoder</td></tr>
+        <tr><td>As duas, em duas pilhas ligadas por cross-attention</td><td>Encoder-decoder</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>A máscara não é um detalhe de implementação: ela <strong>determina o objetivo de treino possível</strong>. Se toda posição vê o futuro, não dá para treinar prevendo o próximo token, porque a resposta está na entrada. O modelo aprende a copiar, a perda vai a zero e nada de linguagem é aprendido. Máscara e função de perda são um pacote.</p>
+  <p>Daí sai a pergunta certa para escolher um modelo. Não é “qual é mais novo”. É: <strong>essa tarefa precisa gerar texto ou precisa devolver um rótulo?</strong> A resposta escolhe a máscara, e a máscara escolhe a família.</p>
+</section>
+
+<section class="block" id="familias">
+  <h2>Três famílias</h2>
+  <h3>Encoder-only: ler dos dois lados</h3>
+  <p>Com atenção bidirecional, prever o próximo token seria trapaça. A solução do BERT (2018) é o <em>masked language modeling</em>: mascarar cerca de 15% dos tokens e treinar o modelo para prever cada um deles usando o contexto dos dois lados. <span class="src">Aula 8 · guia do portal, slide 3</span></p>
+  <p>Isso fecha o laço do “banco”, aberto na Aula 3. A Aula 6 mostrou o mecanismo que faz a representação depender do contexto; o BERT montou o objetivo de treino que força esse mecanismo a aprender isso, dos dois lados, em bilhões de frases.</p>
+  <p>Para obter um rótulo da frase inteira, usa-se o vetor de saída do token <code>[CLS]</code>, colocado na posição zero. Ele não é uma posição privilegiada por natureza: foi treinado para agregar informação da sequência. No <strong>fine-tuning</strong>, o corpo pré-treinado, que é caro, é um só; troca-se apenas a cabeça: linear sobre o <code>[CLS]</code> para classificar a sequência, linear por posição para rotular tokens, sobre um par de sentenças para similaridade. <span class="src">Aula 8 · guia do portal, slide 4</span></p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Dizer que o encoder não gera “porque não foi treinado para isso”. A razão é mais forte: o objetivo de lacunas não define uma probabilidade para a sequência inteira. A perda causal é exatamente a verossimilhança da sequência, decomposta token a token, e gerar é ler essa decomposição da esquerda para a direita. O objetivo de lacunas não tem essa decomposição.</p>
+  </div>
+  <p>Por que alguém ainda usa um encoder pequeno: aritmética. Ele faz <strong>uma passada</strong> pela sequência e devolve o rótulo. Um decoder-only precisa <strong>gerar tokens</strong> para dizer a mesma coisa, e cada token é uma passada pela pilha inteira. Uma passada contra k passadas. Em dez milhões de documentos por dia, é a diferença entre uma máquina e um cluster.</p>
+  <h3>Encoder-decoder: entrada e saída são objetos diferentes</h3>
+  <p>Há tarefas em que a entrada está inteira e disponível, e a saída é uma sequência nova, de outro tamanho: tradução e sumarização. A montagem natural são duas pilhas: um encoder que lê a entrada sem máscara e um decoder que gera com máscara causal e consulta o encoder por cross-attention. <span class="src">Aula 8 · guia do portal, slide 6</span></p>
+  <p>A cross-attention é o mecanismo de Bahdanau da Aula 5, absorvido: as consultas vêm do decoder, as chaves e os valores vêm do encoder. O custo dessa família são duas pilhas e um objetivo de pré-treino montado de propósito. O argumento que a enfraqueceu é que tradução também pode ser feita com uma pilha só, colocando original e tradução na mesma sequência.</p>
+  <h3>Decoder-only: por que prever o próximo token venceu</h3>
+  <p>Máscara causal, uma pilha, um objetivo. Os cinco argumentos da aula, nenhum deles “essa arquitetura é mais inteligente”: <span class="src">Aula 8 · guia do portal, slide 7</span></p>
+  <ol>
+    <li><strong>Rótulo grátis:</strong> o rótulo de cada posição é o próprio texto. Todo texto cru vira dado de treino.</li>
+    <li><strong>Sinal denso:</strong> o objetivo de lacunas treina em 15% das posições; o causal treina em 100%. São cerca de 6,7 vezes mais predições por token lido.</li>
+    <li><strong>Simplicidade operacional:</strong> uma pilha, um objetivo, uma máscara.</li>
+    <li><strong>Prompting unifica as tarefas:</strong> classificar é gerar a palavra do rótulo, extrair é gerar JSON. É a tese da Aula 1.</li>
+    <li><strong>Geração é nativa.</strong></li>
+  </ol>
+  <div class="callout">
+    <strong>O alerta que separa quem entendeu de quem decorou</strong>
+    <p>“Venceu” quer dizer venceu como <em>plataforma geral</em>. Não quer dizer melhor em tudo. Por rótulo entregue e por milissegundo de latência, um encoder pequeno continua ganhando.</p>
+  </div>
+  <h3>O mapa consolidado</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Família</th><th>Máscara</th><th>Objetivo de pré-treino</th><th>O que entrega bem</th></tr></thead>
+      <tbody>
+        <tr><td>Encoder-only</td><td>Nenhuma</td><td>Prever tokens mascarados</td><td>Rótulo, vetor ou escore de par</td></tr>
+        <tr><td>Encoder-decoder</td><td>Bidirecional de um lado, causal do outro, cross-attention no meio</td><td>Reconstrução</td><td>Sequência transformada a partir de uma entrada completa</td></tr>
+        <tr><td>Decoder-only</td><td>Causal</td><td>Próximo token, em 100% das posições</td><td>Geração; interface única para várias tarefas</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Nenhuma coluna dessa tabela é o ano do modelo. <span class="src">Aula 8 · guia do portal, slide 12</span></p>
+</section>
+
+<section class="block" id="kvcache">
+  <h2>O preço da janela: o KV cache em números</h2>
+  <p>Na geração token a token, produzir o token n + 1 exige as chaves e os valores das n posições anteriores. Como a máscara é causal, o passado não vê o futuro, e o que foi calculado continua valendo. Recalcular tudo a cada token é desperdício. Guardar é o KV cache: uma troca de <strong>computação por memória</strong>. <span class="src">Aula 8 · guia do portal, slide 8</span></p>
+  <div class="formula">cache por token = 2 × camadas × cabeças de K/V × dimensão por cabeça × bytes por valor</div>
+  <p>O 2 vem de guardar K e V. No decoder hipotético da aula (32 camadas, 32 cabeças, dimensão 128 por cabeça, meia precisão) isso dá meio mebibyte por token. Uma conversa de 8 mil tokens custa 4 GiB de cache, <strong>por conversa</strong>.</p>
+
+  <div class="demo" id="kv-demo">
+    <h3>Quantas conversas cabem</h3>
+    <div class="row">
+      <button type="button" data-kv="32" aria-pressed="true">32 cabeças de K/V (cheio)</button>
+      <button type="button" data-kv="8" aria-pressed="false">8 (GQA)</button>
+      <button type="button" data-kv="1" aria-pressed="false">1 (MQA)</button>
+    </div>
+    <div class="grid">
+      <label for="kv-ctx">Tokens por conversa: <output id="kv-ctx-out" for="kv-ctx"></output>
+        <input type="range" id="kv-ctx" min="1024" max="32768" step="1024" value="8192"></label>
+      <label for="kv-users">Conversas simultâneas: <output id="kv-users-out" for="kv-users"></output>
+        <input type="range" id="kv-users" min="1" max="100" step="1" value="10"></label>
+    </div>
+    <div class="grid">
+      <div class="stat">cache por token <b id="kv-token"></b></div>
+      <div class="stat">cache por conversa <b id="kv-conv"></b></div>
+      <div class="stat">cache total <b id="kv-total"></b></div>
+      <div class="stat">pesos do modelo <b>14 GiB</b></div>
+    </div>
+    <div class="stack">
+      <p class="meta">Faixa: cache total em relação aos cerca de 60 GiB que sobram para cache em uma GPU de 80 GiB (traço vermelho).</p>
+      <div class="bar" role="img" aria-label="Cache total comparado ao espaço disponível"><div class="fill" id="kv-bar"></div><div class="mark" id="kv-limit"></div></div>
+    </div>
+    <p class="verdict" id="kv-verdict"></p>
+  </div>
+  <p class="meta">Decoder hipotético da aula: 32 camadas, dimensão 128 por cabeça, 2 bytes por valor. Pesos de um modelo de 7 bilhões de parâmetros em meia precisão: 14 GiB, constantes.</p>
+
+  <p>O primeiro chamado, com aritmética: 10 conversas pedem 40 GiB; 40 conversas pedem 160 GiB. Descontados os pesos e a folga de ativações, sobram da ordem de 60 GiB. Quarenta cabem; cento e sessenta não, por um fator de quase três. Entre 10 e 40 usuários <strong>nada mudou no modelo</strong>. Mudou o que ele precisa guardar.</p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Procurar a causa nos pesos ou em um deploy recente. Os pesos são constantes. O cache é linear no contexto e no número de conversas simultâneas, e por isso o sintoma aparece de repente: o cache não degrada devagar, ele estoura.</p>
+  </div>
+</section>
+
+<section class="block" id="janelas">
+  <h2>Atenção em janelas</h2>
+  <p>A atenção plena é quadrática no comprimento. Com 32 mil tokens são mais de um bilhão de pares de posições, por cabeça e por camada. A ideia do Longformer: cada posição consulta só uma janela de largura w em torno de si. O custo cai de n² para n·w. Com janela de 512, são 16,8 milhões de pares, 64 vezes menos. <span class="src">Aula 8 · guia do portal, slide 9</span></p>
+  <p>E a dependência longa, que foi o motivo de a atenção existir? Dois caminhos.</p>
+  <ul>
+    <li><strong>Profundidade:</strong> a informação caminha meia janela para cada lado a cada camada. Com 12 camadas e janela de 512, o alcance é da ordem de 3 mil posições, 9% da sequência. Para ligar a primeira posição à última só com profundidade seriam necessárias 128 camadas. A profundidade recupera alcance médio, e não de ponta a ponta.</li>
+    <li><strong>Atenção global em poucos tokens:</strong> alguns tokens leem tudo e são lidos por todos (o token de classificação, os tokens da pergunta, títulos de seção). Com oito tokens globais o custo sobe 3%, e qualquer par de posições passa a ter um caminho de duas camadas.</li>
+  </ul>
+  <div class="callout trap">
+    <strong>O preço</strong>
+    <p>Escolher <em>onde</em> vai a atenção global é decisão de projeto, por tarefa. Se a escolha for errada, perde-se exatamente a dependência que importava, e o modelo não avisa.</p>
+  </div>
+</section>
+
+<section class="block" id="gqa">
+  <h2>MQA e GQA: compartilhar K/V entre cabeças</h2>
+  <p>O cache é proporcional ao número de cabeças de <strong>chave e valor</strong>. As cabeças de consulta precisam ser muitas, porque cada uma faz uma pergunta diferente. Mas as chaves e os valores precisam ser um conjunto por cabeça? <span class="src">Aula 8 · guia do portal, slide 10</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Configuração</th><th>Cabeças de consulta</th><th>Cabeças de K/V</th><th class="num">Cache de 8 mil tokens</th></tr></thead>
+      <tbody>
+        <tr><td>Multi-head cheia</td><td>32</td><td>32</td><td class="num">4 GiB</td></tr>
+        <tr><td>GQA (grupos)</td><td>32</td><td>8</td><td class="num">1 GiB</td></tr>
+        <tr><td>MQA (uma só)</td><td>32</td><td>1</td><td class="num">128 MiB</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>O fator de redução é exatamente a razão entre o número de cabeças e o número de cabeças de K/V, porque os outros fatores da fórmula se cancelam.</p>
+  <p>O que <strong>não</strong> muda: as consultas continuam 32, então o número de padrões de relação por camada é o mesmo; a fórmula da atenção é a da Aula 6; o número de camadas e a dimensão do modelo continuam iguais. O que se ganha além da memória: gerar um token exige ler o cache inteiro, então um cache menor também acelera a geração.</p>
+  <div class="callout trap">
+    <strong>O preço</strong>
+    <p>Qualidade. O MQA corta mais e pode custar mais. O GQA recupera quase tudo com uma fração do cache, e por isso virou o padrão dos modelos abertos recentes. E no exercício da aula o professor fecha com a parte honesta: mesmo com GQA, a conta para mil usuários simultâneos não fecha. É a primeira alavanca, e não a solução.</p>
+  </div>
+</section>
+
+<section class="block" id="destilacao">
+  <h2>Destilação: o aluno aprende a distribuição do professor</h2>
+  <p>Como se fabrica um modelo pequeno que é bom? Uma resposta é treinar do zero em dados rotulados. A outra é usar um modelo grande, já treinado, como professor. O que se copia do professor não é o rótulo, é a <strong>distribuição</strong>. <span class="src">Aula 8 · guia do portal, slide 11</span></p>
+  <p class="keyidea">O rótulo diz que a resposta é B. O professor diz que é B, que C era defensável e que D é absurdo, e é a segunda frase que ensina.</p>
+  <p>A perda combina duas partes: a entropia cruzada contra o rótulo verdadeiro e a divergência entre a distribuição do aluno e a do professor. Uma temperatura maior que 1 achata a distribuição do professor para tornar as alternativas menos prováveis mais visíveis. No exemplo da aula, com logits 5, 3, 1 e −2, a última classe tem probabilidade 0,0008 com temperatura 1 e 0,08 com temperatura 4: cem vezes mais visível, sem mudar o professor.</p>
+  <p>Onde isso aterrissa: os encoders pequenos que sustentam classificação e reranking em produção são, em boa medida, destilados. A família encoder-only continua viva <em>porque</em> dá para comprimir.</p>
+</section>
+
+<section class="block" id="alvos">
+  <h2>Três propostas, três alvos</h2>
+  <p>As três técnicas reduzem custo, mas cada uma reduz uma coisa diferente. Esta tabela reúne o que as seções anteriores dizem.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Proposta</th><th>O que tenta reduzir</th><th>O que não muda</th><th>Limitação registrada na aula</th></tr></thead>
+      <tbody>
+        <tr><td>Compartilhar K/V entre cabeças (MQA, GQA)</td><td>Memória do KV cache, e o tráfego para lê-lo</td><td>Número de consultas, fórmula da atenção, camadas, dimensão</td><td>Custa qualidade, mais no MQA; sozinha não fecha a conta de alta concorrência</td></tr>
+        <tr><td>Atenção em janelas</td><td>Número de pares comparados na atenção: de n² para n·w</td><td>O bloco em si</td><td>Alcance de ponta a ponta depende de escolher bem os tokens globais; se errar, o modelo não avisa</td></tr>
+        <tr><td>Destilação</td><td>O tamanho do modelo: um aluno menor aprende com um professor maior</td><td>O professor</td><td>A aula não lista uma limitação específica no trecho consultado</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="meta">A formulação “o que tenta reduzir” da destilação é leitura minha do slide 11 (“como se fabrica um modelo pequeno que é bom”). Confira no PDF quando ele estiver disponível.</p>
+</section>
+
+<section class="block" id="pratica">
+  <h2>Pratique: família, atenção eficiente e a conta que confirma</h2>
+  <p>Para cada cenário: a família, o que usar de atenção eficiente (ou explicitamente nada) e que conta ou medição confirma a escolha. “Porque é mais novo” desconta. O guia registra a correção dos cenários 2 e 5; as demais respostas são leitura minha a partir dos slides indicados. <span class="src">Aula 8 · guia do portal, slide 13</span></p>
+  <details class="q" id="p1">
+    <summary>Classificar dez milhões de comentários por dia em três rótulos, com latência de milissegundos</summary>
+    <div class="answer"><p>Encoder-only pequeno, sem atenção eficiente. A conta é a do slide 4: uma passada por documento contra k passadas de um decoder que precisa gerar o rótulo, multiplicada por dez milhões por dia.</p></div>
+  </details>
+  <details class="q" id="p2">
+    <summary>Busca semântica sobre quinhentos mil documentos internos, com reranking dos cinquenta primeiros</summary>
+    <div class="answer"><p>Correção do professor: são <strong>dois encoders</strong>, um para gerar os vetores da busca e outro para pontuar os pares no reranking. O assunto volta na Aula 19.</p></div>
+  </details>
+  <details class="q" id="p3">
+    <summary>Assistente que conversa, chama ferramenta e escreve código</summary>
+    <div class="answer"><p>Decoder-only: a saída é texto aberto, e geração é nativa nessa família. A conta relevante passa a ser a do KV cache por conversa.</p></div>
+  </details>
+  <details class="q" id="p4">
+    <summary>Responder perguntas sobre um contrato de oitenta páginas lido inteiro de uma vez</summary>
+    <div class="answer"><p>O ponto do cenário é o contexto longo. A conta é a do custo quadrático da atenção contra n·w com janelas, e a decisão de projeto é onde colocar a atenção global, por exemplo nos tokens da pergunta. A escolha de família depende de a resposta ser um trecho apontado ou um texto escrito.</p></div>
+  </details>
+  <details class="q" id="p5">
+    <summary>Servir um modelo de oito bilhões de parâmetros para mil usuários simultâneos, com contexto de trinta e dois mil tokens</summary>
+    <div class="answer"><p>Correção do professor: fazer a conta do KV cache com atenção cheia e depois com GQA de oito cabeças de K/V. Mesmo com GQA a conta não fecha. O restante é gerenciamento de memória de cache e agendamento de requisições, assunto da Aula 10.</p></div>
+  </details>
+</section>
+
+<section class="block" id="autoteste">
+  <h2>Autoteste</h2>
+  <p>Responda antes de abrir. <span class="meta" data-quiz-progress></span></p>
+  <details class="q" id="q1">
+    <summary>Por que a máscara “determina o objetivo de treino possível”?</summary>
+    <div class="answer"><p>Se toda posição vê o futuro, prever o próximo token é copiar a resposta da entrada. Com atenção bidirecional o objetivo precisa ser outro (prever lacunas). Máscara e função de perda são um pacote.</p><p><span class="src">Aula 8 · guia do portal, slide 2</span></p></div>
+  </details>
+  <details class="q" id="q2">
+    <summary>Qual é a pergunta que escolhe a família de modelo para uma tarefa?</summary>
+    <div class="answer"><p>A tarefa precisa gerar texto ou devolver um rótulo? A forma da saída escolhe a máscara, e a máscara escolhe a família. A data do modelo não entra.</p><p><span class="src">Aula 8 · guia do portal, slide 2</span></p></div>
+  </details>
+  <details class="q" id="q3">
+    <summary>Por que um encoder pequeno pode ser mais barato que um LLM para classificar?</summary>
+    <div class="answer"><p>Ele faz uma passada pela sequência e devolve o rótulo. Um decoder-only precisa gerar tokens, e cada token gerado é uma passada pela pilha inteira.</p><p><span class="src">Aula 8 · guia do portal, slide 4</span></p></div>
+  </details>
+  <details class="q" id="q4">
+    <summary>“Decoder-only venceu.” Venceu o quê, exatamente?</summary>
+    <div class="answer"><p>Venceu como plataforma geral: rótulo grátis, sinal denso, uma pilha, prompting que unifica tarefas, geração nativa. Não é melhor em tudo: por rótulo entregue e por latência, um encoder pequeno continua ganhando.</p><p><span class="src">Aula 8 · guia do portal, slide 7</span></p></div>
+  </details>
+  <details class="q" id="q5">
+    <summary>O serviço estoura a memória ao passar de 10 para 40 usuários, com os mesmos pesos. O que cresceu?</summary>
+    <div class="answer"><p>O KV cache. Ele guarda chaves e valores de todos os tokens de cada conversa, em todas as camadas. Cresce de forma linear com o contexto e com o número de conversas simultâneas. Os pesos são constantes.</p><p><span class="src">Aula 8 · guia do portal, slide 8</span></p></div>
+  </details>
+  <details class="q" id="q6">
+    <summary>Por que é seguro reutilizar K e V de tokens anteriores durante a geração?</summary>
+    <div class="answer"><p>Porque a máscara é causal: o passado não vê o futuro. Acrescentar um token não altera o que foi calculado para as posições anteriores.</p><p><span class="src">Aula 8 · guia do portal, slide 8</span></p></div>
+  </details>
+  <details class="q" id="q7">
+    <summary>No GQA, o que diminui e o que continua igual?</summary>
+    <div class="answer"><p>Diminui o número de cabeças de chave e valor, e com ele o cache, na razão exata entre cabeças e cabeças de K/V. Continuam iguais o número de consultas, a fórmula da atenção, as camadas e a dimensão.</p><p><span class="src">Aula 8 · guia do portal, slide 10</span></p></div>
+  </details>
+  <details class="q" id="q8">
+    <summary>A atenção em janelas reduz o quê, e qual é o risco?</summary>
+    <div class="answer"><p>Reduz o número de pares de posições comparados, de n² para n·w. O risco é perder dependências de longo alcance: a profundidade só recupera alcance médio, e os tokens de atenção global precisam ser bem escolhidos para a tarefa.</p><p><span class="src">Aula 8 · guia do portal, slide 9</span></p></div>
+  </details>
+  <details class="q" id="q9">
+    <summary>Na destilação, por que copiar a distribuição do professor ensina mais que copiar o rótulo?</summary>
+    <div class="answer"><p>A distribuição carrega informação sobre as alternativas: qual errada era defensável e qual era absurda. O rótulo só diz qual é a certa.</p><p><span class="src">Aula 8 · guia do portal, slide 11</span></p></div>
+  </details>
+</section>
+
+<section class="block" id="av1">
+  <h2>Ponte para a AV1: Caso 8</h2>
+  <p>O Caso 8 (“Escolher e sustentar o modelo”) junta os chamados um e dois: uma empresa precisa classificar mensagens em categorias fixas e oferecer um assistente de respostas abertas, e o assistente fica sem memória quando crescem as conversas simultâneas e os históricos.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pergunta do caso</th><th>Conceito testado</th><th>Onde estudar</th></tr></thead>
+      <tbody>
+        <tr><td>1. Uma família para cada tarefa, justificada pela forma de produzir a saída, com as condições declaradas</td><td>Rótulo em uma passada contra geração token a token; máscara e objetivo</td><td><a href="#mascara">A máscara é a arquitetura</a> e <a href="#familias">Três famílias</a> · slides 2, 4, 7 e 12</td></tr>
+        <tr><td>2. Como a memória aumenta sem alteração dos pesos</td><td>KV cache linear no contexto e na concorrência</td><td><a href="#kvcache">KV cache</a> · slide 8; <a href="aula-06.html#arquitetura">Aula 6</a>, slide 14</td></tr>
+        <tr><td>3. O que três propostas tentam reduzir, e uma limitação</td><td>Alvo de cada técnica: cache, pares comparados, tamanho do modelo</td><td><a href="#alvos">Três propostas, três alvos</a> · slides 9, 10 e 11</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Perguntas-guia para o seu rascunho</h3>
+  <ol>
+    <li>Qual é a forma da saída em cada uma das duas tarefas? Quantas passadas pelo modelo cada forma de saída exige?</li>
+    <li>O enunciado pede para declarar condições. Que condições tornariam a outra família uma escolha defensável para a classificação (por exemplo, volume, latência, número de sistemas a manter)?</li>
+    <li>O que exatamente fica guardado durante uma conversa, por token e por camada? Por que isso pode ser guardado em vez de recalculado?</li>
+    <li>Quais são os dois eixos do enunciado que fazem a memória crescer? O crescimento é gradual ou abrupto do ponto de vista de quem opera?</li>
+    <li>Para cada uma das três propostas: ela mexe na memória do cache, na quantidade de comparações ou no tamanho do modelo? Qual delas ataca diretamente o sintoma descrito no caso?</li>
+  </ol>
+  <div class="callout exam">
+    <strong>O que a rubrica paga</strong>
+    <p>A rubrica diz que escolhas alternativas são aceitas quando tecnicamente defensáveis e coerentes com as condições declaradas. Na pergunta 1, então, o que pontua é a justificativa pela forma da saída e as condições, e não acertar “a” família. Na pergunta 3, o risco é tratar as três propostas como sinônimos de “deixar mais leve”: o caso pede para <em>diferenciar</em> o que cada uma reduz.</p>
+  </div>
+  <p><strong>Como citar:</strong> “Aula 8 — trecho sobre o KV cache em números”, “Aula 8 — MQA e GQA”, “Aula 8 — mapa das famílias”. Enquanto o PDF dos slides não estiver com você, cite pelo tema, como o enunciado exemplifica.</p>
+  <p><strong>Variação:</strong> se você escolher o Caso 8 para a Parte 2, o enunciado sugere mudar o tipo de saída exigido ou a restrição de atendimento. As seções <a href="#familias">Três famílias</a> e <a href="#kvcache">KV cache</a> são a base para argumentar o que muda e o que permanece.</p>
+</section>
+
+<section class="block" id="glossario">
+  <h2>Glossário</h2>
+  <dl>
+    <dt>Encoder-only</dt><dd>Pilha com atenção bidirecional. Entrega representações, rótulos e escores. Exemplo: BERT.</dd>
+    <dt>Decoder-only</dt><dd>Pilha com máscara causal, treinada para prever o próximo token. Gera texto.</dd>
+    <dt>Encoder-decoder</dt><dd>Duas pilhas ligadas por cross-attention: uma lê a entrada, a outra escreve a saída.</dd>
+    <dt>MLM</dt><dd>Masked language modeling: prever tokens mascarados usando o contexto dos dois lados.</dd>
+    <dt>[CLS]</dt><dd>Token na posição zero cujo vetor de saída é usado como resumo da sequência.</dd>
+    <dt>Fine-tuning</dt><dd>Ajuste de um modelo pré-treinado para uma tarefa, trocando a cabeça de saída.</dd>
+    <dt>KV cache</dt><dd>Chaves e valores de tokens anteriores, guardados por camada, para não recalcular na geração.</dd>
+    <dt>MQA / GQA</dt><dd>Multi-query e grouped-query attention: várias cabeças de consulta compartilham uma ou poucas cabeças de K/V.</dd>
+    <dt>Atenção em janelas</dt><dd>Cada posição consulta só uma vizinhança de largura w, com alguns tokens de atenção global.</dd>
+    <dt>Destilação</dt><dd>Treino de um modelo menor (aluno) para imitar a distribuição de saída de um maior (professor).</dd>
+    <dt>Temperatura</dt><dd>Fator que achata ou afia uma distribuição antes do softmax.</dd>
+    <dt>MiB / GiB</dt><dd>Mebibyte e gibibyte: 2²⁰ e 2³⁰ bytes.</dd>
+  </dl>
+</section>
+
+<footer class="note">
+  As etiquetas “Aula N · …” marcam o que está no material do professor e pode ser citado. O restante é explicação escrita com apoio de IA: confira no material antes de usar em uma avaliação.
+</footer>
+
+</main>
+<script src="assets/study.js"></script>
+<script>
+// KV cache: 2 (K and V) x layers x KV heads x head dimension x bytes, per token, per conversation.
+(function () {
+  const LAYERS = 32, HEAD_DIM = 128, BYTES = 2, BUDGET_GIB = 60, GIB = Math.pow(2, 30), MIB = Math.pow(2, 20);
+  const $ = (id) => document.getElementById(id);
+  const context = $("kv-ctx"), users = $("kv-users");
+  const buttons = document.querySelectorAll("#kv-demo [data-kv]");
+  const fmt = (x, digits) => x.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  let kvHeads = 32;
+
+  function size(bytes) {
+    return bytes >= GIB ? fmt(bytes / GIB, 1) + " GiB" : fmt(bytes / MIB, bytes < MIB ? 3 : 0) + " MiB";
+  }
+
+  function update() {
+    const perToken = 2 * LAYERS * kvHeads * HEAD_DIM * BYTES;
+    const perConversation = perToken * Number(context.value);
+    const total = perConversation * Number(users.value);
+    const totalGib = total / GIB;
+    $("kv-ctx-out").textContent = Number(context.value).toLocaleString("pt-BR");
+    $("kv-users-out").textContent = users.value;
+    $("kv-token").textContent = size(perToken);
+    $("kv-conv").textContent = size(perConversation);
+    $("kv-total").textContent = size(total);
+    const scaleMax = Math.max(BUDGET_GIB * 3, totalGib);
+    $("kv-bar").style.width = Math.min(100, totalGib / scaleMax * 100) + "%";
+    $("kv-limit").style.left = (BUDGET_GIB / scaleMax * 100) + "%";
+    buttons.forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.kv) === kvHeads)));
+    $("kv-verdict").textContent = totalGib <= BUDGET_GIB
+      ? "Cabe: o cache ocupa " + fmt(totalGib, 1) + " GiB dos cerca de 60 disponíveis. Os pesos não mudaram e não vão mudar."
+      : "Não cabe: o cache pede " + fmt(totalGib, 1) + " GiB, " + fmt(totalGib / BUDGET_GIB, 1) + " vezes o espaço disponível. Nenhum peso mudou; só cresceu o que precisa ser guardado.";
+  }
+
+  buttons.forEach((button) => button.addEventListener("click", () => { kvHeads = Number(button.dataset.kv); update(); }));
+  [context, users].forEach((el) => el.addEventListener("input", update));
+  update();
+})();
+</script>
+</body>
+</html>

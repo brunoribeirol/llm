@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aula 1 · Tarefas e métricas</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="assets/study.css">
+</head>
+<body data-lesson="aula-01">
+<main class="page">
+
+<header class="masthead">
+  <div class="chips"><a href="index.html">caderno</a><span>aula</span><span>01</span><span>métricas</span><span>AV1 · caso 1</span></div>
+  <h1>Tarefas e métricas</h1>
+  <p class="lede">Duas frases verdadeiras que levam a decisões erradas: “o detector atingiu 99% de acurácia” e “nossa perplexidade é 4,0, melhor que o baseline de 20”. A aula inteira ensina a desconfiar de um número que chega sem denominador.</p>
+  <p class="meta">leitura: 25 min · fontes: slides <a href="../class/slides/aula01.pdf">aula01.pdf</a> (19 p.) e o <a href="../reference/portal_gml_262/docs/aula-01/index.html">guia de estudo do portal</a></p>
+  <ul class="toc">
+    <li><a href="#resumo">Resumo</a></li>
+    <li><a href="#familias">Famílias de tarefa</a></li>
+    <li><a href="#classificacao">Matriz de confusão</a></li>
+    <li><a href="#fbeta">F₁ e F_β</a></li>
+    <li><a href="#geracao">BLEU e ROUGE</a></li>
+    <li><a href="#perplexidade">Perplexidade</a></li>
+    <li><a href="#limites">Onde quebra</a></li>
+    <li><a href="#autoteste">Autoteste</a></li>
+    <li><a href="#av1">Ponte para a AV1</a></li>
+  </ul>
+</header>
+
+<section class="block" id="resumo">
+  <h2>A aula em um minuto</h2>
+  <ul>
+    <li>Uma tarefa de linguagem se define pela <strong>forma da saída</strong>: um rótulo, um rótulo por token, ou texto livre. O assunto do texto não define a família.</li>
+    <li>Quando a classe que interessa é rara, a acurácia já nasce alta. Quem não faz nada ganha <code>1 − π</code>, onde π é a prevalência da classe positiva.</li>
+    <li>Precisão e revocação dividem o mesmo numerador por coisas diferentes: o que o modelo declarou e o que existe no mundo.</li>
+    <li>F₁ junta as duas com média harmônica, que é puxada pelo menor valor. O peso entre elas (β) é decisão de produto, porque depende do custo de cada erro.</li>
+    <li>BLEU e ROUGE repetem a dupla precisão e revocação, agora contando n-gramas. Perplexidade mede indecisão por token e só compara modelos que usam o mesmo tokenizador.</li>
+    <li>Um modelo passou a resolver todas as famílias. As métricas não foram unificadas junto.</li>
+  </ul>
+  <p class="keyidea">A métrica não mentiu. Eu escolhi a métrica errada.</p>
+  <p><span class="src">Aula 1 · slide 7</span> é o título do slide e a frase que resume o bloco de métricas.</p>
+</section>
+
+<section class="block" id="panorama">
+  <h2>Por que a aula gasta 45 minutos em métricas</h2>
+  <p>O histórico mostra cinco saltos em sessenta anos, cada um trocando trabalho humano por dados e computação. <span class="src">Aula 1 · slide 3</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Quando</th><th>Ideia</th><th>Exemplo</th><th>Teto</th></tr></thead>
+      <tbody>
+        <tr><td>1966</td><td>Regras</td><td>ELIZA: padrão e reescrita</td><td>Não existe modelo de língua</td></tr>
+        <tr><td>1990–2000</td><td>Estatística</td><td>n-gramas: língua como distribuição contada</td><td>Esparsidade</td></tr>
+        <tr><td>2013</td><td>Vetores densos</td><td>Word2Vec: semântica como geometria</td><td>Vetor estático, sem contexto</td></tr>
+        <tr><td>2017</td><td>Atenção</td><td>Transformer: dependência longa e paralelismo</td><td>O mesmo mecanismo resolve os dois</td></tr>
+        <tr><td>2020</td><td>Escala e instrução</td><td>GPT-3 e o pós-treino: aprendizado em contexto</td><td>O completador vira assistente</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>O ChatGPT não foi um salto de arquitetura, já que a arquitetura é de 2017. Foi um salto de interface e de alinhamento.</p>
+  <p>O efeito prático: antes, cada tarefa pedia um modelo e um conjunto de dados rotulado. Agora um modelo atende várias tarefas trocando o prompt. Testar uma tarefa nova ficou barato, então o gargalo saiu da modelagem e foi para <strong>avaliação e engenharia de sistema</strong>. <span class="src">Aula 1 · slide 4</span></p>
+  <p>Se construir ficou fácil, saber se o que você construiu presta virou a parte difícil. Por isso as métricas vêm antes de qualquer arquitetura.</p>
+</section>
+
+<section class="block" id="familias">
+  <h2>Três famílias de tarefa</h2>
+  <p>O critério é a assinatura da função, do jeito que um programador leria. <span class="src">Aula 1 · slide 6</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Família</th><th>Assinatura</th><th>Retorna</th><th>Exemplos</th></tr></thead>
+      <tbody>
+        <tr><td>Classificação de sequência</td><td class="mono">texto → 1 rótulo</td><td>um enum</td><td>sentimento, intenção, tópico, idioma</td></tr>
+        <tr><td>Rotulagem de tokens</td><td class="mono">texto → 1 rótulo por token</td><td>lista do tamanho da entrada</td><td>entidades (NER), classe gramatical, parsing</td></tr>
+        <tr><td>Geração</td><td class="mono">texto → texto livre</td><td>string de tamanho livre</td><td>tradução, QA, sumarização, código</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Classificar a tarefa pelo modelo que a resolve. Na demonstração, a extração de entidades foi feita pedindo JSON a um modelo generativo. A <em>tarefa</em> continua sendo rotulagem de tokens, e continua sendo avaliada com as métricas dessa família. O que virou um só foi o modelo.</p>
+  </div>
+  <p>Cada família herdou métricas próprias, construídas ao longo de décadas. É esse o resto da aula.</p>
+</section>
+
+<section class="block" id="classificacao">
+  <h2>Matriz de confusão: quatro células, quatro métricas</h2>
+  <p>Escolha uma classe para chamar de positiva (a que interessa encontrar: fraude, urgência, doença). Toda previsão cai em uma de quatro células.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>Modelo disse positivo</th><th>Modelo disse negativo</th></tr></thead>
+      <tbody>
+        <tr><th>Era positivo</th><td><strong>VP</strong>: encontrou</td><td><strong>FN</strong>: deixou passar</td></tr>
+        <tr><th>Era negativo</th><td><strong>FP</strong>: alarme falso</td><td><strong>VN</strong>: liberou certo</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="formula">acurácia  = (VP + VN) / N          acertos sobre o total
+precisão  = VP / (VP + FP)        do que eu chamei de positivo, quanto era
+revocação = VP / (VP + FN)        do que era positivo, quanto eu achei</div>
+  <p><span class="src">Aula 1 · slide 7</span> <span class="src">Aula 1 · Apêndice A.1 (slide 15)</span></p>
+  <p>Os denominadores são a parte importante. A precisão divide pelo que o <strong>modelo declarou</strong>, que é escolha dele. A revocação divide pelo que <strong>o mundo tem</strong>, que é fato do conjunto de dados. Por isso as duas não são simétricas e podem andar em direções opostas.</p>
+  <p>A analogia do professor é a arbitragem: precisão responde “das vezes que apitei, quantas eram falta?”, revocação responde “das faltas que aconteceram, quantas apitei?”. Dá para ser preciso e omisso, apitando só o óbvio. Dá para ter revocação alta e ser um desastre, apitando tudo.</p>
+
+  <h3>O piso que ninguém vê</h3>
+  <p>Um detector de fraude de uma linha, <code>return False</code>, em um problema com 1% de fraude: acurácia de 99%, revocação zero. Nunca achou uma fraude.</p>
+  <p>Generalizando: com prevalência π, o classificador que responde sempre “negativo” entrega <code>1 − π</code> de acurácia sem fazer nada. Com π = 1%, a régua de comparação é 99%, e não 50%. Toda a diferença entre um modelo inútil e um perfeito cabe entre 0,99 e 1,00. A acurácia também trata FP e FN como o mesmo erro, o que raramente é verdade em um problema real.</p>
+  <p>Os três detectores do exercício em sala, com N = 10.000 e 100 fraudes reais: <span class="src">Aula 1 · slide 8</span> <span class="src">Aula 1 · A.1 (slide 15)</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Modelo</th><th class="num">VP</th><th class="num">FP</th><th class="num">FN</th><th class="num">VN</th><th class="num">Acurácia</th><th class="num">Precisão</th><th class="num">Revocação</th></tr></thead>
+      <tbody>
+        <tr><td>trivial</td><td class="num">0</td><td class="num">0</td><td class="num">100</td><td class="num">9.900</td><td class="num">0,9900</td><td class="num">indefinida</td><td class="num">0,00</td></tr>
+        <tr><td>conservador</td><td class="num">20</td><td class="num">5</td><td class="num">80</td><td class="num">9.895</td><td class="num">0,9915</td><td class="num">0,800</td><td class="num">0,200</td></tr>
+        <tr><td>agressivo</td><td class="num">90</td><td class="num">900</td><td class="num">10</td><td class="num">9.000</td><td class="num">0,9090</td><td class="num">0,091</td><td class="num">0,900</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>O agressivo tem a <strong>pior</strong> acurácia dos três, abaixo até do que não faz nada, e é o único que serve para triagem: acha 90 das 100 fraudes. O conservador tem a melhor acurácia e acha um quinto delas. A acurácia ordenou os modelos ao contrário do que a tarefa pede.</p>
+  <p>O preço do agressivo aparece na precisão: de 990 alertas, 900 são falsos. Alguém precisa revisar essa fila. Esse custo existe e entra na decisão.</p>
+
+  <div class="demo" id="cm-demo">
+    <h3>Monte um detector e veja o que cada métrica diz</h3>
+    <div class="row">
+      <button type="button" data-preset="trivial">trivial</button>
+      <button type="button" data-preset="conservador">conservador</button>
+      <button type="button" data-preset="agressivo">agressivo</button>
+    </div>
+    <div class="grid">
+      <label for="cm-prev">Prevalência π: <output id="cm-prev-out" for="cm-prev"></output>
+        <input type="range" id="cm-prev" min="0.5" max="50" step="0.5" value="1"></label>
+      <label for="cm-rec">Positivos que ele encontra: <output id="cm-rec-out" for="cm-rec"></output>
+        <input type="range" id="cm-rec" min="0" max="100" step="1" value="90"></label>
+      <label for="cm-fpr">Negativos que viram alarme falso: <output id="cm-fpr-out" for="cm-fpr"></output>
+        <input type="range" id="cm-fpr" min="0" max="30" step="0.01" value="9.09"></label>
+    </div>
+    <div class="grid">
+      <div class="cell hit stat">VP · encontrou <b id="cm-tp"></b></div>
+      <div class="cell miss stat">FN · deixou passar <b id="cm-fn"></b></div>
+      <div class="cell alarm stat">FP · alarme falso <b id="cm-fp"></b></div>
+      <div class="cell stat">VN · liberou certo <b id="cm-tn"></b></div>
+    </div>
+    <div class="grid">
+      <div class="stat">acurácia <b id="cm-acc"></b></div>
+      <div class="stat">precisão <b id="cm-prec"></b></div>
+      <div class="stat">revocação <b id="cm-recall"></b></div>
+      <div class="stat">F₁ <b id="cm-f1"></b></div>
+      <div class="stat">F₂ <b id="cm-f2"></b></div>
+      <div class="stat">alertas para revisar <b id="cm-alerts"></b></div>
+    </div>
+    <div class="stack">
+      <p class="meta">Faixa: acurácia do seu detector, de 0 a 100%. Traço vermelho: acurácia de quem não faz nada (1 − π).</p>
+      <div class="bar" role="img" aria-label="Acurácia do detector comparada ao piso trivial"><div class="fill" id="cm-bar"></div><div class="mark" id="cm-base"></div></div>
+    </div>
+    <p class="verdict" id="cm-verdict"></p>
+  </div>
+  <p class="meta">N fixo em 10.000 exemplos. Os três botões reproduzem a tabela do slide 8 quando π = 1%.</p>
+</section>
+
+<section class="block" id="fbeta">
+  <h2>F₁ e F_β: um número para dois, e quem escolhe o peso</h2>
+  <p>F₁ é a média <strong>harmônica</strong> de precisão e revocação. A consequência prática é que ela fica perto do menor dos dois valores. <span class="src">Aula 1 · slide 9</span> <span class="src">Aula 1 · A.2 (slide 16)</span></p>
+  <p>Um detector omisso, que apita raramente e acerta quando apita, tem P = 1,00 e R = 0,01. As três médias do mesmo par:</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Média</th><th class="num">Valor</th><th>Leitura</th></tr></thead>
+      <tbody>
+        <tr><td>Aritmética</td><td class="num">0,505</td><td>Dá metade da nota a quem perde 99% dos casos</td></tr>
+        <tr><td>Geométrica</td><td class="num">0,100</td><td></td></tr>
+        <tr><td>Harmônica (F₁)</td><td class="num">0,0198</td><td>Dominada pelo menor: o sistema é ruim e a métrica diz isso</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>F_β generaliza: <code>F_β = (1 + β²)·P·R / (β²·P + R)</code>. Com β = 2, a revocação pesa quatro vezes mais que a precisão. Com β = 0,5, o contrário. O mesmo sistema (P = 0,30 e R = 0,90) recebe três notas diferentes:</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Métrica</th><th class="num">Valor</th><th>Pergunta que responde</th></tr></thead>
+      <tbody>
+        <tr><td>F₀,₅</td><td class="num">0,346</td><td>Alarme falso custa mais</td></tr>
+        <tr><td>F₁</td><td class="num">0,450</td><td>Os dois erros custam o mesmo</td></tr>
+        <tr><td>F₂</td><td class="num">0,643</td><td>Deixar passar custa mais</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Os três números estão certos. O que muda é quanto você decidiu que um falso negativo custa em relação a um falso positivo: operacionalmente, <code>β² ≈ custo do FN / custo do FP</code>. Em triagem médica, um falso negativo pode custar uma vida e um falso positivo custa um exame a mais, então β &gt; 1. Em moderação de conteúdo, censurar indevidamente é caro, então β &lt; 1.</p>
+  <div class="callout">
+    <strong>Regra de bolso</strong>
+    <p>Esses custos não estão no conjunto de dados e não dá para aprendê-los dele. Escolher β é decisão de produto. Reportar F₁ sem justificar é assumir em silêncio que os dois erros custam o mesmo.</p>
+  </div>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Tratar F₁ como “a métrica certa” para dado desbalanceado. Ela é uma escolha de peso, e a escolha precisa de justificativa ligada ao cenário.</p>
+  </div>
+  <p>Com mais de duas classes: o macro-F₁ faz a média dos F₁ de cada classe, e cada classe pesa igual. O micro-F₁ soma VP, FP e FN de todas e é dominado pelas classes frequentes. Uma classe crítica que representa 2% do volume só aparece no macro. <span class="src">Aula 1 · A.1 (slide 15)</span></p>
+</section>
+
+<section class="block" id="geracao">
+  <h2>BLEU e ROUGE: a mesma contagem, duas divisões</h2>
+  <p>Em geração, a resposta é texto livre e não cabe em uma matriz de confusão. A saída foi contar <strong>n-gramas em comum</strong> entre o texto gerado (candidato) e um texto de referência. <span class="src">Aula 1 · slide 10</span></p>
+  <ul>
+    <li><strong>BLEU</strong> é precisão de n-gramas: “o que eu escrevi está na referência?”. Divide pelo tamanho do candidato.</li>
+    <li><strong>ROUGE</strong> é revocação de n-gramas: “quanto da referência eu cobri?”. Divide pelo tamanho da referência.</li>
+  </ul>
+  <p>Referência: <em>o gato está sobre o tapete</em> (6 palavras).</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Candidato</th><th class="num">Em comum</th><th class="num">Precisão (BLEU-1)</th><th class="num">Revocação (ROUGE-1)</th></tr></thead>
+      <tbody>
+        <tr><td>A: o gato no tapete (curto)</td><td class="num">3</td><td class="num">3/4 = 0,750</td><td class="num">3/6 = 0,500</td></tr>
+        <tr><td>B: o gato está deitado sobre o grande tapete velho (prolixo)</td><td class="num">6</td><td class="num">6/9 = 0,667</td><td class="num">6/6 = 1,000</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Mesmo numerador, denominadores diferentes, ordenações invertidas: a precisão prefere A, a revocação prefere B. Cada métrica recebeu um remendo no lado em que é fraca. BLEU tem a <strong>penalidade de brevidade</strong> (BP), porque sem ela escrever pouco seria a estratégia ótima. ROUGE tem a F, que combina revocação com precisão, porque revocação pura não pergunta o que sobrou no texto. <span class="src">Aula 1 · A.3 (slide 17)</span> <span class="src">Aula 1 · A.4 (slide 18)</span></p>
+
+  <div class="demo" id="ng-demo">
+    <h3>Conte unigramas em comum</h3>
+    <label for="ng-ref">Referência
+      <input type="text" id="ng-ref" value="o gato está sobre o tapete"></label>
+    <label for="ng-cand">Candidato
+      <input type="text" id="ng-cand" value="o gato no tapete"></label>
+    <div class="row">
+      <button type="button" data-cand="o gato no tapete">candidato A</button>
+      <button type="button" data-cand="o gato está deitado sobre o grande tapete velho">candidato B</button>
+      <button type="button" data-cand="o felino está sobre o carpete">sinônimos</button>
+      <button type="button" data-cand="o o o o o">o o o o o</button>
+    </div>
+    <div class="grid">
+      <div class="stat">em comum <b id="ng-match"></b></div>
+      <div class="stat">precisão (÷ candidato) <b id="ng-prec"></b></div>
+      <div class="stat">revocação (÷ referência) <b id="ng-rec"></b></div>
+    </div>
+    <p class="verdict" id="ng-verdict"></p>
+  </div>
+  <p class="meta">A contagem é truncada: uma palavra repetida no candidato só conta até o número de vezes que aparece na referência. Sem isso, “o o o o o” teria precisão perfeita.</p>
+</section>
+
+<section class="block" id="perplexidade">
+  <h2>Perplexidade: a métrica que dispensa gabarito</h2>
+  <p>Perplexidade é <code>exp(loss)</code>, onde o loss é a entropia cruzada média por token, o número que o laço de treino imprime. Não precisa de resposta de referência: basta ver quanta probabilidade o modelo deu ao token que de fato veio. <span class="src">Aula 1 · slide 11</span></p>
+  <p>A leitura intuitiva: PPL = 12 significa estar tão indeciso quanto alguém escolhendo entre 12 opções igualmente prováveis. A unidade é “opções”, e não taxa de erro. Um modelo que chuta uniformemente sobre um vocabulário de tamanho |V| tem PPL = |V|, e esse é o teto de quem não aprendeu nada.</p>
+  <h3>Por que ela não atravessa tokenizadores</h3>
+  <p>A perplexidade é medida <strong>por token</strong>. Se dois modelos cortam o mesmo texto em quantidades diferentes de tokens, a média é sobre coisas diferentes. Para o mesmo modelo e o mesmo texto, com r caracteres por subword:</p>
+  <div class="formula">PPL_subword = PPL_caractere ^ r
+
+PPL_caractere = 4,0   e   r = 4   →   PPL_subword = 4⁴ = 256</div>
+  <p>A diferença é uma potência, e não um fator de escala. Comparar o “4,0” de um modelo por caractere com o “20” publicado de um modelo por subword é comparar 256 com 20: o de subword é o melhor. A normalização que permite comparar é bits por caractere (BPC): 2,00 para o modelo de PPL 4,0 por caractere e 1,08 para o de PPL 20 por subword. <span class="src">Aula 1 · A.5 (slide 19)</span></p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Dizer que a comparação entre tokenizadores fica “imprecisa”. Ela fica sem sentido: muda o espaço de eventos. Prever entre 90 caracteres e prever entre 32.000 subwords são tarefas diferentes. A mesma restrição vale para textos de avaliação diferentes.</p>
+  </div>
+  <p>Essa segunda frase da abertura é a ponte para a Aula 2: antes de prever o próximo token, alguém decide o que é um token.</p>
+</section>
+
+<section class="block" id="limites">
+  <h2>Onde a métrica de referência quebra</h2>
+  <p>Contar n-gramas pressupõe que existe uma resposta certa. Quando há muitas respostas boas e diferentes, a métrica deixa de medir qualidade e passa a medir estilo. <span class="src">Aula 1 · slide 12</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Caso</th><th>Candidato (referência: o gato está sobre o tapete)</th><th>O que acontece</th></tr></thead>
+      <tbody>
+        <tr><td>Paráfrase</td><td>o gato está no tapete</td><td>Português correto e mais natural. BLEU-4 = 0, porque nenhum 4-grama coincide e um zero anula a média geométrica.</td></tr>
+        <tr><td>Sinônimo</td><td>o felino está sobre o carpete</td><td>Mesmo sentido. BLEU-4 = 0 e ROUGE cai junto.</td></tr>
+        <tr><td>O inverso</td><td>resposta errada que reaproveita as palavras da referência</td><td>Nota alta. A métrica é sensível à forma e cega ao conteúdo.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Trocar BLEU por ROUGE não resolve, porque as duas contam forma. O professor chama isso de dívida de avaliação: ficamos excelentes em gerar texto e continuamos ruins em julgar texto. Rubrica humana, acordo entre anotadores e LLM como juiz ficam para a Aula 27.</p>
+  <p class="keyidea">Unificamos o modelo. Não unificamos as métricas.</p>
+  <p><span class="src">Aula 1 · slide 14</span></p>
+</section>
+
+<section class="block" id="pratica">
+  <h2>Pratique: da tarefa à métrica</h2>
+  <p>O segundo exercício da aula pede, para cada cenário, a família, a métrica principal e uma falha que essa métrica <strong>não</strong> enxerga. A terceira coluna é a que vale. Tente antes de abrir. <span class="src">Aula 1 · slide 13</span></p>
+  <details class="q" id="p1">
+    <summary>Roteador de tickets em 12 filas, com uma fila crítica que é 2% do volume</summary>
+    <div class="answer">
+      <p>Classificação de sequência. Acurácia e micro-F₁ seriam dominados pelas filas grandes; a fila crítica só aparece no macro-F₁ ou olhando a revocação dela separadamente (ponto do Apêndice A.1). O que a métrica agregada não vê: um roteador que nunca manda nada para a fila crítica continua com número alto.</p>
+    </div>
+  </details>
+  <details class="q" id="p2">
+    <summary>Detector de discurso de ódio em comentários, com revisão humana depois</summary>
+    <div class="answer">
+      <p>Classificação de sequência com peso assimétrico: é um caso de F_β, e o guia do professor corrige este cenário por esse lado. O raciocínio a montar é quanto custa cada erro <em>neste</em> fluxo, em que um humano revisa o que o modelo sinaliza. A leitura a seguir é minha, confira: a revisão humana barateia o falso positivo, o que empurra para priorizar revocação, mas só até o volume de alertas caber na capacidade de quem revisa.</p>
+    </div>
+  </details>
+  <details class="q" id="p3">
+    <summary>Assistente que responde sobre o regulamento da universidade, citando a fonte</summary>
+    <div class="answer">
+      <p>Geração. A resposta do professor é que nenhuma métrica clássica resolve: sobreposição de n-gramas não verifica se a afirmação é verdadeira nem se a fonte citada sustenta o que foi dito. Precisa de verificação de factualidade e de atribuição de fonte, assunto da Aula 27.</p>
+    </div>
+  </details>
+  <p>Os outros dois cenários do slide (extração de número de processo em petições, e tradução PT→EN de descrições de produto) não têm resolução no guia. Vale resolver sozinho e me pedir para discutir.</p>
+</section>
+
+<section class="block" id="autoteste">
+  <h2>Autoteste</h2>
+  <p>Responda em voz alta ou no papel antes de abrir. <span class="meta" data-quiz-progress></span></p>
+  <details class="q" id="q1">
+    <summary>Um classificador tem 97% de acurácia em um problema com 3% de positivos. O que falta saber antes de comemorar?</summary>
+    <div class="answer"><p>Quem responde sempre “negativo” já tem 1 − π = 97%. O número sozinho não distingue esse modelo de um bom. Falta olhar o que acontece com a classe positiva: revocação e precisão.</p><p><span class="src">Aula 1 · slide 7</span></p></div>
+  </details>
+  <details class="q" id="q2">
+    <summary>Precisão e revocação têm o mesmo numerador. O que muda no denominador e por que isso importa?</summary>
+    <div class="answer"><p>Precisão divide por VP + FP, tudo que o modelo declarou positivo: é escolha do modelo. Revocação divide por VP + FN, tudo que era positivo: é fato do mundo. Um modelo pode melhorar uma piorando a outra, só mudando o quanto ele “apita”.</p><p><span class="src">Aula 1 · A.1 (slide 15)</span></p></div>
+  </details>
+  <details class="q" id="q3">
+    <summary>Por que F₁ usa média harmônica e não aritmética?</summary>
+    <div class="answer"><p>Porque a harmônica fica perto do menor dos dois valores. Com P = 1,00 e R = 0,01, a aritmética dá 0,505 e a harmônica dá 0,0198. Um sistema que perde 99% dos casos é ruim, e a métrica precisa dizer isso.</p><p><span class="src">Aula 1 · slide 9</span></p></div>
+  </details>
+  <details class="q" id="q4">
+    <summary>O mesmo sistema tem F₀,₅ = 0,346, F₁ = 0,450 e F₂ = 0,643. Qual é o número certo?</summary>
+    <div class="answer"><p>Os três. Cada um responde a uma pergunta diferente sobre o custo relativo de falso negativo e falso positivo. Esse custo não está nos dados, é decisão de produto.</p><p><span class="src">Aula 1 · A.2 (slide 16)</span></p></div>
+  </details>
+  <details class="q" id="q5">
+    <summary>Extração de entidades resolvida por um modelo generativo que devolve JSON: qual é a família da tarefa?</summary>
+    <div class="answer"><p>Rotulagem de tokens. A família é definida pela forma da saída da tarefa, e não pelo modelo usado para resolvê-la.</p><p><span class="src">Aula 1 · slide 6</span></p></div>
+  </details>
+  <details class="q" id="q6">
+    <summary>Um candidato curto ganha em BLEU-1 e um prolixo ganha em ROUGE-1. Por quê, e qual é o remendo de cada métrica?</summary>
+    <div class="answer"><p>O numerador é o mesmo (n-gramas em comum). BLEU divide pelo candidato, então texto curto e certeiro pontua bem. ROUGE divide pela referência, então quem cobre tudo pontua bem, mesmo sobrando texto. Remendos: penalidade de brevidade no BLEU; F (revocação com precisão) no ROUGE.</p><p><span class="src">Aula 1 · slide 10</span></p></div>
+  </details>
+  <details class="q" id="q7">
+    <summary>Um modelo por caractere reporta PPL 4,0. Um modelo por subword reporta PPL 20. Qual é melhor?</summary>
+    <div class="answer"><p>Não dá para comparar diretamente, porque perplexidade é por token. Com 4 caracteres por subword, PPL 4,0 por caractere equivale a 4⁴ = 256 por subword. Em bits por caractere: 2,00 contra 1,08. O de subword é melhor.</p><p><span class="src">Aula 1 · slide 11</span> <span class="src">Aula 1 · A.5 (slide 19)</span></p></div>
+  </details>
+  <details class="q" id="q8">
+    <summary>Dê um exemplo em que BLEU dá nota baixa a uma resposta boa, e outro em que dá nota alta a uma resposta ruim.</summary>
+    <div class="answer"><p>Baixa para boa: paráfrase ou sinônimo (“o felino está sobre o carpete”), com BLEU-4 = 0. Alta para ruim: resposta errada que reaproveita as palavras da referência. A métrica mede forma, e não conteúdo.</p><p><span class="src">Aula 1 · slide 12</span></p></div>
+  </details>
+</section>
+
+<section class="block" id="av1">
+  <h2>Ponte para a AV1: Caso 1</h2>
+  <p>O Caso 1 (“Acerta muito, mas perde as urgências”) é esta aula aplicada a uma central de atendimento. Abaixo está o que cada pergunta testa e onde está o fundamento. A resposta é sua: use as perguntas-guia para montar o raciocínio com as suas palavras.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pergunta do caso</th><th>Conceito testado</th><th>Onde estudar</th></tr></thead>
+      <tbody>
+        <tr><td>1. Por que a acurácia alta engana?</td><td>Prevalência e o piso 1 − π</td><td><a href="#classificacao">Matriz de confusão</a> · slides 7 e 15</td></tr>
+        <tr><td>2. Qual erro priorizar e com que métrica?</td><td>Células da matriz; denominador da revocação; peso entre erros</td><td><a href="#classificacao">Matriz</a> e <a href="#fbeta">F_β</a> · slides 7, 9, 15, 16</td></tr>
+        <tr><td>3. E se muitas comuns virarem urgentes?</td><td>Custo do falso positivo; precisão; escolha de β como decisão</td><td><a href="#fbeta">F_β</a> e a tabela do agressivo · slides 8, 9, 16</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Perguntas-guia para o seu rascunho</h3>
+  <ol>
+    <li>No cenário, qual é a classe positiva? O que um classificador que marca tudo como “comum” entrega de acurácia, e de revocação?</li>
+    <li>Em qual célula da matriz está a “urgente que ficou sem prioridade”? Qual métrica tem essa célula no denominador?</li>
+    <li>Se o sistema passar a marcar mais coisas como urgentes, qual célula cresce? Quem paga esse custo dentro da central, e o que acontece com o significado da palavra “urgente” para quem atende?</li>
+    <li>Quem define o equilíbrio entre os dois erros: os dados ou quem conhece a operação?</li>
+  </ol>
+  <div class="callout exam">
+    <strong>O que a rubrica paga</strong>
+    <p>6 pontos para o mecanismo (identificar o problema e explicar <em>como</em> ele acontece), 3 para aplicação e limites (responder ao cenário, justificar a decisão, não generalizar), 1 para a referência. Dizer “acurácia é ruim em dado desbalanceado” nomeia o problema e não explica o mecanismo. Escolher uma métrica sem ligar ao custo do erro no cenário perde os pontos de aplicação.</p>
+  </div>
+  <p><strong>Como citar:</strong> o enunciado pede referência específica no formato “Aula N — trecho”. Por exemplo: “Aula 1 — slide 7, detector de fraude com 99% de acurácia” ou “Aula 1 — Apêndice A.2, F_β e o custo dos erros”.</p>
+  <p><strong>Variação:</strong> se você escolher o Caso 1 para a Parte 2, o próprio enunciado sugere mudar a consequência operacional de um falso positivo. A seção sobre F_β é a base para argumentar o que muda e o que permanece.</p>
+</section>
+
+<section class="block" id="glossario">
+  <h2>Glossário</h2>
+  <dl>
+    <dt>Prevalência (π)</dt><dd>Fração de exemplos da classe positiva no conjunto.</dd>
+    <dt>VP, FP, FN, VN</dt><dd>Verdadeiro positivo, falso positivo (alarme falso), falso negativo (deixou passar), verdadeiro negativo.</dd>
+    <dt>Acurácia</dt><dd>Acertos sobre o total. Trata os dois tipos de erro como iguais.</dd>
+    <dt>Precisão</dt><dd>Do que o modelo chamou de positivo, quanto era positivo.</dd>
+    <dt>Revocação</dt><dd>Do que era positivo, quanto o modelo encontrou. Em inglês, <em>recall</em>.</dd>
+    <dt>F_β</dt><dd>Média harmônica ponderada de precisão e revocação. β &gt; 1 favorece revocação.</dd>
+    <dt>Macro e micro</dt><dd>Macro: média por classe, cada classe pesa igual. Micro: soma as contagens, classes frequentes dominam.</dd>
+    <dt>BLEU</dt><dd>Precisão de n-gramas contra a referência, com penalidade de brevidade.</dd>
+    <dt>ROUGE</dt><dd>Revocação de n-gramas (ROUGE-N) ou da maior subsequência comum (ROUGE-L).</dd>
+    <dt>Perplexidade</dt><dd>exp da entropia cruzada média por token. Só compara modelos com o mesmo tokenizador e o mesmo texto.</dd>
+    <dt>BPC</dt><dd>Bits por caractere: normalização que permite comparar modelos com tokenizadores diferentes.</dd>
+  </dl>
+</section>
+
+<footer class="note">
+  As etiquetas “Aula N · slide X” marcam o que está no material do professor e pode ser citado. O restante é explicação escrita com apoio de IA: confira no material antes de usar em uma avaliação.
+</footer>
+
+</main>
+<script src="assets/study.js"></script>
+<script>
+// Confusion-matrix playground. N is fixed so the counts match the lesson's exercise table.
+(function () {
+  const N = 10000;
+  const $ = (id) => document.getElementById(id);
+  const prev = $("cm-prev"), rec = $("cm-rec"), fpr = $("cm-fpr");
+  const fmt = (x, digits) => x.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const presets = {
+    trivial: { rec: 0, fpr: 0 },
+    conservador: { rec: 20, fpr: 0.05 },
+    agressivo: { rec: 90, fpr: 9.09 },
+  };
+
+  function update() {
+    const pi = prev.value / 100;
+    const positives = Math.round(N * pi);
+    const negatives = N - positives;
+    const tp = Math.round(positives * rec.value / 100);
+    const fn = positives - tp;
+    const fp = Math.round(negatives * fpr.value / 100);
+    const tn = negatives - fp;
+    const acc = (tp + tn) / N;
+    const base = 1 - positives / N;
+    const precision = tp + fp > 0 ? tp / (tp + fp) : null;
+    const recall = positives > 0 ? tp / positives : 0;
+    const f = (beta) => precision && recall ? (1 + beta * beta) * precision * recall / (beta * beta * precision + recall) : 0;
+
+    $("cm-prev-out").textContent = fmt(pi * 100, 1) + "%";
+    $("cm-rec-out").textContent = rec.value + "%";
+    $("cm-fpr-out").textContent = fmt(Number(fpr.value), 2) + "%";
+    $("cm-tp").textContent = fmt(tp, 0);
+    $("cm-fn").textContent = fmt(fn, 0);
+    $("cm-fp").textContent = fmt(fp, 0);
+    $("cm-tn").textContent = fmt(tn, 0);
+    $("cm-acc").textContent = fmt(acc, 4);
+    $("cm-prec").textContent = precision === null ? "indefinida" : fmt(precision, 3);
+    $("cm-recall").textContent = fmt(recall, 3);
+    $("cm-f1").textContent = fmt(f(1), 3);
+    $("cm-f2").textContent = fmt(f(2), 3);
+    $("cm-alerts").textContent = fmt(tp + fp, 0);
+    $("cm-bar").style.width = (acc * 100) + "%";
+    $("cm-base").style.left = (base * 100) + "%";
+
+    const gap = (acc - base) * 100;
+    let text;
+    if (tp === 0) {
+      text = "Este detector nunca encontra um positivo. A acurácia de " + fmt(acc * 100, 2) + "% é toda herdada da prevalência.";
+    } else if (gap < 0) {
+      text = "Acurácia " + fmt(-gap, 2) + " ponto(s) percentual(is) abaixo de quem não faz nada, e ele encontra " + fmt(recall * 100, 0) + "% dos positivos. A acurácia ordenou os modelos ao contrário.";
+    } else {
+      text = "Acurácia " + fmt(gap, 2) + " ponto(s) percentual(is) acima do piso. Toda a distância entre um modelo inútil e um perfeito cabe em " + fmt(pi * 100, 1) + " ponto(s).";
+    }
+    if (tp + fp > 0) {
+      text += " A equipe recebe " + fmt(tp + fp, 0) + " alertas; de cada 100, " + fmt(precision * 100, 0) + " são positivos de verdade.";
+    }
+    $("cm-verdict").textContent = text;
+  }
+
+  document.querySelectorAll("#cm-demo [data-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const preset = presets[button.dataset.preset];
+      prev.value = 1;
+      rec.value = preset.rec;
+      fpr.value = preset.fpr;
+      update();
+    });
+  });
+  [prev, rec, fpr].forEach((input) => input.addEventListener("input", update));
+  update();
+})();
+
+// Unigram overlap: same clipped numerator, divided by the candidate (precision) or the reference (recall).
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const ref = $("ng-ref"), cand = $("ng-cand");
+  const tokens = (text) => text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  const counts = (list) => list.reduce((acc, t) => acc.set(t, (acc.get(t) || 0) + 1), new Map());
+  const fmt = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+  function update() {
+    const r = tokens(ref.value), c = tokens(cand.value);
+    const rc = counts(r), cc = counts(c);
+    let match = 0;
+    cc.forEach((n, t) => { match += Math.min(n, rc.get(t) || 0); });
+    const precision = c.length ? match / c.length : 0;
+    const recall = r.length ? match / r.length : 0;
+    $("ng-match").textContent = match;
+    $("ng-prec").textContent = c.length ? match + "/" + c.length + " = " + fmt(precision) : "indefinida";
+    $("ng-rec").textContent = r.length ? match + "/" + r.length + " = " + fmt(recall) : "indefinida";
+    let text = "Precisão e revocação empatam neste par.";
+    if (precision > recall) {
+      text = "A precisão é maior: quase tudo que o candidato escreveu está na referência, mas ele cobre só parte dela.";
+    } else if (recall > precision) {
+      text = "A revocação é maior: o candidato cobre a referência, mas escreveu mais do que ela contém.";
+    }
+    $("ng-verdict").textContent = text;
+  }
+
+  document.querySelectorAll("#ng-demo [data-cand]").forEach((button) => {
+    button.addEventListener("click", () => { cand.value = button.dataset.cand; update(); });
+  });
+  [ref, cand].forEach((input) => input.addEventListener("input", update));
+  update();
+})();
+</script>
+</body>
+</html>

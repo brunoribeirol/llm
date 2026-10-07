@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aula 7 · O bloco Transformer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="assets/study.css">
+</head>
+<body data-lesson="aula-07">
+<main class="page">
+
+<header class="masthead">
+  <div class="chips"><a href="index.html">caderno</a><span>aula</span><span>07</span><span>posição</span><span>residual</span><span>norma</span><span>AV1 · caso 7</span></div>
+  <h1>Transformer II: posição, normalização e o bloco moderno</h1>
+  <p class="lede">“O cachorro morde o homem” e “o homem morde o cachorro” saem da self-attention com as mesmas representações, a menos da ordem. Não é erro de treino: é o que a fórmula faz. A aula monta as peças que transformam o mecanismo da Aula 6 em um bloco que distingue ordem e treina com dezenas de camadas.</p>
+  <p class="meta">leitura: 35 min · fontes: slides <a href="../class/slides/aula07.pdf">aula07.pdf</a> (22 p.) e o <a href="../reference/portal_gml_262/docs/aula-07/index.html">guia de estudo do portal</a> · os números de slide são as páginas do PDF; a numeração impressa nos slides é uma a menos (duas no apêndice)</p>
+  <ul class="toc">
+    <li><a href="#resumo">Resumo</a></li>
+    <li><a href="#sintoma">Ordem e máscara</a></li>
+    <li><a href="#posicao">Posição</a></li>
+    <li><a href="#residual">Residual</a></li>
+    <li><a href="#norma">Normalização</a></li>
+    <li><a href="#ffn">Feed-forward</a></li>
+    <li><a href="#pecas">Cada peça, um problema</a></li>
+    <li><a href="#autoteste">Autoteste</a></li>
+    <li><a href="#av1">Ponte para a AV1</a></li>
+  </ul>
+</header>
+
+<section class="block" id="resumo">
+  <h2>A aula em um minuto</h2>
+  <ul>
+    <li>A self-attention não sabe que ordem existe. A <strong>informação posicional</strong> precisa ser injetada de fora.</li>
+    <li>A máscara causal não resolve isso: máscara é <strong>permissão de leitura</strong>, posição é <strong>distância</strong>.</li>
+    <li>Há três formas de dar posição: senoidal (calculada), aprendida (tabela com fim) e RoPE (rotação em Q e K, que entrega distância relativa).</li>
+    <li>A <strong>conexão residual</strong> dá ao gradiente um caminho que não multiplica nada, e é o que permite empilhar dezenas de blocos.</li>
+    <li>A soma residual faz a escala crescer a cada camada. A <strong>normalização</strong> controla essa escala.</li>
+    <li>A atenção mistura posições; o <strong>feed-forward</strong> transforma cada posição isolada, e guarda dois terços dos pesos do bloco.</li>
+    <li>De 2017 para hoje foram cinco trocas no bloco e nenhuma no mecanismo de atenção.</li>
+  </ul>
+  <p class="keyidea">Máscara é sobre permissão de leitura. Posição é sobre distância. Só uma delas está no mecanismo.</p>
+  <p><span class="src">Aula 7 · slide 3</span></p>
+</section>
+
+<section class="block" id="sintoma">
+  <h2>O sintoma: o mecanismo não sabe que ordem existe</h2>
+  <p>A Aula 6 terminou com uma demonstração: sem máscara e sem posição, permutar a entrada só permuta a saída. As duas frases, que significam coisas opostas, produzem a mesma saída por token. Nenhuma tarefa que dependa de ordem funciona sobre isso, e o problema não se corrige com um <code>if</code>. <span class="src">Aula 7 · slide 2</span></p>
+  <p>A razão está na fórmula. O peso entre dois tokens vem do produto entre a consulta de um e a chave do outro, e ambas dependem só do <em>conteúdo</em> do token. Em nenhum lugar entra o índice da posição.</p>
+
+  <div class="demo" id="perm-demo">
+    <h3>Mesmas palavras, outra ordem</h3>
+    <div class="row">
+      <button type="button" data-pos="off" aria-pressed="true">sem informação de posição</button>
+      <button type="button" data-pos="on" aria-pressed="false">com posição somada na entrada</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Token</th><th>Saída em “o cachorro morde o homem”</th><th>Saída em “o homem morde o cachorro”</th><th>Iguais?</th></tr></thead>
+        <tbody id="perm-body"></tbody>
+      </table>
+    </div>
+    <p class="verdict" id="perm-verdict"></p>
+  </div>
+  <p class="meta">Self-attention de uma cabeça, sem máscara, com embeddings de duas dimensões inventados para a ilustração. A posição usa o código senoidal da aula.</p>
+
+  <h3>“Mas a máscara causal não resolve isso?”</h3>
+  <p>É a intuição que a aula desmonta. A máscara apaga metade da matriz de atenção: ela diz <strong>quem pode ler quem</strong>. Ela não diz <strong>quanto um token dista do outro</strong>. Dois tokens visíveis são indistinguíveis quanto à distância. E há o caso que encerra a discussão: no encoder não existe máscara nenhuma, e lá o problema aparece puro. <span class="src">Aula 7 · slide 3</span></p>
+</section>
+
+<section class="block" id="posicao">
+  <h2>Três respostas para a posição</h2>
+  <h3>1. Senoidal: um relógio de muitos ponteiros</h3>
+  <div class="formula">PE(pos, 2i)   = sin(pos / 10000^(2i/d))
+PE(pos, 2i+1) = cos(pos / 10000^(2i/d))
+x_pos = x_token + PE(pos)                    soma na entrada</div>
+  <p>Cada posição recebe um código calculado, somado ao embedding do token. As primeiras dimensões oscilam rápido e distinguem vizinhos; as últimas oscilam devagar e distinguem regiões da frase. Juntas, dão um código único por posição. A propriedade útil: o produto interno entre os códigos de duas posições depende só da distância entre elas. <span class="src">Aula 7 · slide 4</span> <span class="src">Aula 7 · A.1 (slide 17)</span></p>
+  <h3>2. Aprendida: uma gaveta de etiquetas</h3>
+  <p>Em vez de calcular o código, aprende-se uma tabela com um vetor por posição. A soma na entrada é a mesma; o código passa a ser parâmetro. A comparação do slide: a senoidal é uma régua, em que qualquer marca é calculável. A aprendida é uma gaveta de etiquetas: a posição 4097 só existe se alguém a imprimiu, e não há noção de distância embutida. <span class="src">Aula 7 · slide 5</span></p>
+  <p>O sintoma típico: um modelo treinado com 4096 posições produz lixo a partir da 4097. Ele não fica ruim aos poucos; simplesmente não existe entrada na tabela.</p>
+  <h3>3. RoPE: girar Q e K em vez de somar</h3>
+  <p>Aqui a posição entra dentro do cálculo do escore. Antes do produto, a consulta da posição m e a chave da posição n são giradas por ângulos proporcionais a m e a n. O escore resultante depende de q, de k e da diferença m − n. Na medição da aula, tokens a distância 2 dão o mesmo escore na posição 3 e na posição 5000. <span class="src">Aula 7 · slide 6</span> <span class="src">Aula 7 · A.2 (slide 18)</span></p>
+  <p>O valor V passa reto, nunca é girado. Girar Q e K afeta quem olha para quem. Girar V afetaria o que é lido: o conteúdo passaria a depender de onde o token está.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>Senoidal</th><th>Aprendida</th><th>RoPE</th></tr></thead>
+      <tbody>
+        <tr><th>Onde entra</th><td>Somada na entrada, uma vez</td><td>Somada na entrada, uma vez</td><td>Em Q e K, a cada camada</td></tr>
+        <tr><th>Tipo de informação</th><td>Absoluta, com estrutura de distância</td><td>Absoluta, sem distância embutida</td><td>Relativa (m − n)</td></tr>
+        <tr><th>Parâmetros treináveis</th><td>Nenhum</td><td>Uma tabela</td><td>Nenhum</td></tr>
+        <tr><th>Além do comprimento de treino</th><td>Calculável</td><td>Não existe</td><td>Calculável; a janela pode ser estendida</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>O slide lista quatro razões para o RoPE ter virado o padrão: é relativa e entra no lugar onde a comparação acontece; não tem parâmetro treinável; é reinjetada em cada camada, enquanto nas outras a posição entra uma vez e precisa sobreviver a dezenas de blocos; e permite estender a janela. <span class="src">Aula 7 · slide 7</span></p>
+  <div class="callout">
+    <strong>A honestidade do slide</strong>
+    <p>Reescalar o RoPE estica a janela; não faz o modelo usar bem o que entrou nela. Janela grande e memória confiável são coisas diferentes.</p>
+  </div>
+</section>
+
+<section class="block" id="residual">
+  <h2>Conexão residual: doze blocos treinam, quarenta e oito divergem</h2>
+  <div class="formula">y = x + f(x)          o sub-bloco aprende um delta</div>
+  <p>Sem residual, o sinal de erro atravessa as camadas como um produto, igual ao da Aula 5, agora ao longo da profundidade. Com 40 blocos e um fator típico de 0,8 por bloco, o gradiente chega às primeiras camadas quatro ordens de grandeza menor: 0,8⁴⁰ ≈ 1,3·10⁻⁴. <span class="src">Aula 7 · slide 9</span></p>
+  <p>Com o residual, a derivada de cada bloco passa a ter dois termos: um atravessa o ramo f, o outro é a identidade, que não multiplica nada e não encolhe nada. O produto vira uma soma de caminhos, e o mais curto é a identidade. <span class="src">Aula 7 · A.3 (slide 19)</span></p>
+  <p>A segunda consequência é sobre o que a camada aprende. Como o bloco aprende um <em>delta</em> sobre a representação que chegou, um bloco que aprende f = 0 devolve a entrada intacta: é inofensivo. O apêndice diz que é isso, mais do que o gradiente, que permite ir a 40 ou 100 camadas. A analogia do slide: o residual está para a profundidade como o gating do LSTM está para o tempo.</p>
+  <div class="callout trap">
+    <strong>O efeito colateral</strong>
+    <p>Cada soma residual acrescenta variância, e a escala das ativações cresce de forma aproximadamente linear com a profundidade. O residual é remédio para o desaparecimento do gradiente, e não para a explosão. É por isso que alguma normalização dentro do bloco é obrigatória: uma peça cria o problema que a outra resolve.</p>
+  </div>
+</section>
+
+<section class="block" id="norma">
+  <h2>Normalização: controlar a escala</h2>
+  <div class="formula">LayerNorm(x) = γ ⊙ (x − μ) / √(σ² + ε) + β      centra e escala
+RMSNorm(x)   = γ ⊙ x / √(mean(x²) + ε)         só escala</div>
+  <p>A norma devolve cada vetor a uma escala controlada, qualquer que seja a escala acumulada pelas somas residuais. Com isso, a entrada de cada ramo chega normalizada, e os escores de atenção não herdam a escala da profundidade. <span class="src">Aula 7 · slide 10</span> <span class="src">Aula 7 · A.4 (slide 20)</span></p>
+  <p>A RMSNorm remove a etapa de centrar: uma passagem a menos sobre o vetor e metade dos parâmetros. Perde a invariância a deslocamento e, na prática, mantém a qualidade. A leitura do professor: se o que atrapalhava o treino era a magnitude do vetor, e não o centro dele, centrar era trabalho que ninguém tinha cobrado.</p>
+  <div class="callout trap">
+    <strong>Isto não é BatchNorm</strong>
+    <p>LayerNorm e RMSNorm calculam as estatísticas sobre as <em>dimensões de um exemplo</em>, e não sobre o lote. Nenhum exemplo influencia outro, e a norma funciona igual ao gerar um token só, o que é necessário para geração autorregressiva.</p>
+  </div>
+  <h3>Onde a norma entra: pós-norm e pré-norm</h3>
+  <div class="formula">pós-norm (2017):          y = Norma(x + f(x))
+pré-norm (LLMs modernos): y = x + f(Norma(x))</div>
+  <p>As peças são as mesmas; muda o que fica dentro e o que fica fora da soma. No pós-norm, a soma passa pela norma, e a autoestrada do residual é reescalada a cada camada: pilhas profundas exigem aquecimento cuidadoso da taxa de aprendizado. No pré-norm, a norma entra dentro do ramo, e o caminho residual fica limpo da entrada até a saída da pilha. <span class="src">Aula 7 · slide 11</span> <span class="src">Aula 7 · A.5 (slide 21)</span></p>
+  <p>O detalhe que falta em quase todo diagrama: com pré-norm é obrigatória uma <strong>norma final</strong> depois do último bloco, antes da camada de saída, porque a última soma residual não passou por norma nenhuma. Esquecida, o treino diverge sem mensagem de erro.</p>
+  <p>O preço, dito no slide: em modelos rasos o pós-norm costuma render um pouco mais. A escolha se inverteu quando a profundidade cresceu. Não é certo contra errado.</p>
+</section>
+
+<section class="block" id="ffn">
+  <h2>Feed-forward: a parte que não olha para nenhum vizinho</h2>
+  <div class="formula">FFN(x) = W₂ · GELU(W₁ · x)          2017, com expansão de 4 vezes</div>
+  <p>A divisão de trabalho dentro do bloco é nítida: <strong>a atenção mistura posições; o feed-forward transforma cada posição isolada</strong>. O feed-forward é aplicado a cada token separadamente, com os mesmos pesos, expandindo a dimensão, aplicando uma não linearidade e projetando de volta. <span class="src">Aula 7 · slide 12</span></p>
+  <p>É ali que está a maior parte dos parâmetros.</p>
+
+  <div class="demo" id="param-demo">
+    <h3>Onde estão os pesos de um bloco</h3>
+    <label for="param-d">Dimensão do modelo (d): <output id="param-d-out" for="param-d"></output>
+      <input type="range" id="param-d" min="256" max="4096" step="256" value="1024"></label>
+    <div class="grid">
+      <div class="stat">atenção · 4·d² <b id="param-att"></b></div>
+      <div class="stat">feed-forward · 8·d² <b id="param-ffn"></b></div>
+      <div class="stat">bloco · 12·d² <b id="param-total"></b></div>
+    </div>
+    <div class="bar" role="img" aria-label="Parcela dos pesos do bloco que está na atenção"><div class="fill" style="width:33.33%"></div></div>
+    <p class="verdict" id="param-verdict"></p>
+  </div>
+  <p class="meta">Contagem sem vieses, como no slide 12: com d = 1024 são 4,2 M na atenção e 8,4 M no feed-forward. A faixa marca o terço que cabe à atenção.</p>
+
+  <p>A variante moderna, SwiGLU, usa três matrizes: um ramo decide o que passa e o outro decide quanto. Para manter a mesma contagem de parâmetros com uma matriz a mais, a expansão cai de 4 para 8/3. <span class="src">Aula 7 · A.6 (slide 22)</span></p>
+</section>
+
+<section class="block" id="pecas">
+  <h2>Cada peça, um problema</h2>
+  <p>O bloco moderno, como o slide escreve: <span class="src">Aula 7 · slide 13</span></p>
+  <div class="formula">h = x + AtençãoCausal(RMSNorm(x), rope)
+y = h + SwiGLU(RMSNorm(h))
+# ... N blocos ...
+logits = Linear(RMSNorm(y_final))</div>
+  <p>Duas normas e duas somas por bloco. A tabela a seguir junta, em um lugar só, o que cada peça compra. É a síntese que responde por que nenhuma delas faz o trabalho da outra.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Peça</th><th>Problema que resolve</th><th>Sintoma quando falta</th><th>Fonte</th></tr></thead>
+      <tbody>
+        <tr><td>Informação posicional</td><td>A atenção compara conteúdos e ignora a ordem</td><td>Frases com as mesmas palavras em outra ordem ficam indistinguíveis</td><td>slides 2 e 4</td></tr>
+        <tr><td>Máscara causal</td><td>Controla quem pode ler quem</td><td>Vazamento do futuro no treino</td><td>slide 3; Aula 6</td></tr>
+        <tr><td>Conexão residual</td><td>O gradiente se dilui ao atravessar muitos blocos</td><td>A pilha profunda não treina; as primeiras camadas mal se movem</td><td>slides 9 e 19</td></tr>
+        <tr><td>Normalização</td><td>A escala das ativações cresce a cada soma</td><td>Softmax saturado, treino instável ou divergente</td><td>slides 10, 11 e 20</td></tr>
+        <tr><td>Feed-forward</td><td>A atenção só faz médias ponderadas entre posições</td><td>Falta a transformação não linear de cada posição, onde está a maior parte da capacidade</td><td>slides 12 e 22</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="meta">As colunas “problema” e “fonte” seguem os slides. A coluna “sintoma quando falta” resume as consequências que a aula descreve; para o feed-forward, a formulação é leitura minha a partir do slide 12 e do Apêndice A.6.</p>
+  <h3>De 2017 para hoje</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Peça</th><th>Transformer de 2017</th><th>Bloco moderno</th></tr></thead>
+      <tbody>
+        <tr><td>Posição</td><td>Senoidal somada na entrada</td><td>RoPE em Q e K, a cada camada</td></tr>
+        <tr><td>Onde a norma entra</td><td>Pós-norm</td><td>Pré-norm mais norma final</td></tr>
+        <tr><td>Qual norma</td><td>LayerNorm</td><td>RMSNorm</td></tr>
+        <tr><td>Feed-forward</td><td>GELU, expansão 4</td><td>SwiGLU, expansão 8/3</td></tr>
+        <tr><td>Montagem da pilha</td><td>Encoder-decoder</td><td>Decoder-only (Aula 8)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Não mudaram em oito anos: a fórmula da atenção, as múltiplas cabeças, o residual e o feed-forward por posição. Na imagem do professor, trocaram a suspensão, e não o motor.</p>
+</section>
+
+<section class="block" id="pratica">
+  <h2>Pratique: achar a peça errada</h2>
+  <p>Para cada sintoma, diga qual peça está ausente ou no lugar errado e que evidência confirmaria. O guia do professor registra a correção do terceiro; os dois primeiros são leitura minha a partir dos slides indicados, confira. <span class="src">Aula 7 · slide 14</span></p>
+  <details class="q" id="p1">
+    <summary>Uma pilha de 48 blocos diverge nos primeiros 200 passos; com 12 blocos a mesma receita treina. Sem NaN antes; as primeiras camadas mal se movem</summary>
+    <div class="answer">
+      <p>O sintoma é de profundidade, e “as primeiras camadas mal se movem” aponta para o caminho do gradiente: residual ausente ou caminho residual interrompido pela norma (pós-norm em pilha profunda sem aquecimento, ou pré-norm sem a norma final). Evidência: medir a norma do gradiente por camada e ver se ela cai com a profundidade; trocar para pré-norm com norma final e observar se a pilha passa a treinar. Slides 9 e 11.</p>
+    </div>
+  </details>
+  <details class="q" id="p2">
+    <summary>Um modelo responde bem em prompts curtos e fica incoerente a partir de um comprimento fixo, em qualquer assunto</summary>
+    <div class="answer">
+      <p>Codificação posicional aprendida: a tabela acaba. O detalhe “sempre o mesmo comprimento” é a assinatura. Evidência: o comprimento em que quebra coincide com o número de posições da tabela usada no treino. Slide 5.</p>
+    </div>
+  </details>
+  <details class="q" id="p3">
+    <summary>Um time aplicou a rotação posicional em Q, K e V; o modelo treina, mas a representação de uma mesma frase muda conforme ela aparece no começo ou no fim do prompt</summary>
+    <div class="answer">
+      <p>O RoPE só pode ser aplicado a Q e K. Girar V faz o conteúdo lido depender da posição absoluta do token. Na correção, o professor desenha o bloco pré-norm inteiro com o RoPE marcado apenas sobre Q e K. Slide 18.</p>
+    </div>
+  </details>
+</section>
+
+<section class="block" id="autoteste">
+  <h2>Autoteste</h2>
+  <p>Responda antes de abrir. <span class="meta" data-quiz-progress></span></p>
+  <details class="q" id="q1">
+    <summary>Por que a self-attention, sozinha, não distingue “o cachorro morde o homem” de “o homem morde o cachorro”?</summary>
+    <div class="answer"><p>Porque os pesos vêm de comparações entre conteúdos de tokens, e o índice da posição não entra em nenhum ponto do cálculo. Trocar a ordem só troca a ordem das saídas.</p><p><span class="src">Aula 7 · slide 2</span></p></div>
+  </details>
+  <details class="q" id="q2">
+    <summary>A máscara causal dá informação de posição ao modelo?</summary>
+    <div class="answer"><p>Não. Ela define quem pode ler quem. Dois tokens visíveis continuam indistinguíveis quanto à distância. E no encoder, onde não há máscara, o problema da ordem aparece puro.</p><p><span class="src">Aula 7 · slide 3</span></p></div>
+  </details>
+  <details class="q" id="q3">
+    <summary>O que acontece com uma codificação posicional aprendida quando o texto passa do comprimento de treino?</summary>
+    <div class="answer"><p>Não existe linha na tabela para a posição nova. O modelo produz lixo a partir dali; não é uma degradação gradual.</p><p><span class="src">Aula 7 · slide 5</span></p></div>
+  </details>
+  <details class="q" id="q4">
+    <summary>No RoPE, por que Q e K são girados e V não?</summary>
+    <div class="answer"><p>Girar Q e K faz o escore depender da distância entre as posições: afeta quem olha para quem. Girar V faria o conteúdo lido depender da posição absoluta.</p><p><span class="src">Aula 7 · A.2 (slide 18)</span></p></div>
+  </details>
+  <details class="q" id="q5">
+    <summary>Como a conexão residual muda o caminho do gradiente?</summary>
+    <div class="answer"><p>A derivada de cada bloco vira identidade mais a derivada do ramo. Sempre existe um caminho que não multiplica nada, então o gradiente chega às primeiras camadas mesmo que os outros termos sejam pequenos.</p><p><span class="src">Aula 7 · slide 9</span></p></div>
+  </details>
+  <details class="q" id="q6">
+    <summary>Se o residual já protege o gradiente, por que ainda é preciso normalizar?</summary>
+    <div class="answer"><p>Porque cada soma residual aumenta a escala das ativações. O residual trata o desaparecimento; a norma trata o crescimento de escala que o próprio residual provoca.</p><p><span class="src">Aula 7 · A.3 (slide 19)</span></p></div>
+  </details>
+  <details class="q" id="q7">
+    <summary>Qual é a diferença de trabalho entre a atenção e o feed-forward?</summary>
+    <div class="answer"><p>A atenção mistura informação entre posições. O feed-forward transforma cada posição isolada, sem olhar para vizinhos, e concentra cerca de dois terços dos pesos do bloco.</p><p><span class="src">Aula 7 · slide 12</span></p></div>
+  </details>
+  <details class="q" id="q8">
+    <summary>Em pré-norm, por que uma norma final é obrigatória?</summary>
+    <div class="answer"><p>Porque a última operação do último bloco é uma soma que não passou por norma. Sem a norma final, a camada de saída herda a escala acumulada de toda a pilha e o treino diverge sem mensagem de erro.</p><p><span class="src">Aula 7 · slide 11</span></p></div>
+  </details>
+  <details class="q" id="q9">
+    <summary>LayerNorm e RMSNorm dependem do tamanho do lote?</summary>
+    <div class="answer"><p>Não. As estatísticas são calculadas sobre as dimensões de cada exemplo. Por isso funcionam igual ao gerar um token só.</p><p><span class="src">Aula 7 · slide 10</span></p></div>
+  </details>
+</section>
+
+<section class="block" id="av1">
+  <h2>Ponte para a AV1: Caso 7</h2>
+  <p>O Caso 7 (“As peças do Transformer”) descreve um encoder com self-attention bidirecional e nenhuma informação de posição, que precisa distinguir as duas frases do cachorro e do homem. O enunciado liga o caso às Aulas 6 e 7.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pergunta do caso</th><th>Conceito testado</th><th>Onde estudar</th></tr></thead>
+      <tbody>
+        <tr><td>1. Por que essa configuração tem dificuldade com a ordem</td><td>Equivariância a permutação; a posição não entra no cálculo</td><td><a href="#sintoma">O sintoma</a> · slide 2; <a href="aula-06.html#arquitetura">Aula 6</a>, slides 16 e 23</td></tr>
+        <tr><td>2. Funções de posição, residual, normalização e feed-forward</td><td>O problema que cada peça resolve</td><td><a href="#pecas">Cada peça, um problema</a> e as seções de cada uma · slides 4, 9, 10 e 12</td></tr>
+        <tr><td>3. Por que não se substituem; posição contra permissão de acesso</td><td>Peças atacam problemas diferentes; máscara é permissão, posição é distância</td><td><a href="#sintoma">Máscara causal não resolve</a>, <a href="#residual">efeito colateral do residual</a> · slides 3 e 19</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Perguntas-guia para o seu rascunho</h3>
+  <ol>
+    <li>O caso diz “bidirecional” e “sem qualquer informação de posição”. O que cada uma dessas duas condições significa para o que um token pode consultar e para o que ele sabe sobre os outros?</li>
+    <li>Na fórmula da atenção, de onde saem os pesos? Algum termo muda quando duas palavras trocam de lugar?</li>
+    <li>Para cada uma das quatro peças, complete: “sem ela, o que quebra é…”. As quatro respostas são sobre o mesmo problema?</li>
+    <li>Qual peça cria um efeito colateral que outra peça precisa controlar? O que isso mostra sobre substituir uma pela outra?</li>
+    <li>Um encoder não tem máscara causal. O que isso prova sobre a diferença entre permissão de acesso e informação de posição?</li>
+  </ol>
+  <div class="callout exam">
+    <strong>O que a rubrica paga</strong>
+    <p>A pergunta 2 convida a uma lista de quatro definições, e a rubrica avisa que “definições soltas” são atendimento insuficiente. O que conta é ligar cada peça a um problema e ao cenário. A pergunta 3 é a de relação entre ideias: o material dá dois pares prontos para trabalhar, residual com normalização e máscara com posição.</p>
+  </div>
+  <p><strong>Como citar:</strong> “Aula 7 — slide 3, máscara é permissão e posição é distância”, “Aula 7 — slide 9, conexão residual”, “Aula 7 — slide 12, feed-forward por posição”, “Aula 6 — Apêndice A.6, equivariância a permutação”.</p>
+</section>
+
+<section class="block" id="glossario">
+  <h2>Glossário</h2>
+  <dl>
+    <dt>Codificação posicional</dt><dd>Informação sobre a posição de cada token, injetada no modelo.</dd>
+    <dt>Senoidal</dt><dd>Código de posição calculado com senos e cossenos de várias frequências, somado na entrada.</dd>
+    <dt>Posição aprendida</dt><dd>Tabela treinável com um vetor por posição. Tem comprimento máximo.</dd>
+    <dt>RoPE</dt><dd>Rotação de Q e K por ângulos proporcionais à posição. O escore passa a depender da distância relativa.</dd>
+    <dt>Conexão residual</dt><dd>Soma da entrada do sub-bloco à sua saída: y = x + f(x).</dd>
+    <dt>LayerNorm</dt><dd>Normalização que centra e escala o vetor de cada exemplo.</dd>
+    <dt>RMSNorm</dt><dd>Normalização que só escala, pela raiz da média dos quadrados.</dd>
+    <dt>Pré-norm / pós-norm</dt><dd>Norma dentro do ramo, antes do sub-bloco, ou depois da soma residual.</dd>
+    <dt>Feed-forward (FFN)</dt><dd>Rede aplicada a cada posição separadamente: expande, aplica não linearidade, projeta de volta.</dd>
+    <dt>SwiGLU</dt><dd>Variante do feed-forward com três matrizes e um ramo que controla quanto passa.</dd>
+    <dt>Bidirecional</dt><dd>Atenção sem máscara: cada posição consulta as anteriores e as posteriores.</dd>
+  </dl>
+</section>
+
+<footer class="note">
+  As etiquetas “Aula N · slide X” marcam o que está no material do professor e pode ser citado. O restante é explicação escrita com apoio de IA: confira no material antes de usar em uma avaliação.
+</footer>
+
+</main>
+<script src="assets/study.js"></script>
+<script>
+// Self-attention without positional information is permutation-equivariant: each token gets the
+// same output vector in both word orders. Adding a positional code to the input breaks the tie.
+(function () {
+  const EMBED = { o: [0.2, 0.1], cachorro: [1.0, 0.2], morde: [0.1, 1.0], homem: [0.9, 0.5] };
+  const A = ["o", "cachorro", "morde", "o", "homem"];
+  const B = ["o", "homem", "morde", "o", "cachorro"];
+  const SHOWN = ["cachorro", "morde", "homem"];
+  const $ = (id) => document.getElementById(id);
+  const buttons = document.querySelectorAll("#perm-demo [data-pos]");
+  const fmt = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  let withPosition = false;
+
+  function attend(tokens) {
+    const x = tokens.map((token, pos) => {
+      const [a, b] = EMBED[token];
+      return withPosition ? [a + Math.sin(pos), b + Math.cos(pos)] : [a, b];
+    });
+    return x.map((query) => {
+      const scores = x.map((key) => (query[0] * key[0] + query[1] * key[1]) / Math.SQRT2);
+      const exps = scores.map(Math.exp);
+      const total = exps.reduce((s, e) => s + e, 0);
+      return x.reduce((out, value, j) => [out[0] + exps[j] / total * value[0], out[1] + exps[j] / total * value[1]], [0, 0]);
+    });
+  }
+
+  function update() {
+    const outA = attend(A), outB = attend(B);
+    const body = $("perm-body");
+    body.textContent = "";
+    let allEqual = true;
+    SHOWN.forEach((token) => {
+      const a = outA[A.indexOf(token)], b = outB[B.indexOf(token)];
+      const equal = Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+      allEqual = allEqual && equal;
+      const row = document.createElement("tr");
+      [token, "(" + fmt(a[0]) + "; " + fmt(a[1]) + ")", "(" + fmt(b[0]) + "; " + fmt(b[1]) + ")", equal ? "sim" : "não"].forEach((text, i) => {
+        const cell = document.createElement("td");
+        cell.textContent = text;
+        if (i === 1 || i === 2) cell.className = "mono";
+        row.appendChild(cell);
+      });
+      body.appendChild(row);
+    });
+    buttons.forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.pos === "on") === withPosition)));
+    $("perm-verdict").textContent = allEqual
+      ? "Cada token sai com o mesmo vetor nas duas frases. Nada na saída registra quem mordeu quem."
+      : "Com a posição somada na entrada, o mesmo token entra com vetores diferentes em posições diferentes, e as saídas passam a distinguir as duas frases.";
+  }
+
+  buttons.forEach((button) => button.addEventListener("click", () => { withPosition = button.dataset.pos === "on"; update(); }));
+  update();
+})();
+
+// Parameter count of one block (no biases): attention 4·d², feed-forward 8·d².
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const slider = $("param-d");
+  const millions = (n) => (n / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " M";
+
+  function update() {
+    const d = Number(slider.value);
+    $("param-d-out").textContent = d.toLocaleString("pt-BR");
+    $("param-att").textContent = millions(4 * d * d);
+    $("param-ffn").textContent = millions(8 * d * d);
+    $("param-total").textContent = millions(12 * d * d);
+    $("param-verdict").textContent = "Dois terços dos pesos estão no feed-forward, em qualquer dimensão. Dobrar d quadruplica a contagem: a relação é quadrática.";
+  }
+
+  slider.addEventListener("input", update);
+  update();
+})();
+</script>
+</body>
+</html>

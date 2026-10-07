@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aula 5 · Recorrência e atenção</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="assets/study.css">
+<style>
+  .weights { display: flex; flex-direction: column; gap: 0.4rem; }
+  .weights .w { display: grid; grid-template-columns: 3rem 1fr 3.5rem; gap: 0.5rem; align-items: center; font-family: var(--font-mono); font-size: 0.8rem; }
+  .weights .track { height: 0.9rem; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; }
+  .weights .fill { height: 100%; background: var(--accent); border-radius: 2px; }
+</style>
+</head>
+<body data-lesson="aula-05">
+<main class="page">
+
+<header class="masthead">
+  <div class="chips"><a href="index.html">caderno</a><span>aula</span><span>05</span><span>recorrência</span><span>atenção</span><span>AV1 · casos 5 e 6</span></div>
+  <h1>Modelos sequenciais e o nascimento da atenção</h1>
+  <p class="lede">Um tradutor acerta a manchete e erra o parágrafo. O erro não é aleatório: ele acompanha o comprimento da entrada. A aula mostra as três dívidas de quem lê em ordem, o que o LSTM renegocia, e a troca que a atenção propõe: acesso em vez de compressão.</p>
+  <p class="meta">leitura: 30 min · fontes: slides <a href="../class/slides/aula05.pdf">aula05.pdf</a> (23 p.) e o <a href="../reference/portal_gml_262/docs/aula-05/index.html">guia de estudo do portal</a> · os números de slide são as páginas do PDF; o guia do portal numera um a menos</p>
+  <ul class="toc">
+    <li><a href="#resumo">Resumo</a></li>
+    <li><a href="#rnn">RNN</a></li>
+    <li><a href="#gradiente">Gradiente</a></li>
+    <li><a href="#paralelismo">Paralelismo</a></li>
+    <li><a href="#lstm">LSTM</a></li>
+    <li><a href="#gargalo">Vetor fixo</a></li>
+    <li><a href="#atencao">Atenção</a></li>
+    <li><a href="#qkv">Q, K, V</a></li>
+    <li><a href="#autoteste">Autoteste</a></li>
+    <li><a href="#av1">Ponte para a AV1</a></li>
+  </ul>
+</header>
+
+<section class="block" id="resumo">
+  <h2>A aula em um minuto</h2>
+  <ul>
+    <li>Uma RNN aplica a mesma função em loop e carrega um <strong>resumo comprimido</strong> de tudo que veio antes. A ordem entra de graça, e os tokens não são guardados.</li>
+    <li>Ler em ordem deixa três dívidas: dependência longa, gradiente que desaparece ou explode, e ausência de paralelismo.</li>
+    <li>O LSTM cria um caminho aditivo com portas. Placar: dependência longa <strong>aliviada</strong>, gradiente <strong>contido</strong>, paralelismo <strong>intacto</strong>.</li>
+    <li>No seq2seq, a frase inteira precisa caber em um vetor de tamanho fixo, e o decoder não pode mais olhar a origem. É o ponto único de falha.</li>
+    <li>A atenção de Bahdanau (2014) calcula um vetor de contexto <strong>por passo</strong>, misturando todos os estados do encoder. Aumentar o vetor compra espaço; a atenção dá acesso.</li>
+    <li>Em 2014 a atenção não substitui a recorrência. Encoder e decoder continuam sendo RNNs.</li>
+  </ul>
+  <p class="keyidea">Falta acesso, não espaço. Comprar um caderno maior não resolve um problema de não poder olhar a fonte.</p>
+  <p><span class="src">Aula 5 · slide 3</span></p>
+</section>
+
+<section class="block" id="sintoma">
+  <h2>O sintoma e a intuição que erra</h2>
+  <p>“O gato dorme” vira <em>the cat sleeps</em>. Uma frase de 40 palavras, com 30 palavras entre o sujeito e o verbo, sai com a concordância errada. A qualidade da tradução do modelo básico cai conforme a frase cresce; a do modelo com atenção se mantém. <span class="src">Aula 5 · slide 2</span></p>
+  <p>O slide tem um cuidado de método: uma curva não fecha o diagnóstico. Ela aponta a suspeita, e quem decide é o experimento comparativo, com os mesmos dados e o mesmo protocolo.</p>
+  <p>A reação natural é “então é só aumentar o vetor”. Aumentar o resumo interno compra espaço, e não acesso: o decoder continua recebendo um único vetor e não pode consultar de novo as posições da entrada. A curva se desloca e mantém a mesma forma. <span class="src">Aula 5 · slide 3</span></p>
+</section>
+
+<section class="block" id="rnn">
+  <h2>RNN: uma função aplicada em loop</h2>
+  <div class="formula">h_t = tanh(W_h · h_(t-1) + W_x · x_t + b)</div>
+  <p>O estado <code>h_t</code> é o resumo comprimido de tudo o que veio antes. A mesma matriz é usada em todos os passos, então o número de parâmetros não depende do comprimento da frase. <span class="src">Aula 5 · slide 4</span></p>
+  <p>Para quem programa, o professor descreve como um <code>reduce</code> sobre a frase: <code>h</code> é o acumulador, <code>x_t</code> é o elemento, e a função de combinação foi aprendida em vez de escrita.</p>
+  <p>Duas propriedades saem daí. A ordem entra de graça, porque compor funções não comuta: processar “a, b” e “b, a” dá estados finais diferentes. E os tokens <strong>não são guardados</strong>: só sobra o resumo. <span class="src">Aula 5 · A.1 (slide 17)</span></p>
+</section>
+
+<section class="block" id="gradiente">
+  <h2>Dívida do gradiente: concorda a três palavras, erra a quarenta</h2>
+  <p>O sintoma é traiçoeiro: não há <code>NaN</code>, não há divergência, a loss desce. A dependência longa simplesmente nunca é aprendida, porque o sinal de treino chega atenuado aos primeiros passos. <span class="src">Aula 5 · slide 5</span></p>
+  <p>O mecanismo: o gradiente que chega ao primeiro passo é um produto de T − 1 fatores, um por passo, e todos envolvem a mesma matriz. Se cada passo multiplica o sinal por um ganho ρ, o que sobra depois de n passos é ρⁿ. É a lógica dos juros compostos. <span class="src">Aula 5 · A.2 (slide 18)</span></p>
+
+  <div class="demo" id="grad-demo">
+    <h3>Quanto do sinal chega depois de n passos</h3>
+    <div class="grid">
+      <label for="grad-rho">Ganho por passo ρ: <output id="grad-rho-out" for="grad-rho"></output>
+        <input type="range" id="grad-rho" min="0.5" max="1.5" step="0.05" value="0.9"></label>
+      <label for="grad-n">Passos de retropropagação n: <output id="grad-n-out" for="grad-n"></output>
+        <input type="range" id="grad-n" min="1" max="200" step="1" value="50"></label>
+    </div>
+    <div class="grid">
+      <div class="stat">ρⁿ <b id="grad-value"></b></div>
+    </div>
+    <div class="row">
+      <button type="button" data-rho="0.9" data-n="10">0,9¹⁰</button>
+      <button type="button" data-rho="0.9" data-n="50">0,9⁵⁰</button>
+      <button type="button" data-rho="0.9" data-n="100">0,9¹⁰⁰</button>
+      <button type="button" data-rho="1.1" data-n="50">1,1⁵⁰</button>
+      <button type="button" data-rho="1.1" data-n="100">1,1¹⁰⁰</button>
+    </div>
+    <p class="verdict" id="grad-verdict"></p>
+  </div>
+  <p class="meta">Os cinco botões reproduzem os números do slide 5: 0,35 · 5·10⁻³ · 3·10⁻⁵ · 117 · 1,4·10⁴.</p>
+
+  <p>Dez por cento de perda por passo é irrelevante em dez passos e é aniquilação em cem.</p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Diagnosticar falta de capacidade e aumentar a dimensão do estado. Mantido o ganho por passo, o expoente continua lá. O modelo pode ter capacidade para representar a dependência e ainda assim não aprendê-la: é um problema de otimização. O recorte de gradiente trata só o lado da explosão; não há operação simétrica para o desaparecimento, porque amplificar um gradiente quase nulo amplifica ruído.</p>
+  </div>
+</section>
+
+<section class="block" id="paralelismo">
+  <h2>Dívida do paralelismo: a GPU quatro vezes mais rápida que rendeu 15%</h2>
+  <p>A causa é estrutural: <code>h_t</code> exige <code>h_(t-1)</code>. São T etapas obrigatoriamente em série, e hardware mais rápido não muda a ordem em que elas precisam acontecer. <span class="src">Aula 5 · slide 6</span></p>
+  <p>O slide faz uma distinção fina: essa dívida é de <strong>treino</strong>, e não de geração. Gerar texto é sequencial em qualquer arquitetura. O que a recorrência impede é processar em paralelo, no treino, uma sequência que já está inteira disponível.</p>
+  <p class="keyidea">O que matou a recorrência não foi qualidade. Foi ela não deixar você gastar dinheiro para ir mais rápido.</p>
+</section>
+
+<section class="block" id="lstm">
+  <h2>LSTM: tudo o que importa está em um sinal de mais</h2>
+  <div class="formula">f_t, i_t, o_t = σ(W · [h_(t-1), x_t])     três portas, entre 0 e 1
+c_t = f_t ⊙ c_(t-1) + i_t ⊙ g_t           o caminho ADITIVO</div>
+  <p>O LSTM acrescenta um estado de célula <code>c_t</code>, que o slide desenha como uma rodovia contínua com três válvulas por passo. A atualização da célula é uma soma, sem multiplicação por matriz no caminho. Se a porta de esquecimento fica perto de 1, o gradiente atravessa muitos passos sem atenuação. <span class="src">Aula 5 · slide 7</span> <span class="src">Aula 5 · A.3 (slide 19)</span></p>
+  <ul>
+    <li><strong>Ganha-se:</strong> dependência de médio alcance aprendível e treino estável.</li>
+    <li><strong>Não se ganha:</strong> quando as portas fecham, o decaimento volta. Com porta em 0,9, o produto volta a ser 0,9ⁿ, só que agora por decisão da rede, e apenas nos canais que ela escolheu esquecer.</li>
+  </ul>
+  <p class="keyidea">O LSTM não resolveu o gradiente. Ele deu à rede o poder de decidir quando não estragá-lo.</p>
+  <h3>O placar das três dívidas</h3>
+  <p><span class="src">Aula 5 · slide 8</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Dívida</th><th>Com LSTM</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr><td>Dependência longa</td><td><strong>Aliviada</strong></td><td>Melhorou muito, não acabou: tokens distantes continuam separados por muitos passos</td></tr>
+        <tr><td>Gradiente</td><td><strong>Contido</strong></td><td>O recorte segura a explosão; o caminho aditivo põe o desaparecimento sob controle da rede</td></tr>
+        <tr><td>Paralelismo</td><td><strong>Intacto</strong></td><td>Nada no LSTM muda o fato de h_t exigir h_(t-1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout">
+    <strong>Três operações distintas</strong>
+    <p>O ELMo (2018) produziu representações contextuais de “banco” usando LSTMs bidirecionais, sem atenção. O slide tira daí uma regra: <strong>contextualizar, consultar e paralelizar são operações distintas</strong>. Uma arquitetura pode fazer a primeira sem fazer as outras duas.</p>
+  </div>
+</section>
+
+<section class="block" id="gargalo">
+  <h2>Seq2seq: um único ponto de falha, e ele tem nome</h2>
+  <p>Tradução automática em 2014 usa duas redes. O <strong>encoder</strong> lê a frase de origem inteira e só atualiza o próprio estado. O <strong>decoder</strong> parte do último estado do encoder e escreve a tradução, uma palavra por vez. <span class="src">Aula 5 · slide 9</span></p>
+  <div class="formula">c = h_T        dimensão fixa, para frases de 5 ou de 50 palavras</div>
+  <p>Daí em diante o decoder não tem mais acesso à frase de origem. No desenho do slide não existe nenhuma seta do decoder de volta para o encoder, e a ausência é o ponto.</p>
+  <p>O apêndice separa <strong>duas coisas diferentes</strong> que faltam nessa ponte. <span class="src">Aula 5 · A.4 (slide 20)</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>O que falta</th><th>Argumento</th><th>Aumentar o vetor resolve?</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Espaço</strong> (memória)</td><td>A capacidade de c é constante enquanto a entrada cresce. A partir de certo comprimento, frases diferentes recebem o mesmo código</td><td>Adia o limite, de forma linear</td></tr>
+        <tr><td><strong>Acesso</strong> (caminho)</td><td>A posição j da entrada só influencia a saída depois de atravessar o resto do encoder, a ponte e os passos do decoder. Cada passo é um fator no produto do gradiente</td><td>Não muda um único termo</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>É por isso que, com um vetor maior, a curva se desloca sem mudar de forma. A atenção não aumenta o vetor: ela torna o comprimento do caminho igual a 1, para qualquer posição da entrada e qualquer passo da saída.</p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Jogar o paralelismo na conta do vetor fixo. A terceira dívida não mora no vetor <code>c</code>: ela atravessa os dois blocos, porque ambos são recorrentes. Essa distinção impede de atribuir à atenção de 2014 um ganho que só aparece em 2017.</p>
+  </div>
+</section>
+
+<section class="block" id="atencao">
+  <h2>Atenção: um vetor de contexto por passo, não um por frase</h2>
+  <p>Na proposta de Bahdanau, Cho e Bengio (2014), os estados do encoder <code>h₁ … h_n</code> permanecem disponíveis. A cada passo t, o decoder faz três coisas. <span class="src">Aula 5 · slide 11</span> <span class="src">Aula 5 · A.5 (slide 21)</span></p>
+  <ol>
+    <li><strong>Compara</strong> o próprio estado com cada posição da origem e obtém um score por posição.</li>
+    <li><strong>Normaliza</strong> os scores com softmax: viram pesos positivos que somam 1, um orçamento de leitura.</li>
+    <li><strong>Lê</strong> a origem segundo esse orçamento: o contexto <code>c_t</code> é a soma ponderada dos estados do encoder.</li>
+  </ol>
+  <div class="formula">α_t = (0,6; 0,3; 0,1)   →   c_t = 0,6·h₁ + 0,3·h₂ + 0,1·h₃</div>
+
+  <div class="demo" id="att-demo">
+    <h3>De scores a pesos</h3>
+    <div class="grid">
+      <label for="att-e1">score de h₁: <output id="att-e1-out" for="att-e1"></output>
+        <input type="range" id="att-e1" min="-2" max="4" step="0.1" value="2"></label>
+      <label for="att-e2">score de h₂: <output id="att-e2-out" for="att-e2"></output>
+        <input type="range" id="att-e2" min="-2" max="4" step="0.1" value="1"></label>
+      <label for="att-e3">score de h₃: <output id="att-e3-out" for="att-e3"></output>
+        <input type="range" id="att-e3" min="-2" max="4" step="0.1" value="0.5"></label>
+      <label for="att-scale">multiplicar todos os scores por: <output id="att-scale-out" for="att-scale"></output>
+        <input type="range" id="att-scale" min="0" max="3" step="0.5" value="1"></label>
+    </div>
+    <div class="weights" id="att-weights"></div>
+    <p class="verdict" id="att-verdict"></p>
+  </div>
+  <p class="meta">Valores iniciais do Apêndice A.5: scores (2,0; 1,0; 0,5) dão pesos (0,6285; 0,2312; 0,1402). Com os scores dobrados: (0,8438; 0,1142; 0,0420).</p>
+
+  <p>Três leituras importantes do apêndice:</p>
+  <ul>
+    <li><strong>É mistura, e não seleção.</strong> O contexto é uma combinação de todos os estados. A saída quase nunca coincide com um estado isolado.</li>
+    <li><strong>É treinável</strong> justamente por ser suave: o gradiente alcança todos os estados. Um argmax rígido teria derivada zero em quase toda parte.</li>
+    <li><strong>O softmax amplifica.</strong> Uma diferença de 1 no score vira um fator de 2,72 no peso, e a amplificação depende da escala dos scores. É o que motiva a divisão por √d_k na Aula 6.</li>
+  </ul>
+  <p>O conteúdo é o mesmo; o que muda é o direito de olhar a fonte na hora de responder. E um limite que o slide deixa explícito: <strong>em 2014 a atenção não substitui a recorrência</strong>. Encoder e decoder continuam RNNs, e a dívida do paralelismo segue intacta.</p>
+  <h3>A evidência: alinhamento aprendido sem rótulo</h3>
+  <p>A matriz de pesos de atenção entre uma frase em português e a tradução em inglês mostra uma diagonal predominante, onde a ordem das duas línguas coincide, e um bloco fora da diagonal onde um grupo nominal inverte a ordem. Nenhum rótulo de alinhamento foi usado no treino: o único sinal foi a tradução correta. O alinhamento apareceu porque era o caminho mais barato para acertar. <span class="src">Aula 5 · slide 12</span></p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Ler o peso de atenção como a explicação da decisão. Peso alto é correlação com a decisão, e não a razão dela. Por isso os autores chamam de alinhamento <em>suave</em>.</p>
+  </div>
+</section>
+
+<section class="block" id="qkv">
+  <h2>Q, K, V: três papéis antes de três matrizes</h2>
+  <p>O que a atenção faz tem a forma de uma busca: há uma consulta, há itens indexados, há conteúdo devolvido. <span class="src">Aula 5 · slide 13</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Papel</th><th>Em Bahdanau (2014)</th><th>Pergunta que responde</th></tr></thead>
+      <tbody>
+        <tr><td>Consulta (Q)</td><td>Deriva do estado do decoder</td><td>O que estou procurando agora?</td></tr>
+        <tr><td>Chave (K)</td><td>Deriva de cada estado do encoder, no cálculo do score</td><td>Como cada posição se anuncia?</td></tr>
+        <tr><td>Valor (V)</td><td>O próprio estado do encoder, que entra na soma ponderada</td><td>O que cada posição entrega?</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Há duas diferenças em relação a um dicionário de programação. A comparação não é igualdade exata: é uma função aprendida que devolve um número contínuo. E o resultado não é um item: é uma mistura ponderada de todos.</p>
+  <p>No Transformer, os três papéis viram três projeções explícitas da mesma entrada, e as consultas passam a vir da própria sequência. O apêndice avisa que uma atenção não é caso particular exato da outra: mudam o score, as projeções, a origem das consultas e a forma de executar. E fecha com a frase que organiza a próxima aula: o paralelismo vem da arquitetura, e não da palavra “atenção”. <span class="src">Aula 5 · A.6 (slide 22)</span></p>
+  <p>A aula termina com a pergunta que a <a href="aula-06.html">Aula 6</a> responde: se a atenção dá acesso direto, para que ainda serve a recorrência?</p>
+</section>
+
+<section class="block" id="pratica">
+  <h2>Pratique: diagnosticar, não calcular</h2>
+  <p>Para cada situação, diga a causa provável e que evidência confirmaria. Os enunciados estão no guia do portal; as causas seguem as três dívidas da aula. O guia não registra as evidências esperadas, então essas partes são leitura minha a partir dos slides: confira. <span class="src">Aula 5 · slide 14</span></p>
+  <details class="q" id="p1">
+    <summary>Um tradutor acerta manchetes e desmonta em parágrafos; o erro cresce com o comprimento; o treino tem exemplos longos em quantidade comparável</summary>
+    <div class="answer">
+      <p>Causa: o vetor de tamanho fixo entre encoder e decoder. Evidência: o experimento comparativo do slide 2, com os mesmos dados e o mesmo protocolo, um modelo com atenção e outro sem, medindo a qualidade por faixa de comprimento.</p>
+    </div>
+  </details>
+  <details class="q" id="p2">
+    <summary>Um modelo recorrente aprende concordância entre vizinhos e nunca aprende entre palavras a 40 posições; a loss desce, sem NaN; aumentar a dimensão não mudou nada</summary>
+    <div class="answer">
+      <p>Causa: gradiente que desaparece ao longo dos passos. O detalhe “aumentar a dimensão não mudou nada” descarta falta de capacidade. Evidência: medir a norma do gradiente em função da distância em passos, como na primeira medição da demonstração em sala (T = 10, 50, 200).</p>
+    </div>
+  </details>
+  <details class="q" id="p3">
+    <summary>GPU quatro vezes mais rápida, tempo por época 15% menor; o profiler mostra uma cadeia de operações pequenas, cada uma esperando a anterior</summary>
+    <div class="answer">
+      <p>Causa: a recorrência obriga o processamento em série, porque cada estado depende do anterior. A evidência já está no enunciado: o perfil de execução com operações encadeadas e a GPU ociosa.</p>
+    </div>
+  </details>
+</section>
+
+<section class="block" id="autoteste">
+  <h2>Autoteste</h2>
+  <p>Responda antes de abrir. <span class="meta" data-quiz-progress></span></p>
+  <details class="q" id="q1">
+    <summary>O que o estado h_t de uma RNN contém, e o que ele não contém?</summary>
+    <div class="answer"><p>Contém um resumo comprimido de tudo que veio antes. Não contém os tokens: eles não são guardados, só o resumo sobrevive.</p><p><span class="src">Aula 5 · slide 4</span></p></div>
+  </details>
+  <details class="q" id="q2">
+    <summary>Por que uma perda de 10% por passo impede o aprendizado de dependências a 100 passos?</summary>
+    <div class="answer"><p>Porque os fatores se multiplicam: 0,9¹⁰⁰ ≈ 3·10⁻⁵. O sinal de treino que chega ao início é indistinguível de ruído.</p><p><span class="src">Aula 5 · A.2 (slide 18)</span></p></div>
+  </details>
+  <details class="q" id="q3">
+    <summary>O recorte de gradiente resolve o desaparecimento?</summary>
+    <div class="answer"><p>Não. Ele renormaliza gradientes grandes e trata a explosão. Não existe operação simétrica para o desaparecimento.</p><p><span class="src">Aula 5 · A.2 (slide 18)</span></p></div>
+  </details>
+  <details class="q" id="q4">
+    <summary>Qual é a mudança estrutural do LSTM que ajuda o gradiente?</summary>
+    <div class="answer"><p>A célula é atualizada por soma (c_t = f⊙c_(t-1) + i⊙g), sem multiplicação por matriz nesse caminho. Com a porta de esquecimento perto de 1, o gradiente atravessa muitos passos.</p><p><span class="src">Aula 5 · slide 7</span></p></div>
+  </details>
+  <details class="q" id="q5">
+    <summary>Qual das três dívidas o LSTM deixa intacta, e por quê?</summary>
+    <div class="answer"><p>O paralelismo. O estado de cada passo continua dependendo do estado anterior, então o processamento continua em série.</p><p><span class="src">Aula 5 · slide 8</span></p></div>
+  </details>
+  <details class="q" id="q6">
+    <summary>“Aumentar o vetor do seq2seq resolve a queda em frases longas.” O que há de certo e de errado?</summary>
+    <div class="answer"><p>Certo: mais dimensão dá mais espaço e adia o limite. Errado: não dá acesso. O caminho entre uma posição da entrada e a saída continua longo, e o decoder continua sem poder consultar a origem. A curva se desloca e mantém a forma.</p><p><span class="src">Aula 5 · slide 3</span> <span class="src">Aula 5 · A.4 (slide 20)</span></p></div>
+  </details>
+  <details class="q" id="q7">
+    <summary>Descreva os três passos da atenção de Bahdanau em um passo do decoder.</summary>
+    <div class="answer"><p>Comparar o estado do decoder com cada estado do encoder (scores); normalizar com softmax (pesos que somam 1); somar os estados do encoder ponderados pelos pesos (contexto daquele passo).</p><p><span class="src">Aula 5 · slide 11</span></p></div>
+  </details>
+  <details class="q" id="q8">
+    <summary>A atenção de 2014 eliminou a recorrência e o processamento sequencial?</summary>
+    <div class="answer"><p>Não. Encoder e decoder continuam RNNs. Ela removeu o resumo fixo e criou um caminho curto até a origem, mas a dívida do paralelismo ficou intacta até 2017.</p><p><span class="src">Aula 5 · slide 11</span></p></div>
+  </details>
+</section>
+
+<section class="block" id="av1">
+  <h2>Ponte para a AV1: Casos 5 e 6</h2>
+  <h3>Caso 5 · O começo da frase se perdeu</h3>
+  <p>Um sistema de tradução recorrente comprime a entrada inteira em um único vetor, e em frases longas os detalhes do começo se perdem. É a abertura desta aula.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pergunta do caso</th><th>Conceito testado</th><th>Onde estudar</th></tr></thead>
+      <tbody>
+        <tr><td>1. O gargalo de um único vetor</td><td>Capacidade fixa contra entrada variável; espaço e acesso como faltas diferentes</td><td><a href="#gargalo">Vetor fixo</a> · slides 3, 9 e 20</td></tr>
+        <tr><td>2. Como a atenção sobre os estados do encoder ajuda</td><td>Contexto por passo; mistura ponderada; caminho de comprimento 1</td><td><a href="#atencao">Atenção</a> · slides 11, 12 e 21</td></tr>
+        <tr><td>3. LSTM elimina a dependência do processamento sequencial?</td><td>O que o LSTM muda (caminho do gradiente) e o que não muda (h_t exige h_(t-1))</td><td><a href="#lstm">LSTM e o placar</a>, <a href="#paralelismo">Paralelismo</a> · slides 6, 7 e 8</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Perguntas-guia para o Caso 5</h3>
+  <ol>
+    <li>O que cresce quando a frase cresce, e o que fica do mesmo tamanho? Depois que o vetor é produzido, o decoder consegue voltar à origem?</li>
+    <li>Por que justamente o <em>começo</em> da frase é o mais prejudicado? Pense em quantos passos separam a primeira palavra da saída.</li>
+    <li>Com atenção, o que o decoder recebe em cada passo que antes não recebia? Isso é um vetor maior ou outra coisa?</li>
+    <li>O LSTM atua sobre qual das três dívidas? O estado de um passo do LSTM pode ser calculado sem o estado anterior?</li>
+    <li>O caso diz “por si só”. O que precisaria mudar na arquitetura para o processamento deixar de ser sequencial?</li>
+  </ol>
+  <h3>Caso 6 · a parte que nasce aqui</h3>
+  <p>O Caso 6 (Aulas 5 e 6) pergunta pelos papéis de Q, K e V. A origem dos três papéis está na seção <a href="#qkv">Q, K, V</a> desta página; a versão do Transformer, a máscara causal e as múltiplas cabeças estão na <a href="aula-06.html">Aula 6</a>.</p>
+  <div class="callout exam">
+    <strong>O que a rubrica paga</strong>
+    <p>Na pergunta 3 do Caso 5, a resposta curta é fácil; os pontos estão em justificar com o mecanismo e em não generalizar. “LSTM resolve o problema da memória” é o tipo de afirmação que o placar da aula corrige: uma dívida aliviada, uma contida, uma intacta. Separar memória, gradiente e paralelismo mostra a relação entre as ideias que o enunciado diz valorizar.</p>
+  </div>
+  <p><strong>Como citar:</strong> “Aula 5 — slide 9, vetor de contexto fixo no seq2seq”, “Aula 5 — slide 11, atenção de Bahdanau”, “Aula 5 — slide 8, placar das três dívidas”.</p>
+</section>
+
+<section class="block" id="glossario">
+  <h2>Glossário</h2>
+  <dl>
+    <dt>RNN</dt><dd>Rede recorrente: aplica a mesma função a cada token, carregando um estado.</dd>
+    <dt>Estado oculto (h_t)</dt><dd>Resumo comprimido do que foi lido até o passo t.</dd>
+    <dt>Gradiente que desaparece</dt><dd>Sinal de treino que encolhe exponencialmente com o número de passos.</dd>
+    <dt>Recorte de gradiente</dt><dd>Renormalização de gradientes grandes. Trata só a explosão.</dd>
+    <dt>LSTM</dt><dd>RNN com estado de célula atualizado por soma e três portas (esquecer, entrar, sair).</dd>
+    <dt>Seq2seq</dt><dd>Arquitetura encoder-decoder: uma rede lê a origem, outra escreve a saída.</dd>
+    <dt>Vetor de contexto</dt><dd>No seq2seq clássico, o último estado do encoder. Com atenção, um vetor novo a cada passo.</dd>
+    <dt>Atenção</dt><dd>Mecanismo que pontua, normaliza e mistura representações de outras posições.</dd>
+    <dt>Alinhamento suave</dt><dd>Distribuição de pesos sobre a origem, em vez de uma correspondência única.</dd>
+    <dt>Consulta, chave, valor</dt><dd>Os três papéis da atenção: o que se procura, como cada item se anuncia, o que cada item entrega.</dd>
+  </dl>
+</section>
+
+<footer class="note">
+  As etiquetas “Aula N · slide X” marcam o que está no material do professor e pode ser citado. O restante é explicação escrita com apoio de IA: confira no material antes de usar em uma avaliação.
+</footer>
+
+</main>
+<script src="assets/study.js"></script>
+<script>
+// Compound gain: what is left of the training signal after n recurrent steps.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const rho = $("grad-rho"), steps = $("grad-n");
+
+  function scientific(x) {
+    if (x >= 0.01 && x < 1000) {
+      return x.toLocaleString("pt-BR", { maximumSignificantDigits: 3 });
+    }
+    const exponent = Math.floor(Math.log10(x));
+    const mantissa = x / Math.pow(10, exponent);
+    return mantissa.toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " × 10^" + exponent;
+  }
+
+  function update() {
+    const r = Number(rho.value), n = Number(steps.value);
+    const value = Math.pow(r, n);
+    $("grad-rho-out").textContent = r.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+    $("grad-n-out").textContent = n;
+    $("grad-value").textContent = scientific(value);
+    let text = "Com ganho exatamente 1 o sinal se mantém, mas é um equilíbrio instável: qualquer desvio volta a um dos dois regimes.";
+    if (r < 1) {
+      text = value < 0.001
+        ? "O sinal desaparece: o que chega ao início da sequência é menor que um milésimo do original. A dependência a essa distância não é aprendida, e nada na loss avisa."
+        : "O sinal encolhe, mas ainda chega. Em janelas curtas a RNN funciona.";
+    } else if (r > 1) {
+      text = value > 1000
+        ? "O sinal explode. Este lado tem remendo: o recorte de gradiente."
+        : "O sinal cresce a cada passo; com mais passos ele explode.";
+    }
+    $("grad-verdict").textContent = text;
+  }
+
+  document.querySelectorAll("#grad-demo [data-rho]").forEach((button) => {
+    button.addEventListener("click", () => {
+      rho.value = button.dataset.rho;
+      steps.value = button.dataset.n;
+      update();
+    });
+  });
+  [rho, steps].forEach((el) => el.addEventListener("input", update));
+  update();
+})();
+
+// Scores to attention weights: softmax turns differences into ratios, and scale sharpens it.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const inputs = ["att-e1", "att-e2", "att-e3"].map($);
+  const scale = $("att-scale"), box = $("att-weights");
+  const fmt = (x, digits) => x.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+  const rows = inputs.map((_, index) => {
+    const row = document.createElement("div");
+    row.className = "w";
+    const label = document.createElement("span");
+    label.textContent = "α" + (index + 1);
+    const track = document.createElement("div");
+    track.className = "track";
+    const fill = document.createElement("div");
+    fill.className = "fill";
+    track.appendChild(fill);
+    const value = document.createElement("span");
+    row.append(label, track, value);
+    box.appendChild(row);
+    return { fill, value };
+  });
+
+  function update() {
+    const k = Number(scale.value);
+    const scores = inputs.map((input) => Number(input.value) * k);
+    const exps = scores.map(Math.exp);
+    const total = exps.reduce((a, b) => a + b, 0);
+    const weights = exps.map((e) => e / total);
+    inputs.forEach((input, i) => { $(input.id + "-out").textContent = fmt(Number(input.value), 1); });
+    $("att-scale-out").textContent = fmt(k, 1);
+    weights.forEach((w, i) => {
+      rows[i].fill.style.width = (w * 100) + "%";
+      rows[i].value.textContent = fmt(w, 4);
+    });
+    const top = Math.max(...weights);
+    let text = "O contexto deste passo é uma mistura dos três estados, nas proporções acima.";
+    if (k === 0 || top - Math.min(...weights) < 0.01) {
+      text = "Scores iguais dão pesos iguais: média simples. É o estado de “não sei onde olhar”.";
+    } else if (top > 0.95) {
+      text = "Um score domina e o peso vai para perto de 1: alinhamento quase rígido. Os outros estados quase não recebem gradiente.";
+    }
+    $("att-verdict").textContent = text;
+  }
+
+  inputs.concat(scale).forEach((el) => el.addEventListener("input", update));
+  update();
+})();
+</script>
+</body>
+</html>
