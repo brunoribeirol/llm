@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Famílias de modelos e atenção eficiente · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="8">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 08 / 1 — Fundamentos: do texto ao Transformer</p><h1>Famílias de modelos e atenção eficiente</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 08" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Distinguir</strong> encoder-only, encoder-decoder e decoder-only pela máscara de atenção e pelo objetivo de pré-treino — não pelo tamanho, pelo nome ou pela data do modelo.</p></li><li><p><strong>Explicar</strong> o objetivo MLM e o papel do token <code>[CLS]</code>, e <strong>descrever</strong> como um fine-tuning troca a cabeça de tarefa sobre o mesmo corpo pré-treinado.</p></li><li><p><strong>Justificar</strong> por que a previsão do próximo token dominou, e <strong>apontar</strong> dois cenários concretos em que um encoder-only continua sendo a escolha certa.</p></li><li><p><strong>Calcular</strong> o tamanho do KV cache a partir de <code>n_layers</code>, <code>n_kv_heads</code>, <code>d_head</code>, <code>n_tokens</code> e bytes por valor, e <strong>derivar</strong> o fator de redução de MQA e GQA.</p></li><li><p><strong>Comparar</strong> o custo de atenção plena, de janela deslizante e de janela com atenção global em função de <code>n</code> e <code>w</code>, e <strong>explicar</strong> como a informação de longa distância sobrevive à janela.</p></li><li><p><strong>Explicar</strong> o que a destilação transfere do professor para o aluno que um rótulo duro não transfere.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · Abertura: três chamados, nenhum bug · 00:00–00:10</summary><div class="prose"><p>Boa noite, pessoal. Na aula passada a gente fechou o bloco Transformer moderno, e vale recapitular em uma
+linha o que exatamente ficou fechado: posição entrando por RoPE, girando query e key para que a distância
+relativa apareça dentro do score; normalização por RMSNorm em pré-norm, com a residual passando limpa de
+ponta a ponta; e feed-forward com SwiGLU. Esse bloco é o que os modelos abertos de hoje empilham, e vocês
+sabem desenhar ele.</p>
+<p>Hoje eu não vou construir bloco nenhum. Hoje eu vou trazer três chamados que chegaram na mesma semana, e
+eu quero que vocês repararem numa coisa que os três têm em comum: <strong>nenhum deles tem exceção no log</strong>.</p>
+<p>Chamado um. O serviço de conversa atende dez usuários simultâneos com folga. Em quarenta, a GPU estoura.
+Mesmo modelo, mesmos pesos, mesma máquina, e ninguém fez deploy de nada entre uma coisa e a outra.</p>
+<p>Chamado dois. Um time tinha um classificador pequeno rodando desde 2019 e trocou por um LLM, com o
+argumento de que o LLM é de 2024. A qualidade subiu um pouco. A fatura de inferência multiplicou, e a
+latência saiu do orçamento do produto.</p>
+<p>Chamado três. O produto anunciou janela de cento e vinte e oito mil tokens. Em produção, com usuários de
+verdade, o contexto útil que sobra é uma fração disso — e ninguém na equipe consegue dizer qual fração.</p>
+<p>Nenhum dos três é bug. Os três se resolvem com duas contas que eu vou dar hoje: <strong>quem pode ler quem</strong>, e
+<strong>quanto o rascunho custa</strong>. A primeira metade da aula responde o chamado dois. A segunda metade responde
+o um e o três — e o chamado um fecha com um número.</p>
+<blockquote>
+<p>Ideia central: "Nenhum dos três tem erro no log. E os três se resolvem com duas contas: quem pode ler quem, e quanto o rascunho custa."</p>
+</blockquote></div></details><details><summary>Slide 2 · Por que a escolha por nome sai errada: a máscara é a arquitetura · 00:10–00:16</summary><div class="prose"><p>Deixa eu começar pelo chamado dois, porque o erro dele é de raciocínio, não de engenharia.</p>
+<p>O time comparou <strong>datas</strong>. E data não é uma propriedade que decide arquitetura. Deixa eu mostrar o que
+decide.</p>
+<p>Eu vou pegar exatamente o bloco da aula passada e trocar <strong>uma</strong> coisa: quem pode ler quem. Três opções.</p>
+<p>Primeira: máscara nenhuma. Toda posição consulta todas as outras, passado e futuro. Isso é bidirecional, e
+é o que a gente chama de encoder. Segunda: máscara causal, aquela matriz triangular que a gente montou na
+Aula 6 — cada posição só consulta o próprio passado. Isso é o decoder. Terceira: as duas juntas, em duas
+pilhas. Uma pilha lê a entrada inteira sem máscara, outra pilha gera com máscara causal e consulta a
+primeira por cross-attention.</p>
+<p>Agora o ponto que eu quero que vocês levem deste slide, porque ele é o eixo da aula. A máscara não é um
+detalhe de implementação: ela <strong>determina o objetivo de treino possível</strong>. Se toda posição vê o futuro,
+não dá para treinar prevendo o próximo token — a resposta está na entrada. O modelo aprende a copiar, a
+perda vai a zero, e nada de linguagem foi aprendido. Então o objetivo tem que mudar junto. Máscara e
+função de perda são um pacote, não duas escolhas independentes.</p>
+<p>E é por isso que o chamado dois errou. A pergunta certa não era "qual é mais novo". Era: essa tarefa
+precisa gerar texto, ou precisa devolver um rótulo? A resposta dessa pergunta escolhe a máscara, e a
+máscara escolhe a família.</p>
+<blockquote>
+<p>Ideia central: "Trocar a máscara troca o que o modelo pode aprender — e aí o objetivo de treino não tem escolha."</p>
+</blockquote></div></details><details><summary>Slide 3 · BERT: atenção bidirecional e a lacuna a preencher · 00:16–00:25</summary><div class="prose"><p>Vou começar pela família bidirecional, que é onde a história moderna começa de verdade em 2018, com o
+BERT.</p>
+<p>O problema é o que eu acabei de dizer: com atenção bidirecional, prever o próximo token é trapaça. A
+solução do BERT é o <strong>masked language modeling</strong>: mascarar cerca de quinze por cento dos tokens da
+sequência e treinar o modelo para prever cada um deles usando o contexto dos dois lados. A perda está no
+slide, e eu vou ler em vez de derivar: menos a soma, sobre as posições mascaradas, do log da probabilidade
+do token correto dado o resto da sequência.</p>
+<p>E aqui a gente fecha um laço que está aberto desde a Aula 3. Vocês lembram do problema do "banco"?
+Embedding estático dava um vetor só para a palavra, e eu deixei aquele sintoma <strong>aberto de propósito</strong>,
+dizendo que fechava na Aula 6. Na Aula 6 a gente viu o mecanismo — a atenção mistura o vetor de "banco"
+com os vetores dos vizinhos, e a saída depende do contexto. O que o BERT fez foi montar o <strong>objetivo de
+treino</strong> que força esse mecanismo a aprender exatamente isso, dos dois lados, em bilhões de frases. E na
+demo, daqui a quinze minutos, vocês vão ver as duas frases do banco produzindo distribuições diferentes,
+na tela.</p>
+<p>Tem um detalhe honesto que vale contar, porque parece gambiarra e é engenharia. Existe uma discrepância
+entre treino e uso: no treino o modelo vê o token <code>[MASK]</code>, e em uso ninguém manda <code>[MASK]</code> para ele. O
+BERT original ameniza isso substituindo só oitenta por cento das posições escolhidas pelo <code>[MASK]</code>, dez
+por cento por um token aleatório e dez por cento por nada — deixando a palavra original no lugar e ainda
+pedindo a predição. Esses últimos dez por cento são o mais engenhoso dos três, e a razão está em A.1.</p>
+<p>Só que reparem no verbo que eu usei: <strong>ameniza</strong>. E dá para remover. Em dois mil e vinte, o ELECTRA trocou a tarefa: em vez de "adivinhe a palavra que está debaixo da máscara", ele pergunta, para cada palavra da frase, "esta aqui é a original ou foi trocada?". Um modelo pequeno preenche as lacunas com palavras plausíveis, e o modelo que interessa recebe a frase já preenchida — <strong>sem nenhum <code>[MASK]</code></strong>. A discrepância some, porque ela não existe mais. E tem um segundo ganho, que eu vou cobrar de volta no slide sete: a pergunta é feita para <strong>todas</strong> as posições, não para quinze por cento delas.</p>
+<p>Guardem isso, porque no slide sete eu vou dizer que o decoder aprende com mais densidade de sinal que o encoder, e o ELECTRA é a prova de que essa densidade não vinha da máscara causal — vinha do objetivo. Dá para ter as duas coisas. Está em A.1, inclusive a parte contraintuitiva: o gerador do ELECTRA é pequeno <strong>de propósito</strong>, porque um gerador bom demais deixa a tarefa impossível.</p>
+<p>E o que essa família <strong>não</strong> faz: gerar. Aqui eu quero ser mais preciso do que o normal, porque a resposta
+fácil está errada. A resposta fácil é "ele não foi treinado para isso". A resposta certa é mais forte: o
+MLM <strong>não define uma distribuição conjunta sobre sequências</strong>. A perda causal, que eu vou escrever no
+slide sete, é exatamente a log-verossimilhança da sequência inteira, pela regra da cadeia — e gerar é
+ler essa fatoração da esquerda para a direita. O MLM não tem fatoração nenhuma: ele aprende um conjunto de
+condicionais que não se multiplicam para dar a probabilidade do texto. Não é dificuldade de engenharia; é
+ausência do objeto de que a geração precisaria. As três razões independentes estão em A.1.</p>
+<blockquote>
+<p>Ideia central: "Se toda posição vê todas, prever o próximo token é copiar a resposta. O objetivo tem que ser outro: a lacuna."</p>
+</blockquote></div></details><details><summary>Slide 4 · `[CLS]`, fine-tuning e cabeças de tarefa · 00:25–00:32</summary><div class="prose"><p>Uma pergunta prática: o BERT devolve um vetor por token. Se eu quero <strong>um</strong> rótulo para a frase inteira, de
+onde eu tiro?</p>
+<p>A resposta do BERT é o token <code>[CLS]</code>, acrescentado na posição zero da sequência. O vetor de saída daquela
+posição é usado como resumo. E eu quero desmontar a mágica disso na frente de vocês, porque a turma sempre
+acha que tem algo especial no <code>[CLS]</code>. Não tem. Ele funciona como resumo porque no pré-treino ele foi
+obrigado a resolver uma tarefa de nível de sentença, e o gradiente empurrou aquela posição a agregar
+informação da sequência inteira. É uma posição treinada para isso, não uma posição privilegiada por
+natureza.</p>
+<p>E daí vem a parte que interessa para produção: o <strong>fine-tuning</strong>. O corpo pré-treinado é caro e é um só.
+Sobre ele, eu troco só a cabeça. Cabeça linear sobre o <code>[CLS]</code>: classificação de sequência. Cabeça linear
+por posição: rotulagem de tokens, reconhecimento de entidade. Cabeça sobre um par de sentenças:
+similaridade, e aí a gente chega no reranking, que volta com nome e métrica próprios na Aula 19.</p>
+<p>Agora eu volto no chamado dois, porque é aqui que ele fecha. Por que alguém ainda usaria BERT em 2026? Por
+custo, e é aritmética. Um encoder pequeno faz <strong>uma</strong> passada pela sequência e devolve um rótulo ou um
+vetor. Um decoder-only tem que <strong>gerar tokens</strong> para dizer a mesma coisa, e cada token gerado é uma passada
+pela pilha inteira. Uma passada contra k passadas. Em dez milhões de documentos por dia, isso é a diferença
+entre uma máquina e um cluster.</p>
+<p>O time do chamado dois não comparou uma passada com k passadas. Comparou 2019 com 2024.</p>
+<blockquote>
+<p>Ideia central: "O corpo pré-treinado é caro e é um só. A cabeça é barata e troca por tarefa."</p>
+</blockquote></div></details><details><summary>Slide 5 · [Demo] BERT hoje, e os dois campos que abrem a segunda metade · 00:32–00:44</summary><div class="prose"><p>Chega de slide. Deixa eu mostrar três coisas funcionando, no navegador, e terminar com dois números lidos
+de um arquivo de configuração — que são os números que abrem a segunda metade da aula.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Mesma palavra, dois contextos, duas distribuições. Isso é a resposta ao 'banco' que a Aula 3 deixou aberto."</p>
+</blockquote></div></details><details><summary>Slide 6 · Encoder-decoder: quando entrada e saída são objetos diferentes · 00:44–00:49</summary><div class="prose"><p>Segunda família, e vou ser rápido. Tem um tipo de tarefa em que a entrada está inteira e disponível de uma
+vez, e a saída é uma sequência <strong>nova</strong>, de tamanho diferente, em outro idioma ou em outro nível de
+detalhe. Tradução e sumarização são os dois casos canônicos.</p>
+<p>Para esse tipo de tarefa, a montagem natural é duas pilhas. Um encoder que lê a entrada bidirecionalmente,
+sem máscara, porque a entrada está toda lá. E um decoder que gera com máscara causal, porque a saída ainda
+não existe — e que consulta o encoder por <strong>cross-attention</strong>.</p>
+<p>E agora deixa eu cravar uma coisa que eu prometi na Aula 5. A cross-attention é o mecanismo de Bahdanau,
+sem uma linha de diferença. As queries vêm do decoder — "o que eu preciso agora, nesta palavra que estou
+escrevendo" — e as keys e values vêm do encoder — "o que a frase de origem oferece". Aquele mecanismo de
+2014 que a gente estudou como solução para o gargalo do vetor de contexto fixo não foi substituído: ele foi
+absorvido e virou um dos três tipos de atenção do Transformer. Foi aqui que ele sobreviveu.</p>
+<p>O custo dessa família é honesto: duas pilhas, dois conjuntos de hiperparâmetros, e um objetivo de
+pré-treino que não é qualquer texto cru — precisa de uma tarefa de reconstrução ou de corrupção de trechos
+montada de propósito. E o argumento que enfraqueceu a família é que tradução também dá para fazer com uma
+pilha só: coloca o original e a tradução na mesma sequência e prevê a continuação. Se dá para fazer com uma
+pilha, a segunda pilha tem que se justificar.</p>
+<blockquote>
+<p>Ideia central: "A cross-attention é o Bahdanau da Aula 5, vivo e sem mudar uma linha. Foi aqui que ele sobreviveu."</p>
+</blockquote></div></details><details><summary>Slide 7 · Decoder-only: por que prever o próximo token venceu · 00:49–00:55</summary><div class="prose"><p>Terceira família, e a que ocupa as outras vinte e duas aulas desta disciplina. Máscara causal, uma pilha,
+um objetivo: prever o próximo token, em toda posição.</p>
+<p>Eu quero dar cinco argumentos, e eu quero que vocês vejam que nenhum deles é "essa arquitetura é mais
+inteligente".</p>
+<p>Primeiro, <strong>rótulo grátis</strong>. O rótulo do token <code>t</code> é o próprio token <code>t</code>. Todo texto cru do mundo, sem
+anotação humana, sem par alinhado, vira dado de treino supervisionado. Isso contrasta com tradução, que
+precisa de pares alinhados por gente.</p>
+<p>Segundo, e esse é o mais bonito: <strong>sinal denso</strong>. O MLM treina em quinze por cento das posições de cada
+sequência. O LM causal treina em cem por cento delas. E eu quero dar o número, porque "mais denso" é
+adjetivo: a razão é um sobre zero vírgula quinze, ou seja, cerca de <strong>seis vezes e sete décimos</strong> mais
+predições supervisionadas por token de corpus lido. Multiplicado por trilhões de tokens, isso deixa de ser
+detalhe.</p>
+<p>Terceiro, <strong>simplicidade operacional</strong>: uma pilha, um objetivo, uma máscara. Menos peças para escalar, e
+escalar é o assunto do Módulo 2. Quarto, <strong>prompting unifica as tarefas</strong> — é literalmente a tese que eu
+abri na Aula 1: classificar é gerar a palavra do rótulo, extrair é gerar JSON, sem trocar de cabeça e sem
+trocar de modelo. Quinto, <strong>geração é nativa</strong>, não é um enxerto em cima de um modelo que não foi feito
+para isso.</p>
+<p>E tem uma sexta coisa, que não é argumento de vitória e é a razão formal da diferença: essa perda que está
+no slide <strong>é</strong> a log-verossimilhança exata da sequência, pela regra da cadeia da probabilidade. O MLM não
+tem essa propriedade. É por isso que um gera e o outro não — e não porque um é mais moderno.</p>
+<p>O alerta, que é a parte que separa quem entendeu de quem decorou: "venceu" quer dizer venceu <strong>como
+plataforma geral</strong>. Não quer dizer melhor em tudo. Por rótulo entregue e por milissegundo de latência, um
+encoder pequeno destilado continua ganhando, e é o chamado dois de novo.</p>
+<blockquote>
+<p>Ideia central: "O MLM treina em quinze por cento das posições. O LM causal treina em cem por cento. Isso, multiplicado por trilhões de tokens, é a diferença."</p>
+</blockquote></div></details><details><summary>Slide 8 · O preço da janela: o KV cache em números · 01:05–01:14</summary><div class="prose"><p>Voltando. A primeira metade foi sobre escolher a família, e ela fechou o chamado dois. A segunda metade
+fecha o chamado um, e ela começa com uma conta que ninguém faz até a primeira vez que serve um modelo em
+produção e a GPU estoura.</p>
+<p>Vamos lembrar da geração autorregressiva da Aula 6. Para produzir o token <code>n+1</code>, o modelo precisa das keys
+e values de todas as <code>n</code> posições anteriores. E essas keys e values <strong>não mudaram</strong> — a máscara é causal, o
+passado não vê o futuro, então o que foi calculado continua valendo. Recalcular tudo a cada token é
+desperdício puro. Guardar é o que se chama de KV cache, e é troca de computação por memória.</p>
+<p>A fórmula está no slide, e eu vou lê-la: o cache por token é dois — porque são K e V — vezes o número de
+camadas, vezes o número de cabeças de key/value, vezes a dimensão de cada cabeça, vezes os bytes por valor.</p>
+<p>E aqui está o número, num decoder hipotético — e eu quero ser explícito de que é hipotético: trinta e duas
+camadas, trinta e duas cabeças, dimensão cento e vinte e oito por cabeça, meia precisão. <strong>Meio mebibyte
+por token.</strong> Uma conversa de oito mil tokens custa quatro gibibytes de cache. E aqui está a parte que dói:
+quatro gibibytes <strong>por conversa</strong>.</p>
+<p>Agora o chamado um, com aritmética. Dez conversas simultâneas: quarenta gibibytes. Quarenta conversas:
+cento e sessenta. Os pesos de um modelo de sete bilhões em meia precisão são catorze gibibytes, e são
+<strong>constantes</strong>. Numa GPU de oitenta gibibytes, descontando os pesos e a folga de ativações, sobram da ordem
+de sessenta para cache. Quarenta cabe com folga. Cento e sessenta não cabe, por um fator de quase três.</p>
+<p>Entre dez e quarenta <strong>não mudou nada no modelo</strong>. Mudou o que ele tem que guardar, e o crescimento é
+linear na concorrência. É por isso que esse sintoma aparece de repente: o cache não degrada devagar, ele
+estoura.</p>
+<p>Peso é constante. Cache é linear no contexto <strong>e</strong> no número de conversas simultâneas. O que estoura a GPU
+em serviço não é o peso do modelo — é o rascunho.</p>
+<blockquote>
+<p>Ideia central: "Meio mebibyte por token. Oito mil tokens dão quatro gibibytes — por conversa. Dez conversas caberiam; quarenta não."</p>
+</blockquote></div></details><details><summary>Slide 9 · Longformer: janela deslizante mais atenção global · 01:14–01:22</summary><div class="prose"><p>Antes de cortar o cache, deixa eu atacar o outro lado da conta, que é o custo da própria atenção.</p>
+<p>Atenção plena é quadrática no comprimento, e isso a gente já sabe desde a Aula 6. Com trinta e dois mil
+tokens de contexto, são mais de um bilhão de pares de posições, por cabeça e por camada. A ideia do
+Longformer é simples e é a que mais parece trapaça sem ser: cada posição não precisa consultar todas — só
+uma janela de largura <code>w</code> em torno de si. O custo cai de <code>n</code> ao quadrado para <code>n</code> vezes <code>w</code>. Com trinta e
+dois mil tokens e janela de quinhentos e doze, são dezesseis milhões e oitocentos mil pares em vez de um
+bilhão. A razão é <code>n</code> sobre <code>w</code>: sessenta e quatro vezes menos.</p>
+<p>E a pergunta óbvia é: e a dependência longa, que foi o motivo de a atenção existir? Dois caminhos.</p>
+<p>O primeiro é <strong>profundidade</strong>: a informação caminha metade da janela para cada lado a cada camada, então
+com doze camadas e janela de quinhentos e doze o alcance é da ordem de três mil posições para cada lado.</p>
+<p>E aqui eu vou ser mais honesto do que a versão anterior desta aula era, porque esse número merece ser
+comparado. Três mil de trinta e dois mil é <strong>nove por cento da sequência</strong>. Para a profundidade sozinha
+ligar a primeira posição à última, seriam necessárias <strong>cento e vinte e oito camadas</strong> — a conta é duas
+vezes <code>n</code> sobre <code>w</code>, e ela está em A.3. Ou seja: a profundidade recupera alcance <em>médio</em>. Ela não recupera
+alcance de ponta a ponta.</p>
+<p>Então o segundo caminho não é complemento opcional, é essencial: <strong>atenção global</strong> em um punhado de tokens
+escolhidos. Alguns tokens leem tudo e são lidos por todos — o token de classificação, os tokens da
+pergunta, os títulos de seção. Com oito tokens globais, o custo sobe três por cento. E o que esses três por
+cento compram é o seguinte: qualquer par de posições passa a ter um caminho de <strong>duas</strong> camadas, indo até um
+token global e voltando. O diâmetro da comunicação vira dois, independentemente do comprimento.</p>
+<p>E aqui está o preço honesto dessa família: escolher <strong>onde</strong> vai a atenção global é decisão de projeto, por
+tarefa. Se eu escolher errado, eu perco exatamente a dependência que importava, e o modelo não me avisa.</p>
+<blockquote>
+<p>Ideia central: "A profundidade compra três mil posições de trinta e duas mil. O alcance de ponta a ponta quem compra são os poucos tokens globais — se eu escolher certo."</p>
+</blockquote></div></details><details><summary>Slide 10 · MQA e GQA: cortar o KV cache pela raiz · 01:22–01:31</summary><div class="prose"><p>Agora o corte no cache, e ele é elegante porque sai direto da fórmula.</p>
+<p>Olha a fórmula do slide 8 de novo. O cache é proporcional ao número de cabeças de <strong>key e value</strong>. E aqui
+vem a pergunta que alguém em 2019 fez: as cabeças de query precisam ser muitas, porque cada uma faz uma
+pergunta diferente. Mas as chaves e os valores precisam ser um conjunto por cabeça?</p>
+<p>A resposta do MQA é: não. Mantém as trinta e duas cabeças de query e compartilha <strong>uma única</strong> cabeça de
+key/value entre todas. O cache é dividido por trinta e dois. Na conta do slide 8, quatro gibibytes viram
+cento e vinte e oito mebibytes.</p>
+<p>O GQA é o meio-termo, e é o que os modelos abertos recentes usam. Em vez de uma cabeça de K/V, <code>G</code> grupos:
+as trinta e duas queries se dividem em, digamos, oito grupos, cada grupo com sua própria cabeça de
+key/value. O fator de redução é a razão <code>n_heads</code> sobre <code>n_kv_heads</code> — trinta e dois sobre oito, quatro. Os
+quatro gibibytes viram um gibibyte.</p>
+<p>E esse fator é <strong>exato</strong>, não aproximado, porque todos os outros fatores da fórmula se cancelam quando eu
+comparo duas configurações que só diferem no número de cabeças de K/V. A derivação de duas linhas está em
+A.2.</p>
+<p>Agora deixa eu ser explícito sobre o que <strong>não</strong> muda, porque é aqui que a turma escorrega. As queries
+continuam trinta e duas — o número de padrões de relação por camada é o mesmo. A fórmula da atenção
+continua sendo softmax de Q K transposto sobre raiz de d_k, vezes V, exatamente a mesma da Aula 6. O número
+de camadas e a dimensão do modelo continuam iguais.</p>
+<p>E uma coisa que muda e que eu não dizia antes, porque vale a precisão: as <strong>projeções</strong> de K e V encolhem.
+Em atenção multi-cabeça cheia as três projeções custam três vezes a dimensão ao quadrado; com GQA de oito
+cabeças de K/V, as de K e V ficam quatro vezes menores. É uma redução real de parâmetros, da ordem de
+cinquenta por cento nos parâmetros de projeção da atenção — e as implementações costumam compensar isso
+alargando a rede feed-forward. Está em A.2, com os números.</p>
+<p>O que se ganha, então: memória de cache <strong>e</strong> tráfego de memória para lê-lo. E esse segundo ganho é o que
+faz a geração ficar mais rápida, porque gerar um token exige <strong>ler o cache inteiro</strong>: com quatro gibibytes
+e banda de dois terabytes por segundo, são dois milissegundos por token só de leitura. Com GQA de oito,
+meio milissegundo. O que se paga é qualidade: MQA corta mais e pode custar mais; GQA recupera quase tudo
+com uma fração do cache, e é por isso que virou o padrão.</p>
+<blockquote>
+<p>Ideia central: "As perguntas continuam trinta e duas. O índice consultado passa a ser um só, ou oito. O fator de redução é exatamente a razão entre eles."</p>
+</blockquote></div></details><details><summary>Slide 11 · Destilação: o aluno aprende a distribuição do professor · 01:31–01:37</summary><div class="prose"><p>Última técnica de hoje, e ela fecha o laço com a primeira metade da aula.</p>
+<p>A pergunta é: como se fabrica um modelo pequeno que é bom? Uma resposta é treinar do zero em dados
+rotulados, e aí o pequeno é pequeno mesmo. A outra é destilação: usar um modelo grande, já treinado, como
+professor.</p>
+<p>E o pulo do gato é o que se copia do professor. Não é o rótulo — é a <strong>distribuição</strong>. Quando eu passo um
+exemplo pelo professor, ele não devolve só "a resposta é B": devolve uma distribuição sobre todas as
+alternativas, e nessa distribuição está a informação de que C era defensável e D é absurdo.</p>
+<p>A perda está no slide e é uma combinação: uma parte de entropia cruzada contra o rótulo verdadeiro, outra
+parte de divergência entre a distribuição do aluno e a do professor, com um peso alfa entre as duas — e um
+fator de temperatura ao quadrado multiplicando a segunda parte.</p>
+<p>Deixa eu dar o número que mostra o que a temperatura faz, porque "achatar a distribuição" é vago. Numa
+distribuição cujos logits são cinco, três, um e menos dois: com temperatura um, a última classe tem
+probabilidade zero vírgula zero zero zero oito. Com temperatura quatro, ela tem zero vírgula zero oito. A
+cauda ficou <strong>cem vezes mais visível</strong>, e o professor não mudou. Foi só a temperatura.</p>
+<p>E duas coisas de A.4 que eu quero enunciar sem derivar. A primeira: a divergência está escrita na ordem
+professor, aluno, e essa ordem importa — nessa ordem, a divergência pune muito o aluno por <strong>não cobrir</strong> a
+cauda do professor. Se estivesse invertida, o aluno poderia concentrar tudo na classe vencedora e ignorar o
+resto, que é exatamente o que o rótulo duro já faz. A assimetria é o mecanismo. A segunda: aquele fator de
+temperatura ao quadrado existe para que os dois termos continuem com pesos comparáveis quando a temperatura
+muda — e no limite de temperatura alta a destilação vira, literalmente, igualar os logits do aluno aos do
+professor. A conta está em A.4.</p>
+<p>E onde isso aterrissa nesta aula: os encoders pequenos que sustentam classificação e reranking em produção,
+que eu defendi no slide 4, são em boa medida destilados. A família encoder-only continua viva <strong>porque</strong> dá
+para comprimir — e isso fecha o chamado dois de vez. O tema volta com mais profundidade no Módulo 7.</p>
+<blockquote>
+<p>Ideia central: "O rótulo diz que a resposta é B. O professor diz que é B, que C era defensável e que D é absurdo — e é a segunda frase que ensina."</p>
+</blockquote></div></details><details><summary>Slide 12 · O mapa das famílias, consolidado · 01:37–01:39</summary><div class="prose"><p>Deixa eu juntar as três famílias numa tabela só, porque é essa tabela que vocês vão querer na mão na Aula
+17 e no projeto.</p>
+<p>Três colunas que decidem tudo: a máscara, o objetivo de pré-treino, e o que a família faz bem.
+Encoder-only: sem máscara, MLM, entrega rótulo, vetor ou escore de par. Encoder-decoder: bidirecional de um
+lado, causal do outro, cross-attention no meio, objetivo de reconstrução, entrega uma sequência
+transformada a partir de uma entrada completa. Decoder-only: máscara causal, LM causal em cem por cento das
+posições, entrega geração e serve de interface única.</p>
+<p>E eu botei uma quarta coluna de propósito: onde cada família volta nesta disciplina. Encoder-only volta na
+Aula 19, como modelo de embedding e como cross-encoder de reranking. A cross-attention do encoder-decoder
+já apareceu na Aula 5 e é o Bahdanau. E o decoder-only volta na próxima aula, na unha, e depois na Aula 10
+com escala e inferência.</p>
+<p>E repararam no que <strong>não</strong> tem nessa tabela? Data. Nenhuma coluna aqui é o ano do modelo.</p>
+<blockquote>
+<p>Ideia central: "Máscara, objetivo, e o que a família faz bem. Essas três colunas respondem a maioria das perguntas de arquitetura que vocês vão fazer — e nenhuma delas é a data do modelo."</p>
+</blockquote></div></details><details><summary>Slide 13 · [Exercício] Qual família, qual atenção, e que conta confirma · 01:39–01:50</summary><div class="prose"><p>Oito minutos com vocês trabalhando, em dupla, e três de correção comigo.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Cinco cenários. Família, atenção eficiente, e a conta que sustenta a escolha — e 'porque é mais novo' desconta."</p>
+</blockquote></div></details><details><summary>Slide 14 · Fechamento: três chamados, duas contas · 01:50–02:00</summary><div class="prose"><p>Deixa eu fechar pelos três chamados com que eu abri.</p>
+<p>Chamado um, o serviço que atende dez e morre em quarenta: <strong>cache linear no contexto e na concorrência</strong>. O
+peso é constante, o cache não é, e a conta está no slide 8 e em A.2. Ninguém mexeu no modelo — mexeu na
+carga.</p>
+<p>Chamado dois, o time que trocou o encoder por um LLM porque o LLM é mais novo: <strong>uma passada contra k
+tokens gerados</strong>. A escolha por data ignorou uma aritmética de custo, e o que decide a família é a máscara e
+o objetivo de pré-treino.</p>
+<p>Chamado três, os cento e vinte e oito mil tokens anunciados: <strong>o cache disputa a mesma memória dos pesos</strong>.
+Quanto de janela é utilizável não é uma propriedade do modelo, é uma consequência de quantas conversas
+simultâneas o serviço precisa atender — e a conta de dimensionamento é a Aula 10.</p>
+<p>E as duas metades da aula, em duas linhas. Primeira: a arquitetura não é o bloco, é a máscara. E o
+decoder-only venceu não por ser mais inteligente, mas por ter o objetivo mais barato — rótulo grátis, sinal
+em cem por cento das posições, seis vírgula sete vezes mais predições por token lido — e por permitir que
+prompting unifique as tarefas. Segunda: essa vitória tem uma fatura, e ela vem em memória. Contra isso, duas
+alavancas: cortar pares de atenção com janela mais atenção global, e cortar o cache com MQA ou GQA, com
+fator igual à razão entre o número de cabeças e o número de cabeças de key/value.</p>
+<p>E na próxima aula essa família sai do slide. Aula 9, Laboratório 2: vocês vão implementar atenção causal na
+mão, com a máscara triangular que eu desenhei no slide 2; multi-head, como a gente derivou na Aula 6; o
+bloco completo, com residual, norm e feed-forward da Aula 7. Depois vão treinar um modelo de linguagem de
+verdade num corpus pequeno, gerar texto e medir perplexidade — aquela mesma perplexidade que eu prometi na
+Aula 1 que vocês mediriam com as próprias mãos.</p>
+<p>As leituras da semana: o paper do BERT, na seção do objetivo de pré-treino; o do GQA, com o do MQA como
+antecedente; e o do Longformer. A pergunta dirigida é: no GQA, o que exatamente é compartilhado entre as
+cabeças, o que continua sendo por cabeça, e qual é o fator de redução do cache em função de <code>n_heads</code> e
+<code>n_kv_heads</code>? E um item de dez minutos: abrir o <code>config.json</code> de dois modelos abertos no Hub e calcular o
+cache por token de cada um com a fórmula de hoje.</p>
+<blockquote>
+<p>Ideia central: "Na próxima aula a família decoder-only sai do slide. Vocês vão escrever a máscara causal, o multi-head e o bloco — e treinar."</p>
+</blockquote>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p>Esta demo roda em doze minutos, no navegador, e termina no quadro. O objetivo é triplo: mostrar que a
+representação do BERT é contextual de verdade — fechando o sintoma que a Aula 3 deixou aberto —, mostrar que
+a família encoder-only entrega coisas que não são texto, e <strong>ler numa configuração real os dois números de
+que a segunda metade da aula depende</strong>.</p>
+<p>Na V2 o ato 4 deixa de ser complemento e passa a ser a <strong>evidência</strong> do slide 8 e do slide 10: os números
+saem de um arquivo que o modelo publica, não de um slide meu.</p>
+<p>Insumos preparados antes da aula: quatro abas do Hugging Face Hub já abertas, as duas frases do "banco" num
+arquivo de texto local para colar sem digitar, <strong>os quatro campos do <code>config.json</code> anotados na véspera</strong> (para
+o passo 7 rodar mesmo sem rede), e capturas de tela dos passos.</p>
+<p><strong>1.</strong> <strong>[Abro a página de um BERT em português no Hub, com o widget de fill-mask visível]</strong> Vou usar um
+BERT treinado em português aqui. Isso é um modelo de 2020, encoder-only, e ele está no Hub com um widget que
+roda inferência direto na página — não preciso de código nenhum para o que eu quero mostrar.</p>
+<p><strong>2.</strong> <strong>[Colo <code>O banco do rio estava [MASK].</code> e submeto]</strong> Primeira frase: "o banco do rio estava" e uma
+lacuna. Olha as predições que ele devolveu. O modelo está preenchendo a lacuna com o que faz sentido depois
+de um banco de rio.</p>
+<p><strong>3.</strong> <strong>[Colo <code>O banco do centro estava [MASK].</code> e submeto, deixando a primeira resposta visível para
+comparar]</strong> Segunda frase, e eu troquei uma palavra só: "centro" em vez de "rio". Olha a diferença nas
+predições. A palavra mascarada está na mesma posição, a estrutura é a mesma, e a distribuição mudou. Isso só
+é possível porque o vetor de "banco" que chegou naquela camada final é <strong>diferente</strong> nas duas frases — a
+atenção leu "rio" de um lado e "centro" do outro. E é a resposta ao sintoma que eu deixei aberto na Aula 3
+de propósito, e que a Aula 6 explicou mecanicamente: embedding estático não separa os dois sentidos;
+representação contextual separa.</p>
+<p><strong>4.</strong> <strong>[Abro a página de um modelo de embedding, sentence-transformers, e mostro a saída]</strong> Segundo ato.
+Este é outro encoder, e olha o que ele devolve: não é texto, é um vetor de dimensão fixa. Este modelo existe
+para transformar frase em ponto num espaço, e é sobre esse espaço que a busca semântica da Aula 18 vai
+funcionar.</p>
+<p><strong>5.</strong> <strong>[Abro a página de um cross-encoder de reranking e mostro a saída para um par consulta-documento]</strong>
+Terceiro. Este recebe um <strong>par</strong> — uma consulta e um documento — e devolve um número: quão relevante. Uma
+passada, um escore. Nenhum token gerado. Este é o argumento de custo do slide 4 na tela: para dizer
+"relevante, nota tal", um decoder-only teria que escrever uma frase.</p>
+<p><strong>6.</strong> <strong>[Abro o <code>config.json</code> de um decoder-only aberto e recente no Hub e leio os quatro campos]</strong> Agora eu
+mudo de família e vou atrás de quatro números. Neste arquivo tem <code>num_hidden_layers</code>, tem
+<code>num_attention_heads</code>, tem <code>num_key_value_heads</code> e tem <code>hidden_size</code>. Olha os quatro valores — e olha os dois
+do meio em particular. Quando esses dois são diferentes, isso é GQA. E a razão entre eles é o fator pelo qual
+o cache foi reduzido em relação a atenção multi-cabeça cheia. Vou anotar os quatro no quadro.</p>
+<p><strong>7.</strong> <strong>[Vou para o quadro e aplico a fórmula do KV cache com os valores lidos na tela]</strong> E aqui eu fecho no
+quadro, com números que não são meus: dois, vezes camadas, vezes cabeças de key/value, vezes a dimensão por
+cabeça — que é <code>hidden_size</code> dividido por <code>num_attention_heads</code> —, vezes dois bytes. Isso dá o cache por
+token deste modelo. Depois eu refaço a mesma conta trocando <code>num_key_value_heads</code> por <code>num_attention_heads</code>,
+que é o que seria sem GQA. A razão entre as duas contas é exatamente a razão entre os dois números que estão
+na tela. Não é um número que eu trouxe no slide: é aritmética em cima do que o modelo declara sobre si.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>Oito minutos em dupla, três de correção, com os cinco cenários projetados e o mapa das famílias do slide 12
+ainda na tela. O objetivo não é acertar a família — é obrigar a justificativa a virar <strong>conta</strong>, que é o
+vocabulário que a aula construiu. Na V1 eu pedia "uma frase citando custo, latência ou memória"; na V2 eu
+peço a conta, porque frase citando custo ainda é frase.</p>
+<p><strong>1.</strong> <strong>[Projeto os cinco cenários e formo as duplas]</strong> Oito minutos, em dupla. Cinco cenários. Para cada um
+eu quero três coisas: a família — encoder-only, encoder-decoder ou decoder-only; o que vocês usariam de
+atenção eficiente, ou explicitamente nada; e <strong>que conta ou medição confirmaria</strong> a escolha. E eu vou ser
+chato com a terceira: "porque é melhor" não conta, e "porque é mais novo" desconta — esse é literalmente o
+chamado dois com que eu abri a aula.</p>
+<p>Os cinco cenários:</p>
+<ol>
+<li>Classificar dez milhões de comentários por dia em três rótulos, com latência de milissegundos.</li>
+<li>Busca semântica sobre quinhentos mil documentos internos, com reranking dos cinquenta primeiros.</li>
+<li>Assistente que conversa, chama ferramenta e escreve código.</li>
+<li>Responder perguntas sobre um contrato de oitenta páginas lido inteiro de uma vez.</li>
+<li>Servir um modelo de oito bilhões de parâmetros para mil usuários simultâneos, com contexto de trinta e
+   dois mil tokens.</li>
+</ol>
+<p><em>Como recolher:</em> oito minutos de dupla, três de correção conduzida por mim. Não corrijo os cinco: peço
+voluntário para o 1 e forço a terceira coluna — "como você confirmaria isso?" —, corrijo o 2 rápido apontando
+que são dois encoders e sinalizando a Aula 19, e gasto os minutos finais no cenário 5. No 5 eu faço a conta
+na frente deles com a fórmula do slide 8, primeiro com atenção multi-cabeça cheia e depois com GQA de oito
+cabeças de key/value. E eu fecho com a parte honesta: <strong>mesmo com GQA a conta para mil usuários simultâneos
+não fecha.</strong> GQA é a primeira alavanca, não a solução — o resto é gerenciamento de memória de cache e
+agendamento de requisições, que é o que a Aula 10 trata como inferência eficiente. Encerro dizendo isso: "a
+conta ainda não fecha, e é por isso que existe uma aula sobre inferência".</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a aritmética em aula. A
+regra geral é remeter ao apêndice e seguir; conduzir uma conta só se sobrar tempo, e anunciando que é
+conteúdo de consulta.</p>
+<p><strong>Item 1 — "Por que um BERT não gera texto?" (A.1, ~5 min).</strong>
+A pergunta mais interessante do Bloco 1, e a que eu mais gosto de responder porque a resposta fácil está
+errada. Se eu tiver os cinco minutos, eu conduzo assim: escrevo a perda causal e digo que aquela soma <strong>é</strong> a
+log-verossimilhança da sequência inteira, pela regra da cadeia — cada fator é uma condicional, e o produto
+dos fatores é a probabilidade do texto. Gerar é ler essa fatoração da esquerda para a direita. Depois escrevo
+a perda do MLM ao lado e mostro que não existe produto daqueles termos que dê a probabilidade do texto:
+cada termo condiciona em posições que outros termos tratam como alvo. É pseudo-verossimilhança.
+<strong>Versão de 30 segundos:</strong> "a perda causal é a verossimilhança exata pela regra da cadeia, e gerar é ler a
+fatoração. O MLM não tem fatoração nenhuma — ele otimiza uma pseudo-verossimilhança. Não é que ele não foi
+treinado para gerar: é que não existe o objeto de que a geração precisaria. Está em A.1, com três razões."</p>
+<p><strong>Item 2 — "Faz a multiplicação do cache aí" (A.2, ~5 min).</strong>
+A pergunta mais provável do Bloco 2. Se eu decidir fazer, eu faço em <strong>duas etapas</strong> e não em seis fatores de
+uma vez, porque foi assim que a V1 travava a sala. Etapa um: dois vezes trinta e dois vezes trinta e dois
+vezes cento e vinte e oito dá duzentos e sessenta e dois mil valores por token, e a dois bytes é meio
+mebibyte. Etapa dois: multiplica pelo contexto, e depois pelo número de conversas. E eu digo em voz alta a
+razão de cada fator: o dois é K e V, o L é porque cada camada tem projeções próprias, o <code>d_head</code> é porque a
+projeção já reduziu a dimensão.
+<strong>Versão de 30 segundos:</strong> "meio mebibyte por token no modelo hipotético, quatro gibibytes por conversa de
+oito mil. A conta fator a fator, com a razão de existir de cada fator e a leitura de banda de memória, está
+em A.2 — e a instanciação com números reais é o que a demo já fez, lendo o <code>config.json</code>."</p>
+<p><strong>Item 3 — "Como se prova que o fator do GQA é exatamente essa razão?" (A.2, ~3 min).</strong>
+Barata e satisfatória, e vale sempre que aparecer. Eu escrevo o cache das duas configurações uma em cima da
+outra e divido: camadas, dimensão por cabeça, tokens e bytes são os mesmos nas duas, então cancelam. Sobra a
+razão dos números de cabeças de key/value. Duas linhas, e o resultado é exato, não aproximado.
+<strong>Versão de 30 segundos:</strong> "compare duas configurações que só diferem no número de cabeças de key/value: todos
+os outros fatores cancelam e sobra a razão entre eles. É exato. Está em A.2."</p>
+<p><strong>Item 4 — "A profundidade não resolve o alcance longo?" (A.3, ~4 min).</strong>
+A melhor pergunta que pode aparecer no Bloco 2, e se ela vier eu abro espaço. Eu escrevo o alcance por
+profundidade — <code>L</code> vezes <code>w</code> sobre dois —, instancio com doze camadas e janela quinhentos e doze, dá três mil
+setenta e dois. E aí comparo com trinta e dois mil, que é a sequência: nove por cento. E inverto a conta:
+para cobrir a sequência, <code>L</code> maior ou igual a duas vezes <code>n</code> sobre <code>w</code>, que dá cento e vinte e oito camadas.
+Fecho com a consequência: por isso a atenção global não é opcional, e por isso escolher onde ela vai é
+decisão de projeto.
+<strong>Versão de 30 segundos:</strong> "a profundidade compra <code>L</code> vezes <code>w</code> sobre dois: três mil de trinta e duas mil.
+Para cobrir a sequência seriam cento e vinte e oito camadas. É a atenção global que faz o alcance de ponta a
+ponta, e ela reduz o diâmetro para duas camadas. Está em A.3."</p>
+<p><strong>Item 5 — "De onde vem esse T ao quadrado da destilação?" (A.4, ~5 min).</strong>
+Raramente perguntam, e quando perguntam vale, porque é a única derivação realmente elegante do Bloco 2. Eu
+digo que o gradiente do termo suave em relação a um logit do aluno é a diferença entre as duas distribuições
+suavizadas, dividida pela temperatura — e que, em temperatura alta, essa diferença <strong>também</strong> encolhe como um
+sobre T. Dois fatores de um sobre T, então o gradiente iria a zero como um sobre T ao quadrado; multiplicar
+por T ao quadrado devolve a magnitude e faz alfa significar a mesma coisa em qualquer temperatura. E fecho
+com o resultado bonito: nesse limite, destilar é igualar logits.
+<strong>Versão de 30 segundos:</strong> "o gradiente do termo suave escala como um sobre T ao quadrado em temperatura alta;
+o T ao quadrado compensa isso para que o peso alfa signifique a mesma coisa em qualquer temperatura. E nesse
+limite destilar é literalmente igualar os logits. A derivação está em A.4."</p></div></details><details><summary>Ordem de sacrifício</summary><div class="prose"><p>Se a aula atrasar: corto primeiro o <strong>slide 12</strong> da exposição, deixando-o projetado durante o exercício —
+ele se sustenta lido e é assim que a turma o usa de qualquer forma. Depois comprimo o <strong>slide 6</strong>
+(encoder-decoder) para três minutos, mantendo só a conexão com Bahdanau, que é o pagamento da promessa da
+Aula 5. Depois encolho a <strong>destilação</strong> de seis para quatro minutos, ficando no número da cauda e no
+fechamento com o chamado dois.
+<strong>Não corto</strong> o slide 8 nem o slide 10: os dois juntos são a resposta do chamado um e o pré-requisito direto
+da Aula 10, e uma Aula 10 que precisa reensinar a fórmula do cache perde os primeiros dez minutos dela.
+<strong>Não corto</strong> os passos 6 e 7 da demo, que são os únicos números reais da aula. E <strong>não corto</strong> o cenário 5
+do exercício, porque é ele que entrega a aula seguinte — a conta que não fecha é a porta da Aula 10.</p>
+<hr /></div></details><details><summary>Encerramento · 01:50–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 14 da Parte 1 — os três chamados fechados com a causa
+nomeada e onde ela mora, a síntese das duas metades (a máscara é a arquitetura; o cache é a fatura), o índice
+do apêndice projetado por vinte segundos, a ponte para a Aula 9 (Laboratório 2: Mini-GPT do zero em PyTorch) e
+as três leituras da semana com a pergunta dirigida do GQA.</p>
+<blockquote>
+<p>Ideia central: "Hoje vocês escolheram a família por uma conta, não por uma data. Na próxima aula vocês escrevem a máscara causal em PyTorch e treinam a coisa até ela gerar texto."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 8 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Famílias de modelos e atenção eficiente</h1>
+<h2>Slide 1 · Abertura: três chamados, nenhum bug · 00:00–00:10</h2>
+<p>Boa noite, pessoal. Na aula passada a gente fechou o bloco Transformer moderno, e vale recapitular em uma
+linha o que exatamente ficou fechado: posição entrando por RoPE, girando query e key para que a distância
+relativa apareça dentro do score; normalização por RMSNorm em pré-norm, com a residual passando limpa de
+ponta a ponta; e feed-forward com SwiGLU. Esse bloco é o que os modelos abertos de hoje empilham, e vocês
+sabem desenhar ele.</p>
+<p>Hoje eu não vou construir bloco nenhum. Hoje eu vou trazer três chamados que chegaram na mesma semana, e
+eu quero que vocês repararem numa coisa que os três têm em comum: <strong>nenhum deles tem exceção no log</strong>.</p>
+<p>Chamado um. O serviço de conversa atende dez usuários simultâneos com folga. Em quarenta, a GPU estoura.
+Mesmo modelo, mesmos pesos, mesma máquina, e ninguém fez deploy de nada entre uma coisa e a outra.</p>
+<p>Chamado dois. Um time tinha um classificador pequeno rodando desde 2019 e trocou por um LLM, com o
+argumento de que o LLM é de 2024. A qualidade subiu um pouco. A fatura de inferência multiplicou, e a
+latência saiu do orçamento do produto.</p>
+<p>Chamado três. O produto anunciou janela de cento e vinte e oito mil tokens. Em produção, com usuários de
+verdade, o contexto útil que sobra é uma fração disso — e ninguém na equipe consegue dizer qual fração.</p>
+<p>Nenhum dos três é bug. Os três se resolvem com duas contas que eu vou dar hoje: <strong>quem pode ler quem</strong>, e
+<strong>quanto o rascunho custa</strong>. A primeira metade da aula responde o chamado dois. A segunda metade responde
+o um e o três — e o chamado um fecha com um número.</p>
+<blockquote>
+<p>Ideia central: "Nenhum dos três tem erro no log. E os três se resolvem com duas contas: quem pode ler quem, e quanto o rascunho custa."</p>
+</blockquote>
+<h2>Slide 2 · Por que a escolha por nome sai errada: a máscara é a arquitetura · 00:10–00:16</h2>
+<p>Deixa eu começar pelo chamado dois, porque o erro dele é de raciocínio, não de engenharia.</p>
+<p>O time comparou <strong>datas</strong>. E data não é uma propriedade que decide arquitetura. Deixa eu mostrar o que
+decide.</p>
+<p>Eu vou pegar exatamente o bloco da aula passada e trocar <strong>uma</strong> coisa: quem pode ler quem. Três opções.</p>
+<p>Primeira: máscara nenhuma. Toda posição consulta todas as outras, passado e futuro. Isso é bidirecional, e
+é o que a gente chama de encoder. Segunda: máscara causal, aquela matriz triangular que a gente montou na
+Aula 6 — cada posição só consulta o próprio passado. Isso é o decoder. Terceira: as duas juntas, em duas
+pilhas. Uma pilha lê a entrada inteira sem máscara, outra pilha gera com máscara causal e consulta a
+primeira por cross-attention.</p>
+<p>Agora o ponto que eu quero que vocês levem deste slide, porque ele é o eixo da aula. A máscara não é um
+detalhe de implementação: ela <strong>determina o objetivo de treino possível</strong>. Se toda posição vê o futuro,
+não dá para treinar prevendo o próximo token — a resposta está na entrada. O modelo aprende a copiar, a
+perda vai a zero, e nada de linguagem foi aprendido. Então o objetivo tem que mudar junto. Máscara e
+função de perda são um pacote, não duas escolhas independentes.</p>
+<p>E é por isso que o chamado dois errou. A pergunta certa não era "qual é mais novo". Era: essa tarefa
+precisa gerar texto, ou precisa devolver um rótulo? A resposta dessa pergunta escolhe a máscara, e a
+máscara escolhe a família.</p>
+<blockquote>
+<p>Ideia central: "Trocar a máscara troca o que o modelo pode aprender — e aí o objetivo de treino não tem escolha."</p>
+</blockquote>
+<h2>Slide 3 · BERT: atenção bidirecional e a lacuna a preencher · 00:16–00:25</h2>
+<p>Vou começar pela família bidirecional, que é onde a história moderna começa de verdade em 2018, com o
+BERT.</p>
+<p>O problema é o que eu acabei de dizer: com atenção bidirecional, prever o próximo token é trapaça. A
+solução do BERT é o <strong>masked language modeling</strong>: mascarar cerca de quinze por cento dos tokens da
+sequência e treinar o modelo para prever cada um deles usando o contexto dos dois lados. A perda está no
+slide, e eu vou ler em vez de derivar: menos a soma, sobre as posições mascaradas, do log da probabilidade
+do token correto dado o resto da sequência.</p>
+<p>E aqui a gente fecha um laço que está aberto desde a Aula 3. Vocês lembram do problema do "banco"?
+Embedding estático dava um vetor só para a palavra, e eu deixei aquele sintoma <strong>aberto de propósito</strong>,
+dizendo que fechava na Aula 6. Na Aula 6 a gente viu o mecanismo — a atenção mistura o vetor de "banco"
+com os vetores dos vizinhos, e a saída depende do contexto. O que o BERT fez foi montar o <strong>objetivo de
+treino</strong> que força esse mecanismo a aprender exatamente isso, dos dois lados, em bilhões de frases. E na
+demo, daqui a quinze minutos, vocês vão ver as duas frases do banco produzindo distribuições diferentes,
+na tela.</p>
+<p>Tem um detalhe honesto que vale contar, porque parece gambiarra e é engenharia. Existe uma discrepância
+entre treino e uso: no treino o modelo vê o token <code>[MASK]</code>, e em uso ninguém manda <code>[MASK]</code> para ele. O
+BERT original ameniza isso substituindo só oitenta por cento das posições escolhidas pelo <code>[MASK]</code>, dez
+por cento por um token aleatório e dez por cento por nada — deixando a palavra original no lugar e ainda
+pedindo a predição. Esses últimos dez por cento são o mais engenhoso dos três, e a razão está em A.1.</p>
+<p>Só que reparem no verbo que eu usei: <strong>ameniza</strong>. E dá para remover. Em dois mil e vinte, o ELECTRA trocou a tarefa: em vez de "adivinhe a palavra que está debaixo da máscara", ele pergunta, para cada palavra da frase, "esta aqui é a original ou foi trocada?". Um modelo pequeno preenche as lacunas com palavras plausíveis, e o modelo que interessa recebe a frase já preenchida — <strong>sem nenhum <code>[MASK]</code></strong>. A discrepância some, porque ela não existe mais. E tem um segundo ganho, que eu vou cobrar de volta no slide sete: a pergunta é feita para <strong>todas</strong> as posições, não para quinze por cento delas.</p>
+<p>Guardem isso, porque no slide sete eu vou dizer que o decoder aprende com mais densidade de sinal que o encoder, e o ELECTRA é a prova de que essa densidade não vinha da máscara causal — vinha do objetivo. Dá para ter as duas coisas. Está em A.1, inclusive a parte contraintuitiva: o gerador do ELECTRA é pequeno <strong>de propósito</strong>, porque um gerador bom demais deixa a tarefa impossível.</p>
+<p>E o que essa família <strong>não</strong> faz: gerar. Aqui eu quero ser mais preciso do que o normal, porque a resposta
+fácil está errada. A resposta fácil é "ele não foi treinado para isso". A resposta certa é mais forte: o
+MLM <strong>não define uma distribuição conjunta sobre sequências</strong>. A perda causal, que eu vou escrever no
+slide sete, é exatamente a log-verossimilhança da sequência inteira, pela regra da cadeia — e gerar é
+ler essa fatoração da esquerda para a direita. O MLM não tem fatoração nenhuma: ele aprende um conjunto de
+condicionais que não se multiplicam para dar a probabilidade do texto. Não é dificuldade de engenharia; é
+ausência do objeto de que a geração precisaria. As três razões independentes estão em A.1.</p>
+<blockquote>
+<p>Ideia central: "Se toda posição vê todas, prever o próximo token é copiar a resposta. O objetivo tem que ser outro: a lacuna."</p>
+</blockquote>
+<h2>Slide 4 · <code>[CLS]</code>, fine-tuning e cabeças de tarefa · 00:25–00:32</h2>
+<p>Uma pergunta prática: o BERT devolve um vetor por token. Se eu quero <strong>um</strong> rótulo para a frase inteira, de
+onde eu tiro?</p>
+<p>A resposta do BERT é o token <code>[CLS]</code>, acrescentado na posição zero da sequência. O vetor de saída daquela
+posição é usado como resumo. E eu quero desmontar a mágica disso na frente de vocês, porque a turma sempre
+acha que tem algo especial no <code>[CLS]</code>. Não tem. Ele funciona como resumo porque no pré-treino ele foi
+obrigado a resolver uma tarefa de nível de sentença, e o gradiente empurrou aquela posição a agregar
+informação da sequência inteira. É uma posição treinada para isso, não uma posição privilegiada por
+natureza.</p>
+<p>E daí vem a parte que interessa para produção: o <strong>fine-tuning</strong>. O corpo pré-treinado é caro e é um só.
+Sobre ele, eu troco só a cabeça. Cabeça linear sobre o <code>[CLS]</code>: classificação de sequência. Cabeça linear
+por posição: rotulagem de tokens, reconhecimento de entidade. Cabeça sobre um par de sentenças:
+similaridade, e aí a gente chega no reranking, que volta com nome e métrica próprios na Aula 19.</p>
+<p>Agora eu volto no chamado dois, porque é aqui que ele fecha. Por que alguém ainda usaria BERT em 2026? Por
+custo, e é aritmética. Um encoder pequeno faz <strong>uma</strong> passada pela sequência e devolve um rótulo ou um
+vetor. Um decoder-only tem que <strong>gerar tokens</strong> para dizer a mesma coisa, e cada token gerado é uma passada
+pela pilha inteira. Uma passada contra k passadas. Em dez milhões de documentos por dia, isso é a diferença
+entre uma máquina e um cluster.</p>
+<p>O time do chamado dois não comparou uma passada com k passadas. Comparou 2019 com 2024.</p>
+<blockquote>
+<p>Ideia central: "O corpo pré-treinado é caro e é um só. A cabeça é barata e troca por tarefa."</p>
+</blockquote>
+<h2>Slide 5 · [Demo] BERT hoje, e os dois campos que abrem a segunda metade · 00:32–00:44</h2>
+<p>Chega de slide. Deixa eu mostrar três coisas funcionando, no navegador, e terminar com dois números lidos
+de um arquivo de configuração — que são os números que abrem a segunda metade da aula.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Mesma palavra, dois contextos, duas distribuições. Isso é a resposta ao 'banco' que a Aula 3 deixou aberto."</p>
+</blockquote>
+<h2>Slide 6 · Encoder-decoder: quando entrada e saída são objetos diferentes · 00:44–00:49</h2>
+<p>Segunda família, e vou ser rápido. Tem um tipo de tarefa em que a entrada está inteira e disponível de uma
+vez, e a saída é uma sequência <strong>nova</strong>, de tamanho diferente, em outro idioma ou em outro nível de
+detalhe. Tradução e sumarização são os dois casos canônicos.</p>
+<p>Para esse tipo de tarefa, a montagem natural é duas pilhas. Um encoder que lê a entrada bidirecionalmente,
+sem máscara, porque a entrada está toda lá. E um decoder que gera com máscara causal, porque a saída ainda
+não existe — e que consulta o encoder por <strong>cross-attention</strong>.</p>
+<p>E agora deixa eu cravar uma coisa que eu prometi na Aula 5. A cross-attention é o mecanismo de Bahdanau,
+sem uma linha de diferença. As queries vêm do decoder — "o que eu preciso agora, nesta palavra que estou
+escrevendo" — e as keys e values vêm do encoder — "o que a frase de origem oferece". Aquele mecanismo de
+2014 que a gente estudou como solução para o gargalo do vetor de contexto fixo não foi substituído: ele foi
+absorvido e virou um dos três tipos de atenção do Transformer. Foi aqui que ele sobreviveu.</p>
+<p>O custo dessa família é honesto: duas pilhas, dois conjuntos de hiperparâmetros, e um objetivo de
+pré-treino que não é qualquer texto cru — precisa de uma tarefa de reconstrução ou de corrupção de trechos
+montada de propósito. E o argumento que enfraqueceu a família é que tradução também dá para fazer com uma
+pilha só: coloca o original e a tradução na mesma sequência e prevê a continuação. Se dá para fazer com uma
+pilha, a segunda pilha tem que se justificar.</p>
+<blockquote>
+<p>Ideia central: "A cross-attention é o Bahdanau da Aula 5, vivo e sem mudar uma linha. Foi aqui que ele sobreviveu."</p>
+</blockquote>
+<h2>Slide 7 · Decoder-only: por que prever o próximo token venceu · 00:49–00:55</h2>
+<p>Terceira família, e a que ocupa as outras vinte e duas aulas desta disciplina. Máscara causal, uma pilha,
+um objetivo: prever o próximo token, em toda posição.</p>
+<p>Eu quero dar cinco argumentos, e eu quero que vocês vejam que nenhum deles é "essa arquitetura é mais
+inteligente".</p>
+<p>Primeiro, <strong>rótulo grátis</strong>. O rótulo do token <code>t</code> é o próprio token <code>t</code>. Todo texto cru do mundo, sem
+anotação humana, sem par alinhado, vira dado de treino supervisionado. Isso contrasta com tradução, que
+precisa de pares alinhados por gente.</p>
+<p>Segundo, e esse é o mais bonito: <strong>sinal denso</strong>. O MLM treina em quinze por cento das posições de cada
+sequência. O LM causal treina em cem por cento delas. E eu quero dar o número, porque "mais denso" é
+adjetivo: a razão é um sobre zero vírgula quinze, ou seja, cerca de <strong>seis vezes e sete décimos</strong> mais
+predições supervisionadas por token de corpus lido. Multiplicado por trilhões de tokens, isso deixa de ser
+detalhe.</p>
+<p>Terceiro, <strong>simplicidade operacional</strong>: uma pilha, um objetivo, uma máscara. Menos peças para escalar, e
+escalar é o assunto do Módulo 2. Quarto, <strong>prompting unifica as tarefas</strong> — é literalmente a tese que eu
+abri na Aula 1: classificar é gerar a palavra do rótulo, extrair é gerar JSON, sem trocar de cabeça e sem
+trocar de modelo. Quinto, <strong>geração é nativa</strong>, não é um enxerto em cima de um modelo que não foi feito
+para isso.</p>
+<p>E tem uma sexta coisa, que não é argumento de vitória e é a razão formal da diferença: essa perda que está
+no slide <strong>é</strong> a log-verossimilhança exata da sequência, pela regra da cadeia da probabilidade. O MLM não
+tem essa propriedade. É por isso que um gera e o outro não — e não porque um é mais moderno.</p>
+<p>O alerta, que é a parte que separa quem entendeu de quem decorou: "venceu" quer dizer venceu <strong>como
+plataforma geral</strong>. Não quer dizer melhor em tudo. Por rótulo entregue e por milissegundo de latência, um
+encoder pequeno destilado continua ganhando, e é o chamado dois de novo.</p>
+<blockquote>
+<p>Ideia central: "O MLM treina em quinze por cento das posições. O LM causal treina em cem por cento. Isso, multiplicado por trilhões de tokens, é a diferença."</p>
+</blockquote>
+<h2>Slide 8 · O preço da janela: o KV cache em números · 01:05–01:14</h2>
+<p>Voltando. A primeira metade foi sobre escolher a família, e ela fechou o chamado dois. A segunda metade
+fecha o chamado um, e ela começa com uma conta que ninguém faz até a primeira vez que serve um modelo em
+produção e a GPU estoura.</p>
+<p>Vamos lembrar da geração autorregressiva da Aula 6. Para produzir o token <code>n+1</code>, o modelo precisa das keys
+e values de todas as <code>n</code> posições anteriores. E essas keys e values <strong>não mudaram</strong> — a máscara é causal, o
+passado não vê o futuro, então o que foi calculado continua valendo. Recalcular tudo a cada token é
+desperdício puro. Guardar é o que se chama de KV cache, e é troca de computação por memória.</p>
+<p>A fórmula está no slide, e eu vou lê-la: o cache por token é dois — porque são K e V — vezes o número de
+camadas, vezes o número de cabeças de key/value, vezes a dimensão de cada cabeça, vezes os bytes por valor.</p>
+<p>E aqui está o número, num decoder hipotético — e eu quero ser explícito de que é hipotético: trinta e duas
+camadas, trinta e duas cabeças, dimensão cento e vinte e oito por cabeça, meia precisão. <strong>Meio mebibyte
+por token.</strong> Uma conversa de oito mil tokens custa quatro gibibytes de cache. E aqui está a parte que dói:
+quatro gibibytes <strong>por conversa</strong>.</p>
+<p>Agora o chamado um, com aritmética. Dez conversas simultâneas: quarenta gibibytes. Quarenta conversas:
+cento e sessenta. Os pesos de um modelo de sete bilhões em meia precisão são catorze gibibytes, e são
+<strong>constantes</strong>. Numa GPU de oitenta gibibytes, descontando os pesos e a folga de ativações, sobram da ordem
+de sessenta para cache. Quarenta cabe com folga. Cento e sessenta não cabe, por um fator de quase três.</p>
+<p>Entre dez e quarenta <strong>não mudou nada no modelo</strong>. Mudou o que ele tem que guardar, e o crescimento é
+linear na concorrência. É por isso que esse sintoma aparece de repente: o cache não degrada devagar, ele
+estoura.</p>
+<p>Peso é constante. Cache é linear no contexto <strong>e</strong> no número de conversas simultâneas. O que estoura a GPU
+em serviço não é o peso do modelo — é o rascunho.</p>
+<blockquote>
+<p>Ideia central: "Meio mebibyte por token. Oito mil tokens dão quatro gibibytes — por conversa. Dez conversas caberiam; quarenta não."</p>
+</blockquote>
+<h2>Slide 9 · Longformer: janela deslizante mais atenção global · 01:14–01:22</h2>
+<p>Antes de cortar o cache, deixa eu atacar o outro lado da conta, que é o custo da própria atenção.</p>
+<p>Atenção plena é quadrática no comprimento, e isso a gente já sabe desde a Aula 6. Com trinta e dois mil
+tokens de contexto, são mais de um bilhão de pares de posições, por cabeça e por camada. A ideia do
+Longformer é simples e é a que mais parece trapaça sem ser: cada posição não precisa consultar todas — só
+uma janela de largura <code>w</code> em torno de si. O custo cai de <code>n</code> ao quadrado para <code>n</code> vezes <code>w</code>. Com trinta e
+dois mil tokens e janela de quinhentos e doze, são dezesseis milhões e oitocentos mil pares em vez de um
+bilhão. A razão é <code>n</code> sobre <code>w</code>: sessenta e quatro vezes menos.</p>
+<p>E a pergunta óbvia é: e a dependência longa, que foi o motivo de a atenção existir? Dois caminhos.</p>
+<p>O primeiro é <strong>profundidade</strong>: a informação caminha metade da janela para cada lado a cada camada, então
+com doze camadas e janela de quinhentos e doze o alcance é da ordem de três mil posições para cada lado.</p>
+<p>E aqui eu vou ser mais honesto do que a versão anterior desta aula era, porque esse número merece ser
+comparado. Três mil de trinta e dois mil é <strong>nove por cento da sequência</strong>. Para a profundidade sozinha
+ligar a primeira posição à última, seriam necessárias <strong>cento e vinte e oito camadas</strong> — a conta é duas
+vezes <code>n</code> sobre <code>w</code>, e ela está em A.3. Ou seja: a profundidade recupera alcance <em>médio</em>. Ela não recupera
+alcance de ponta a ponta.</p>
+<p>Então o segundo caminho não é complemento opcional, é essencial: <strong>atenção global</strong> em um punhado de tokens
+escolhidos. Alguns tokens leem tudo e são lidos por todos — o token de classificação, os tokens da
+pergunta, os títulos de seção. Com oito tokens globais, o custo sobe três por cento. E o que esses três por
+cento compram é o seguinte: qualquer par de posições passa a ter um caminho de <strong>duas</strong> camadas, indo até um
+token global e voltando. O diâmetro da comunicação vira dois, independentemente do comprimento.</p>
+<p>E aqui está o preço honesto dessa família: escolher <strong>onde</strong> vai a atenção global é decisão de projeto, por
+tarefa. Se eu escolher errado, eu perco exatamente a dependência que importava, e o modelo não me avisa.</p>
+<blockquote>
+<p>Ideia central: "A profundidade compra três mil posições de trinta e duas mil. O alcance de ponta a ponta quem compra são os poucos tokens globais — se eu escolher certo."</p>
+</blockquote>
+<h2>Slide 10 · MQA e GQA: cortar o KV cache pela raiz · 01:22–01:31</h2>
+<p>Agora o corte no cache, e ele é elegante porque sai direto da fórmula.</p>
+<p>Olha a fórmula do slide 8 de novo. O cache é proporcional ao número de cabeças de <strong>key e value</strong>. E aqui
+vem a pergunta que alguém em 2019 fez: as cabeças de query precisam ser muitas, porque cada uma faz uma
+pergunta diferente. Mas as chaves e os valores precisam ser um conjunto por cabeça?</p>
+<p>A resposta do MQA é: não. Mantém as trinta e duas cabeças de query e compartilha <strong>uma única</strong> cabeça de
+key/value entre todas. O cache é dividido por trinta e dois. Na conta do slide 8, quatro gibibytes viram
+cento e vinte e oito mebibytes.</p>
+<p>O GQA é o meio-termo, e é o que os modelos abertos recentes usam. Em vez de uma cabeça de K/V, <code>G</code> grupos:
+as trinta e duas queries se dividem em, digamos, oito grupos, cada grupo com sua própria cabeça de
+key/value. O fator de redução é a razão <code>n_heads</code> sobre <code>n_kv_heads</code> — trinta e dois sobre oito, quatro. Os
+quatro gibibytes viram um gibibyte.</p>
+<p>E esse fator é <strong>exato</strong>, não aproximado, porque todos os outros fatores da fórmula se cancelam quando eu
+comparo duas configurações que só diferem no número de cabeças de K/V. A derivação de duas linhas está em
+A.2.</p>
+<p>Agora deixa eu ser explícito sobre o que <strong>não</strong> muda, porque é aqui que a turma escorrega. As queries
+continuam trinta e duas — o número de padrões de relação por camada é o mesmo. A fórmula da atenção
+continua sendo softmax de Q K transposto sobre raiz de d_k, vezes V, exatamente a mesma da Aula 6. O número
+de camadas e a dimensão do modelo continuam iguais.</p>
+<p>E uma coisa que muda e que eu não dizia antes, porque vale a precisão: as <strong>projeções</strong> de K e V encolhem.
+Em atenção multi-cabeça cheia as três projeções custam três vezes a dimensão ao quadrado; com GQA de oito
+cabeças de K/V, as de K e V ficam quatro vezes menores. É uma redução real de parâmetros, da ordem de
+cinquenta por cento nos parâmetros de projeção da atenção — e as implementações costumam compensar isso
+alargando a rede feed-forward. Está em A.2, com os números.</p>
+<p>O que se ganha, então: memória de cache <strong>e</strong> tráfego de memória para lê-lo. E esse segundo ganho é o que
+faz a geração ficar mais rápida, porque gerar um token exige <strong>ler o cache inteiro</strong>: com quatro gibibytes
+e banda de dois terabytes por segundo, são dois milissegundos por token só de leitura. Com GQA de oito,
+meio milissegundo. O que se paga é qualidade: MQA corta mais e pode custar mais; GQA recupera quase tudo
+com uma fração do cache, e é por isso que virou o padrão.</p>
+<blockquote>
+<p>Ideia central: "As perguntas continuam trinta e duas. O índice consultado passa a ser um só, ou oito. O fator de redução é exatamente a razão entre eles."</p>
+</blockquote>
+<h2>Slide 11 · Destilação: o aluno aprende a distribuição do professor · 01:31–01:37</h2>
+<p>Última técnica de hoje, e ela fecha o laço com a primeira metade da aula.</p>
+<p>A pergunta é: como se fabrica um modelo pequeno que é bom? Uma resposta é treinar do zero em dados
+rotulados, e aí o pequeno é pequeno mesmo. A outra é destilação: usar um modelo grande, já treinado, como
+professor.</p>
+<p>E o pulo do gato é o que se copia do professor. Não é o rótulo — é a <strong>distribuição</strong>. Quando eu passo um
+exemplo pelo professor, ele não devolve só "a resposta é B": devolve uma distribuição sobre todas as
+alternativas, e nessa distribuição está a informação de que C era defensável e D é absurdo.</p>
+<p>A perda está no slide e é uma combinação: uma parte de entropia cruzada contra o rótulo verdadeiro, outra
+parte de divergência entre a distribuição do aluno e a do professor, com um peso alfa entre as duas — e um
+fator de temperatura ao quadrado multiplicando a segunda parte.</p>
+<p>Deixa eu dar o número que mostra o que a temperatura faz, porque "achatar a distribuição" é vago. Numa
+distribuição cujos logits são cinco, três, um e menos dois: com temperatura um, a última classe tem
+probabilidade zero vírgula zero zero zero oito. Com temperatura quatro, ela tem zero vírgula zero oito. A
+cauda ficou <strong>cem vezes mais visível</strong>, e o professor não mudou. Foi só a temperatura.</p>
+<p>E duas coisas de A.4 que eu quero enunciar sem derivar. A primeira: a divergência está escrita na ordem
+professor, aluno, e essa ordem importa — nessa ordem, a divergência pune muito o aluno por <strong>não cobrir</strong> a
+cauda do professor. Se estivesse invertida, o aluno poderia concentrar tudo na classe vencedora e ignorar o
+resto, que é exatamente o que o rótulo duro já faz. A assimetria é o mecanismo. A segunda: aquele fator de
+temperatura ao quadrado existe para que os dois termos continuem com pesos comparáveis quando a temperatura
+muda — e no limite de temperatura alta a destilação vira, literalmente, igualar os logits do aluno aos do
+professor. A conta está em A.4.</p>
+<p>E onde isso aterrissa nesta aula: os encoders pequenos que sustentam classificação e reranking em produção,
+que eu defendi no slide 4, são em boa medida destilados. A família encoder-only continua viva <strong>porque</strong> dá
+para comprimir — e isso fecha o chamado dois de vez. O tema volta com mais profundidade no Módulo 7.</p>
+<blockquote>
+<p>Ideia central: "O rótulo diz que a resposta é B. O professor diz que é B, que C era defensável e que D é absurdo — e é a segunda frase que ensina."</p>
+</blockquote>
+<h2>Slide 12 · O mapa das famílias, consolidado · 01:37–01:39</h2>
+<p>Deixa eu juntar as três famílias numa tabela só, porque é essa tabela que vocês vão querer na mão na Aula
+17 e no projeto.</p>
+<p>Três colunas que decidem tudo: a máscara, o objetivo de pré-treino, e o que a família faz bem.
+Encoder-only: sem máscara, MLM, entrega rótulo, vetor ou escore de par. Encoder-decoder: bidirecional de um
+lado, causal do outro, cross-attention no meio, objetivo de reconstrução, entrega uma sequência
+transformada a partir de uma entrada completa. Decoder-only: máscara causal, LM causal em cem por cento das
+posições, entrega geração e serve de interface única.</p>
+<p>E eu botei uma quarta coluna de propósito: onde cada família volta nesta disciplina. Encoder-only volta na
+Aula 19, como modelo de embedding e como cross-encoder de reranking. A cross-attention do encoder-decoder
+já apareceu na Aula 5 e é o Bahdanau. E o decoder-only volta na próxima aula, na unha, e depois na Aula 10
+com escala e inferência.</p>
+<p>E repararam no que <strong>não</strong> tem nessa tabela? Data. Nenhuma coluna aqui é o ano do modelo.</p>
+<blockquote>
+<p>Ideia central: "Máscara, objetivo, e o que a família faz bem. Essas três colunas respondem a maioria das perguntas de arquitetura que vocês vão fazer — e nenhuma delas é a data do modelo."</p>
+</blockquote>
+<h2>Slide 13 · [Exercício] Qual família, qual atenção, e que conta confirma · 01:39–01:50</h2>
+<p>Oito minutos com vocês trabalhando, em dupla, e três de correção comigo.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Cinco cenários. Família, atenção eficiente, e a conta que sustenta a escolha — e 'porque é mais novo' desconta."</p>
+</blockquote>
+<h2>Slide 14 · Fechamento: três chamados, duas contas · 01:50–02:00</h2>
+<p>Deixa eu fechar pelos três chamados com que eu abri.</p>
+<p>Chamado um, o serviço que atende dez e morre em quarenta: <strong>cache linear no contexto e na concorrência</strong>. O
+peso é constante, o cache não é, e a conta está no slide 8 e em A.2. Ninguém mexeu no modelo — mexeu na
+carga.</p>
+<p>Chamado dois, o time que trocou o encoder por um LLM porque o LLM é mais novo: <strong>uma passada contra k
+tokens gerados</strong>. A escolha por data ignorou uma aritmética de custo, e o que decide a família é a máscara e
+o objetivo de pré-treino.</p>
+<p>Chamado três, os cento e vinte e oito mil tokens anunciados: <strong>o cache disputa a mesma memória dos pesos</strong>.
+Quanto de janela é utilizável não é uma propriedade do modelo, é uma consequência de quantas conversas
+simultâneas o serviço precisa atender — e a conta de dimensionamento é a Aula 10.</p>
+<p>E as duas metades da aula, em duas linhas. Primeira: a arquitetura não é o bloco, é a máscara. E o
+decoder-only venceu não por ser mais inteligente, mas por ter o objetivo mais barato — rótulo grátis, sinal
+em cem por cento das posições, seis vírgula sete vezes mais predições por token lido — e por permitir que
+prompting unifique as tarefas. Segunda: essa vitória tem uma fatura, e ela vem em memória. Contra isso, duas
+alavancas: cortar pares de atenção com janela mais atenção global, e cortar o cache com MQA ou GQA, com
+fator igual à razão entre o número de cabeças e o número de cabeças de key/value.</p>
+<p>E na próxima aula essa família sai do slide. Aula 9, Laboratório 2: vocês vão implementar atenção causal na
+mão, com a máscara triangular que eu desenhei no slide 2; multi-head, como a gente derivou na Aula 6; o
+bloco completo, com residual, norm e feed-forward da Aula 7. Depois vão treinar um modelo de linguagem de
+verdade num corpus pequeno, gerar texto e medir perplexidade — aquela mesma perplexidade que eu prometi na
+Aula 1 que vocês mediriam com as próprias mãos.</p>
+<p>As leituras da semana: o paper do BERT, na seção do objetivo de pré-treino; o do GQA, com o do MQA como
+antecedente; e o do Longformer. A pergunta dirigida é: no GQA, o que exatamente é compartilhado entre as
+cabeças, o que continua sendo por cabeça, e qual é o fator de redução do cache em função de <code>n_heads</code> e
+<code>n_kv_heads</code>? E um item de dez minutos: abrir o <code>config.json</code> de dois modelos abertos no Hub e calcular o
+cache por token de cada um com a fórmula de hoje.</p>
+<blockquote>
+<p>Ideia central: "Na próxima aula a família decoder-only sai do slide. Vocês vão escrever a máscara causal, o multi-head e o bloco — e treinar."</p>
+</blockquote>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p>Esta demo roda em doze minutos, no navegador, e termina no quadro. O objetivo é triplo: mostrar que a
+representação do BERT é contextual de verdade — fechando o sintoma que a Aula 3 deixou aberto —, mostrar que
+a família encoder-only entrega coisas que não são texto, e <strong>ler numa configuração real os dois números de
+que a segunda metade da aula depende</strong>.</p>
+<p>Na V2 o ato 4 deixa de ser complemento e passa a ser a <strong>evidência</strong> do slide 8 e do slide 10: os números
+saem de um arquivo que o modelo publica, não de um slide meu.</p>
+<p>Insumos preparados antes da aula: quatro abas do Hugging Face Hub já abertas, as duas frases do "banco" num
+arquivo de texto local para colar sem digitar, <strong>os quatro campos do <code>config.json</code> anotados na véspera</strong> (para
+o passo 7 rodar mesmo sem rede), e capturas de tela dos passos.</p>
+<p><strong>1.</strong> <strong>[Abro a página de um BERT em português no Hub, com o widget de fill-mask visível]</strong> Vou usar um
+BERT treinado em português aqui. Isso é um modelo de 2020, encoder-only, e ele está no Hub com um widget que
+roda inferência direto na página — não preciso de código nenhum para o que eu quero mostrar.</p>
+<p><strong>2.</strong> <strong>[Colo <code>O banco do rio estava [MASK].</code> e submeto]</strong> Primeira frase: "o banco do rio estava" e uma
+lacuna. Olha as predições que ele devolveu. O modelo está preenchendo a lacuna com o que faz sentido depois
+de um banco de rio.</p>
+<p><strong>3.</strong> <strong>[Colo <code>O banco do centro estava [MASK].</code> e submeto, deixando a primeira resposta visível para
+comparar]</strong> Segunda frase, e eu troquei uma palavra só: "centro" em vez de "rio". Olha a diferença nas
+predições. A palavra mascarada está na mesma posição, a estrutura é a mesma, e a distribuição mudou. Isso só
+é possível porque o vetor de "banco" que chegou naquela camada final é <strong>diferente</strong> nas duas frases — a
+atenção leu "rio" de um lado e "centro" do outro. E é a resposta ao sintoma que eu deixei aberto na Aula 3
+de propósito, e que a Aula 6 explicou mecanicamente: embedding estático não separa os dois sentidos;
+representação contextual separa.</p>
+<p><strong>4.</strong> <strong>[Abro a página de um modelo de embedding, sentence-transformers, e mostro a saída]</strong> Segundo ato.
+Este é outro encoder, e olha o que ele devolve: não é texto, é um vetor de dimensão fixa. Este modelo existe
+para transformar frase em ponto num espaço, e é sobre esse espaço que a busca semântica da Aula 18 vai
+funcionar.</p>
+<p><strong>5.</strong> <strong>[Abro a página de um cross-encoder de reranking e mostro a saída para um par consulta-documento]</strong>
+Terceiro. Este recebe um <strong>par</strong> — uma consulta e um documento — e devolve um número: quão relevante. Uma
+passada, um escore. Nenhum token gerado. Este é o argumento de custo do slide 4 na tela: para dizer
+"relevante, nota tal", um decoder-only teria que escrever uma frase.</p>
+<p><strong>6.</strong> <strong>[Abro o <code>config.json</code> de um decoder-only aberto e recente no Hub e leio os quatro campos]</strong> Agora eu
+mudo de família e vou atrás de quatro números. Neste arquivo tem <code>num_hidden_layers</code>, tem
+<code>num_attention_heads</code>, tem <code>num_key_value_heads</code> e tem <code>hidden_size</code>. Olha os quatro valores — e olha os dois
+do meio em particular. Quando esses dois são diferentes, isso é GQA. E a razão entre eles é o fator pelo qual
+o cache foi reduzido em relação a atenção multi-cabeça cheia. Vou anotar os quatro no quadro.</p>
+<p><strong>7.</strong> <strong>[Vou para o quadro e aplico a fórmula do KV cache com os valores lidos na tela]</strong> E aqui eu fecho no
+quadro, com números que não são meus: dois, vezes camadas, vezes cabeças de key/value, vezes a dimensão por
+cabeça — que é <code>hidden_size</code> dividido por <code>num_attention_heads</code> —, vezes dois bytes. Isso dá o cache por
+token deste modelo. Depois eu refaço a mesma conta trocando <code>num_key_value_heads</code> por <code>num_attention_heads</code>,
+que é o que seria sem GQA. A razão entre as duas contas é exatamente a razão entre os dois números que estão
+na tela. Não é um número que eu trouxe no slide: é aritmética em cima do que o modelo declara sobre si.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>Oito minutos em dupla, três de correção, com os cinco cenários projetados e o mapa das famílias do slide 12
+ainda na tela. O objetivo não é acertar a família — é obrigar a justificativa a virar <strong>conta</strong>, que é o
+vocabulário que a aula construiu. Na V1 eu pedia "uma frase citando custo, latência ou memória"; na V2 eu
+peço a conta, porque frase citando custo ainda é frase.</p>
+<p><strong>1.</strong> <strong>[Projeto os cinco cenários e formo as duplas]</strong> Oito minutos, em dupla. Cinco cenários. Para cada um
+eu quero três coisas: a família — encoder-only, encoder-decoder ou decoder-only; o que vocês usariam de
+atenção eficiente, ou explicitamente nada; e <strong>que conta ou medição confirmaria</strong> a escolha. E eu vou ser
+chato com a terceira: "porque é melhor" não conta, e "porque é mais novo" desconta — esse é literalmente o
+chamado dois com que eu abri a aula.</p>
+<p>Os cinco cenários:</p>
+<ol>
+<li>Classificar dez milhões de comentários por dia em três rótulos, com latência de milissegundos.</li>
+<li>Busca semântica sobre quinhentos mil documentos internos, com reranking dos cinquenta primeiros.</li>
+<li>Assistente que conversa, chama ferramenta e escreve código.</li>
+<li>Responder perguntas sobre um contrato de oitenta páginas lido inteiro de uma vez.</li>
+<li>Servir um modelo de oito bilhões de parâmetros para mil usuários simultâneos, com contexto de trinta e
+   dois mil tokens.</li>
+</ol>
+<p><em>Como recolher:</em> oito minutos de dupla, três de correção conduzida por mim. Não corrijo os cinco: peço
+voluntário para o 1 e forço a terceira coluna — "como você confirmaria isso?" —, corrijo o 2 rápido apontando
+que são dois encoders e sinalizando a Aula 19, e gasto os minutos finais no cenário 5. No 5 eu faço a conta
+na frente deles com a fórmula do slide 8, primeiro com atenção multi-cabeça cheia e depois com GQA de oito
+cabeças de key/value. E eu fecho com a parte honesta: <strong>mesmo com GQA a conta para mil usuários simultâneos
+não fecha.</strong> GQA é a primeira alavanca, não a solução — o resto é gerenciamento de memória de cache e
+agendamento de requisições, que é o que a Aula 10 trata como inferência eficiente. Encerro dizendo isso: "a
+conta ainda não fecha, e é por isso que existe uma aula sobre inferência".</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a aritmética em aula. A
+regra geral é remeter ao apêndice e seguir; conduzir uma conta só se sobrar tempo, e anunciando que é
+conteúdo de consulta.</p>
+<p><strong>Item 1 — "Por que um BERT não gera texto?" (A.1, ~5 min).</strong>
+A pergunta mais interessante do Bloco 1, e a que eu mais gosto de responder porque a resposta fácil está
+errada. Se eu tiver os cinco minutos, eu conduzo assim: escrevo a perda causal e digo que aquela soma <strong>é</strong> a
+log-verossimilhança da sequência inteira, pela regra da cadeia — cada fator é uma condicional, e o produto
+dos fatores é a probabilidade do texto. Gerar é ler essa fatoração da esquerda para a direita. Depois escrevo
+a perda do MLM ao lado e mostro que não existe produto daqueles termos que dê a probabilidade do texto:
+cada termo condiciona em posições que outros termos tratam como alvo. É pseudo-verossimilhança.
+<strong>Versão de 30 segundos:</strong> "a perda causal é a verossimilhança exata pela regra da cadeia, e gerar é ler a
+fatoração. O MLM não tem fatoração nenhuma — ele otimiza uma pseudo-verossimilhança. Não é que ele não foi
+treinado para gerar: é que não existe o objeto de que a geração precisaria. Está em A.1, com três razões."</p>
+<p><strong>Item 2 — "Faz a multiplicação do cache aí" (A.2, ~5 min).</strong>
+A pergunta mais provável do Bloco 2. Se eu decidir fazer, eu faço em <strong>duas etapas</strong> e não em seis fatores de
+uma vez, porque foi assim que a V1 travava a sala. Etapa um: dois vezes trinta e dois vezes trinta e dois
+vezes cento e vinte e oito dá duzentos e sessenta e dois mil valores por token, e a dois bytes é meio
+mebibyte. Etapa dois: multiplica pelo contexto, e depois pelo número de conversas. E eu digo em voz alta a
+razão de cada fator: o dois é K e V, o L é porque cada camada tem projeções próprias, o <code>d_head</code> é porque a
+projeção já reduziu a dimensão.
+<strong>Versão de 30 segundos:</strong> "meio mebibyte por token no modelo hipotético, quatro gibibytes por conversa de
+oito mil. A conta fator a fator, com a razão de existir de cada fator e a leitura de banda de memória, está
+em A.2 — e a instanciação com números reais é o que a demo já fez, lendo o <code>config.json</code>."</p>
+<p><strong>Item 3 — "Como se prova que o fator do GQA é exatamente essa razão?" (A.2, ~3 min).</strong>
+Barata e satisfatória, e vale sempre que aparecer. Eu escrevo o cache das duas configurações uma em cima da
+outra e divido: camadas, dimensão por cabeça, tokens e bytes são os mesmos nas duas, então cancelam. Sobra a
+razão dos números de cabeças de key/value. Duas linhas, e o resultado é exato, não aproximado.
+<strong>Versão de 30 segundos:</strong> "compare duas configurações que só diferem no número de cabeças de key/value: todos
+os outros fatores cancelam e sobra a razão entre eles. É exato. Está em A.2."</p>
+<p><strong>Item 4 — "A profundidade não resolve o alcance longo?" (A.3, ~4 min).</strong>
+A melhor pergunta que pode aparecer no Bloco 2, e se ela vier eu abro espaço. Eu escrevo o alcance por
+profundidade — <code>L</code> vezes <code>w</code> sobre dois —, instancio com doze camadas e janela quinhentos e doze, dá três mil
+setenta e dois. E aí comparo com trinta e dois mil, que é a sequência: nove por cento. E inverto a conta:
+para cobrir a sequência, <code>L</code> maior ou igual a duas vezes <code>n</code> sobre <code>w</code>, que dá cento e vinte e oito camadas.
+Fecho com a consequência: por isso a atenção global não é opcional, e por isso escolher onde ela vai é
+decisão de projeto.
+<strong>Versão de 30 segundos:</strong> "a profundidade compra <code>L</code> vezes <code>w</code> sobre dois: três mil de trinta e duas mil.
+Para cobrir a sequência seriam cento e vinte e oito camadas. É a atenção global que faz o alcance de ponta a
+ponta, e ela reduz o diâmetro para duas camadas. Está em A.3."</p>
+<p><strong>Item 5 — "De onde vem esse T ao quadrado da destilação?" (A.4, ~5 min).</strong>
+Raramente perguntam, e quando perguntam vale, porque é a única derivação realmente elegante do Bloco 2. Eu
+digo que o gradiente do termo suave em relação a um logit do aluno é a diferença entre as duas distribuições
+suavizadas, dividida pela temperatura — e que, em temperatura alta, essa diferença <strong>também</strong> encolhe como um
+sobre T. Dois fatores de um sobre T, então o gradiente iria a zero como um sobre T ao quadrado; multiplicar
+por T ao quadrado devolve a magnitude e faz alfa significar a mesma coisa em qualquer temperatura. E fecho
+com o resultado bonito: nesse limite, destilar é igualar logits.
+<strong>Versão de 30 segundos:</strong> "o gradiente do termo suave escala como um sobre T ao quadrado em temperatura alta;
+o T ao quadrado compensa isso para que o peso alfa signifique a mesma coisa em qualquer temperatura. E nesse
+limite destilar é literalmente igualar os logits. A derivação está em A.4."</p>
+<h2>Ordem de sacrifício</h2>
+<p>Se a aula atrasar: corto primeiro o <strong>slide 12</strong> da exposição, deixando-o projetado durante o exercício —
+ele se sustenta lido e é assim que a turma o usa de qualquer forma. Depois comprimo o <strong>slide 6</strong>
+(encoder-decoder) para três minutos, mantendo só a conexão com Bahdanau, que é o pagamento da promessa da
+Aula 5. Depois encolho a <strong>destilação</strong> de seis para quatro minutos, ficando no número da cauda e no
+fechamento com o chamado dois.
+<strong>Não corto</strong> o slide 8 nem o slide 10: os dois juntos são a resposta do chamado um e o pré-requisito direto
+da Aula 10, e uma Aula 10 que precisa reensinar a fórmula do cache perde os primeiros dez minutos dela.
+<strong>Não corto</strong> os passos 6 e 7 da demo, que são os únicos números reais da aula. E <strong>não corto</strong> o cenário 5
+do exercício, porque é ele que entrega a aula seguinte — a conta que não fecha é a porta da Aula 10.</p>
+<hr />
+<h2>Encerramento · 01:50–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 14 da Parte 1 — os três chamados fechados com a causa
+nomeada e onde ela mora, a síntese das duas metades (a máscara é a arquitetura; o cache é a fatura), o índice
+do apêndice projetado por vinte segundos, a ponte para a Aula 9 (Laboratório 2: Mini-GPT do zero em PyTorch) e
+as três leituras da semana com a pergunta dirigida do GQA.</p>
+<blockquote>
+<p>Ideia central: "Hoje vocês escolheram a família por uma conta, não por uma data. Na próxima aula vocês escrevem a máscara causal em PyTorch e treinam a coisa até ela gerar texto."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 8 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-07/index.html">← Aula anterior</a><a class="button" href="../aula-09/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

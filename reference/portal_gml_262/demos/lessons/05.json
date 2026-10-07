@@ -1,0 +1,210 @@
+{
+  "id": 5,
+  "title": "Da recorrência à atenção: três sintomas, três mecanismos",
+  "subtitle": "Estados, gradientes, gates e alinhamento calculados passo a passo",
+  "nodes": [
+    "Sequência",
+    "Estado",
+    "Gradiente",
+    "Memória",
+    "Acesso",
+    "Diagnóstico"
+  ],
+  "controls": [
+    {
+      "key": "length",
+      "label": "Comprimento T",
+      "type": "range",
+      "min": 2,
+      "max": 100,
+      "step": 1,
+      "value": 20
+    },
+    {
+      "key": "gain",
+      "label": "Ganho por passo",
+      "type": "range",
+      "min": 0.5,
+      "max": 1.2,
+      "step": 0.01,
+      "value": 0.9
+    },
+    {
+      "key": "forget",
+      "label": "Porta de esquecimento f",
+      "type": "range",
+      "min": 0.5,
+      "max": 1,
+      "step": 0.01,
+      "value": 0.95
+    },
+    {
+      "key": "query",
+      "label": "Estado-consulta do decoder",
+      "type": "range",
+      "min": -2,
+      "max": 2,
+      "step": 0.1,
+      "value": 0.8
+    },
+    {
+      "key": "scale",
+      "label": "Escala dos scores de atenção",
+      "type": "range",
+      "min": 0.2,
+      "max": 5,
+      "step": 0.2,
+      "value": 1
+    },
+    {
+      "key": "order",
+      "label": "Ordem da sequência",
+      "type": "select",
+      "value": "forward",
+      "options": [
+        {
+          "value": "forward",
+          "label": "Original"
+        },
+        {
+          "value": "reverse",
+          "label": "Invertida"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "title": "Separe três sintomas diferentes",
+      "view": "symptoms",
+      "explanation": "Erro em sequências longas, gradiente fraco e baixa paralelização têm causas relacionadas, mas distintas. A miniatura oferece uma medição para cada uma sem inventar uma curva de qualidade de um modelo treinado.",
+      "action": "Aumente T e observe caminho, produto de ganhos e quantidade de etapas sequenciais.",
+      "board": "Comprimento; gradiente; dependência de execução",
+      "question": "Uma solução que melhora memória necessariamente libera paralelismo?",
+      "answer": "Não; LSTMs melhoram o transporte de informação, mas continuam calculando um estado após o anterior.",
+      "focus": 0,
+      "speech": "Erro em sequências longas, gradiente fraco e baixa paralelização têm causas relacionadas, mas distintas. A miniatura oferece uma medição para cada uma sem inventar uma curva de qualidade de um modelo treinado. Aumente T e observe caminho, produto de ganhos e quantidade de etapas sequenciais. Pergunto à turma: “Uma solução que melhora memória necessariamente libera paralelismo?” Não; LSTMs melhoram o transporte de informação, mas continuam calculando um estado após o anterior."
+    },
+    {
+      "title": "Desenrole a recorrência",
+      "view": "unroll",
+      "explanation": "A mesma transformação é aplicada em cada posição com parâmetros compartilhados. O estado atual depende do estado anterior e da nova entrada.",
+      "action": "Troque a ordem da sequência e siga os estados numéricos calculados por tanh.",
+      "board": "hₜ = tanh(0,8hₜ₋₁ + xₜ)",
+      "question": "A rede guarda todos os tokens dentro do estado?",
+      "answer": "Ela carrega um vetor atualizado; não existe uma cópia literal garantida de cada entrada passada.",
+      "focus": 1,
+      "speech": "A mesma transformação é aplicada em cada posição com parâmetros compartilhados. O estado atual depende do estado anterior e da nova entrada. Troque a ordem da sequência e siga os estados numéricos calculados por tanh. Pergunto à turma: “A rede guarda todos os tokens dentro do estado?” Ela carrega um vetor atualizado; não existe uma cópia literal garantida de cada entrada passada."
+    },
+    {
+      "title": "A ordem aparece na composição",
+      "view": "state",
+      "explanation": "Aplicar as mesmas funções em outra ordem pode produzir um estado final diferente. O exemplo usa a sequência 1, −1, 0,5 e coeficientes fixos para permitir conferência.",
+      "action": "Alterne Original e Invertida, comparando o primeiro e o último estado.",
+      "board": "f₃(f₂(f₁(h₀))) pode diferir de f₁(f₂(f₃(h₀)))",
+      "question": "Por que somar as entradas não reproduz necessariamente uma RNN?",
+      "answer": "Porque a recorrência intercala transformações dependentes do estado e não linearidades.",
+      "focus": 1,
+      "speech": "Aplicar as mesmas funções em outra ordem pode produzir um estado final diferente. O exemplo usa a sequência 1, −1, 0,5 e coeficientes fixos para permitir conferência. Alterne Original e Invertida, comparando o primeiro e o último estado. Pergunto à turma: “Por que somar as entradas não reproduz necessariamente uma RNN?” Porque a recorrência intercala transformações dependentes do estado e não linearidades."
+    },
+    {
+      "title": "Meça o produto que transporta o gradiente",
+      "view": "gradient",
+      "explanation": "O produto de ganhos isola o efeito multiplicativo de atravessar muitos passos. Não é o gradiente completo de uma RNN, pois fixa o mesmo ganho em todas as transições.",
+      "action": "Compare ganho 0,9 e 1,1 para T=50; leia a escala logarítmica da magnitude.",
+      "board": "G = ganhoᵀ; log₁₀|G| = T log₁₀|ganho|",
+      "question": "Aumentar apenas a dimensão elimina esse expoente?",
+      "answer": "Não; mantendo o regime de ganhos, o efeito exponencial no comprimento continua presente.",
+      "focus": 2,
+      "speech": "O produto de ganhos isola o efeito multiplicativo de atravessar muitos passos. Não é o gradiente completo de uma RNN, pois fixa o mesmo ganho em todas as transições. Compare ganho 0,9 e 1,1 para T=50; leia a escala logarítmica da magnitude. Pergunto à turma: “Aumentar apenas a dimensão elimina esse expoente?” Não; mantendo o regime de ganhos, o efeito exponencial no comprimento continua presente."
+    },
+    {
+      "title": "Distingua desaparecer de explodir",
+      "view": "regimes",
+      "explanation": "Ganhos menores que um fazem o sinal decair; maiores que um fazem crescer neste modelo escalar. A proximidade de um muda fortemente o alcance útil.",
+      "action": "Passe por 0,99, 1 e 1,01 com T alto; compare as ordens de grandeza.",
+      "board": "ganho < 1: decai; = 1: preserva; > 1: cresce",
+      "question": "Perda descendo garante que dependências longas estão sendo aprendidas?",
+      "answer": "Não; o modelo pode melhorar relações locais enquanto o sinal relevante para posições distantes continua fraco.",
+      "focus": 2,
+      "speech": "Ganhos menores que um fazem o sinal decair; maiores que um fazem crescer neste modelo escalar. A proximidade de um muda fortemente o alcance útil. Passe por 0,99, 1 e 1,01 com T alto; compare as ordens de grandeza. Pergunto à turma: “Perda descendo garante que dependências longas estão sendo aprendidas?” Não; o modelo pode melhorar relações locais enquanto o sinal relevante para posições distantes continua fraco."
+    },
+    {
+      "title": "Conte a dependência sequencial",
+      "view": "parallel",
+      "explanation": "Para calcular hₜ é necessário terminar hₜ₋₁. Operações dentro de um passo podem ser paralelas, mas a cadeia temporal impõe T dependências.",
+      "action": "Dobre T e compare a profundidade sequencial com a leitura em paralelo usada como referência conceitual.",
+      "board": "h₁ → h₂ → ... → h_T",
+      "question": "A limitação desaparece no treino porque a frase inteira é conhecida?",
+      "answer": "Não na recorrência: conhecer as entradas não torna os estados anteriores disponíveis antes de calculá-los.",
+      "focus": 2,
+      "speech": "Para calcular hₜ é necessário terminar hₜ₋₁. Operações dentro de um passo podem ser paralelas, mas a cadeia temporal impõe T dependências. Dobre T e compare a profundidade sequencial com a leitura em paralelo usada como referência conceitual. Pergunto à turma: “A limitação desaparece no treino porque a frase inteira é conhecida?” Não na recorrência: conhecer as entradas não torna os estados anteriores disponíveis antes de calculá-los."
+    },
+    {
+      "title": "Abra o caminho aditivo do LSTM",
+      "view": "lstm",
+      "explanation": "A célula combina memória anterior e nova informação por uma soma controlada por gates. O cálculo exibido isola a retenção da memória com entrada nova igual a zero.",
+      "action": "Compare f=0,9 e f=0,99 para o mesmo T; veja a fração de memória preservada.",
+      "board": "cₜ = fₜcₜ₋₁ + iₜgₜ; caminho isolado: c_T = fᵀc₀",
+      "question": "O LSTM elimina automaticamente o desaparecimento?",
+      "answer": "Não; permite aprender gates que preservam informação nos canais necessários, mas sua retenção ainda depende desses valores.",
+      "focus": 3,
+      "speech": "A célula combina memória anterior e nova informação por uma soma controlada por gates. O cálculo exibido isola a retenção da memória com entrada nova igual a zero. Compare f=0,9 e f=0,99 para o mesmo T; veja a fração de memória preservada. Pergunto à turma: “O LSTM elimina automaticamente o desaparecimento?” Não; permite aprender gates que preservam informação nos canais necessários, mas sua retenção ainda depende desses valores."
+    },
+    {
+      "title": "Localize o gargalo do contexto fixo",
+      "view": "bottleneck",
+      "explanation": "No seq2seq básico, o decoder recebe um resumo fixo do encoder. Aumentar o estado amplia capacidade, mas não oferece acesso separado a cada posição de origem.",
+      "action": "Aumente T e compare o caminho da primeira posição até o decoder.",
+      "board": "c = h_T; caminho da posição j ao passo t = (T−j)+t",
+      "question": "Por que capacidade e acesso são problemas diferentes?",
+      "answer": "Um resumo maior pode conter mais informação, mas recuperar uma posição específica continua dependendo de como ela foi comprimida.",
+      "focus": 3,
+      "speech": "No seq2seq básico, o decoder recebe um resumo fixo do encoder. Aumentar o estado amplia capacidade, mas não oferece acesso separado a cada posição de origem. Aumente T e compare o caminho da primeira posição até o decoder. Pergunto à turma: “Por que capacidade e acesso são problemas diferentes?” Um resumo maior pode conter mais informação, mas recuperar uma posição específica continua dependendo de como ela foi comprimida."
+    },
+    {
+      "title": "Calcule scores aditivos de alinhamento",
+      "view": "scores",
+      "explanation": "A consulta do decoder é comparada às anotações do encoder por um score aditivo. A miniatura usa tanh(q+kⱼ) com pesos fixos para mostrar a dependência de q e k.",
+      "action": "Mova Estado-consulta e compare os scores das três posições de origem.",
+      "board": "eⱼ = escala × tanh(q + kⱼ)",
+      "question": "Esse score já é uma probabilidade?",
+      "answer": "Não; é um número real que precisa ser normalizado sobre as posições disponíveis.",
+      "focus": 4,
+      "speech": "A consulta do decoder é comparada às anotações do encoder por um score aditivo. A miniatura usa tanh(q+kⱼ) com pesos fixos para mostrar a dependência de q e k. Mova Estado-consulta e compare os scores das três posições de origem. Pergunto à turma: “Esse score já é uma probabilidade?” Não; é um número real que precisa ser normalizado sobre as posições disponíveis."
+    },
+    {
+      "title": "Normalize e leia uma mistura de valores",
+      "view": "attention",
+      "explanation": "Softmax converte os scores em pesos positivos que somam um. O contexto é a média ponderada dos valores, portanto muda quando a consulta ou a escala muda.",
+      "action": "Aumente Escala e compare pesos, soma da linha e contexto resultante.",
+      "board": "αⱼ = softmax(e)ⱼ; c = soma αⱼvⱼ",
+      "question": "O contexto pode sair do intervalo entre valores escalares nesta mistura?",
+      "answer": "Não; com pesos não negativos somando um, ele é uma combinação convexa dos valores.",
+      "focus": 4,
+      "speech": "Softmax converte os scores em pesos positivos que somam um. O contexto é a média ponderada dos valores, portanto muda quando a consulta ou a escala muda. Aumente Escala e compare pesos, soma da linha e contexto resultante. Pergunto à turma: “O contexto pode sair do intervalo entre valores escalares nesta mistura?” Não; com pesos não negativos somando um, ele é uma combinação convexa dos valores."
+    },
+    {
+      "title": "Veja um contexto por passo",
+      "view": "alignment",
+      "explanation": "Linhas diferentes representam consultas diferentes do decoder e colunas representam estados do encoder. A matriz é calculada com regras fixas didáticas, não aprendida de traduções reais.",
+      "action": "Mova Consulta e observe como as três linhas de alinhamento se deslocam.",
+      "board": "Linhas: destino; colunas: origem; soma por linha = 1",
+      "question": "Um peso alto prova a causa linguística de uma decisão?",
+      "answer": "Não; revela uma contribuição no mecanismo, mas uma interpretação causal exige intervenções e evidências adicionais.",
+      "focus": 4,
+      "speech": "Linhas diferentes representam consultas diferentes do decoder e colunas representam estados do encoder. A matriz é calculada com regras fixas didáticas, não aprendida de traduções reais. Mova Consulta e observe como as três linhas de alinhamento se deslocam. Pergunto à turma: “Um peso alto prova a causa linguística de uma decisão?” Não; revela uma contribuição no mecanismo, mas uma interpretação causal exige intervenções e evidências adicionais."
+    },
+    {
+      "title": "Feche as dívidas antes do Transformer",
+      "view": "diagnosis",
+      "explanation": "Atenção remove a obrigação de ler um único resumo ao dar acesso aos estados de origem. Na arquitetura recorrente de Bahdanau, produzir esses estados continua sequencial.",
+      "action": "Compare a tabela de mecanismos e associe cada sintoma à intervenção correspondente.",
+      "board": "LSTM: caminho de memória; atenção: acesso; Transformer: atenção sem recorrência",
+      "question": "Qual ganho pertence ao Transformer e não a qualquer atenção?",
+      "answer": "A possibilidade de processar posições de treino em paralelo sem a cadeia recorrente, respeitando as máscaras necessárias.",
+      "focus": 5,
+      "speech": "Atenção remove a obrigação de ler um único resumo ao dar acesso aos estados de origem. Na arquitetura recorrente de Bahdanau, produzir esses estados continua sequencial. Compare a tabela de mecanismos e associe cada sintoma à intervenção correspondente. Pergunto à turma: “Qual ganho pertence ao Transformer e não a qualquer atenção?” A possibilidade de processar posições de treino em paralelo sem a cadeia recorrente, respeitando as máscaras necessárias."
+    }
+  ]
+}

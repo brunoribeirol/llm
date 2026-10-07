@@ -1,0 +1,210 @@
+{
+  "id": 3,
+  "title": "Embeddings: veja a geometria e o objetivo que a aprende",
+  "subtitle": "Vetores, cosseno, contexto, negativos e limites da representação estática",
+  "nodes": [
+    "Símbolos",
+    "Contextos",
+    "Vetores",
+    "Treino",
+    "Busca",
+    "Limites"
+  ],
+  "controls": [
+    {
+      "key": "angle",
+      "label": "Ângulo da consulta (graus)",
+      "type": "range",
+      "min": 0,
+      "max": 180,
+      "step": 5,
+      "value": 25
+    },
+    {
+      "key": "scale",
+      "label": "Norma da consulta",
+      "type": "range",
+      "min": 0.2,
+      "max": 4,
+      "step": 0.2,
+      "value": 1
+    },
+    {
+      "key": "window",
+      "label": "Raio da janela de contexto",
+      "type": "range",
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "value": 1
+    },
+    {
+      "key": "negatives",
+      "label": "Negativos por par positivo",
+      "type": "range",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "lr",
+      "label": "Taxa de um passo de SGD",
+      "type": "range",
+      "min": 0.01,
+      "max": 1,
+      "step": 0.01,
+      "value": 0.1
+    },
+    {
+      "key": "sense",
+      "label": "Contexto de banco",
+      "type": "select",
+      "value": "money",
+      "options": [
+        {
+          "value": "money",
+          "label": "banco aprova o crédito"
+        },
+        {
+          "value": "park",
+          "label": "banco fica na praça"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "title": "A busca literal encontra apenas a forma",
+      "view": "lexical",
+      "explanation": "Buscar uma palavra exata pode perder documentos que usam sinônimos. A pequena coleção desta aula separa correspondência lexical de proximidade geométrica em vetores desenhados manualmente.",
+      "action": "Mova o Ângulo da consulta e compare o ranking vetorial com a busca literal por carro.",
+      "board": "Consulta carro; documento automóvel; correspondência literal = 0",
+      "question": "Falhar na busca literal significa que o documento é irrelevante?",
+      "answer": "Não; o vocabulário pode diferir mantendo o assunto, motivando uma representação compartilhada.",
+      "focus": 0,
+      "speech": "Buscar uma palavra exata pode perder documentos que usam sinônimos. A pequena coleção desta aula separa correspondência lexical de proximidade geométrica em vetores desenhados manualmente. Mova o Ângulo da consulta e compare o ranking vetorial com a busca literal por carro. Pergunto à turma: “Falhar na busca literal significa que o documento é irrelevante?” Não; o vocabulário pode diferir mantendo o assunto, motivando uma representação compartilhada."
+    },
+    {
+      "title": "One-hot distingue, mas não aproxima",
+      "view": "onehot",
+      "explanation": "Cada palavra ocupa uma coordenada própria no one-hot. Palavras diferentes têm produto interno zero e distância igual, independentemente de semelhança de significado.",
+      "action": "Compare carro e automóvel na matriz identidade antes de olhar os vetores densos.",
+      "board": "eᵢ · eⱼ = 0 para i ≠ j",
+      "question": "Qual informação semântica o ID ou one-hot oferece sozinho?",
+      "answer": "Nenhuma relação de proximidade; a geometria útil precisa vir de uma representação aprendida ou construída.",
+      "focus": 0,
+      "speech": "Cada palavra ocupa uma coordenada própria no one-hot. Palavras diferentes têm produto interno zero e distância igual, independentemente de semelhança de significado. Compare carro e automóvel na matriz identidade antes de olhar os vetores densos. Pergunto à turma: “Qual informação semântica o ID ou one-hot oferece sozinho?” Nenhuma relação de proximidade; a geometria útil precisa vir de uma representação aprendida ou construída."
+    },
+    {
+      "title": "Conte quem aparece perto de quem",
+      "view": "contexts",
+      "explanation": "A hipótese distribucional usa contextos de ocorrência como sinal para aprender representações. A janela escolhida define quais pares positivos são extraídos da frase de treino.",
+      "action": "Aumente Raio da janela de 1 para 3 e conte os pares que passam a ligar palavras distantes.",
+      "board": "Centro + raio de contexto → pares positivos",
+      "question": "Uma janela maior produz apenas mais exemplos da mesma relação?",
+      "answer": "Não; além de quantidade, ela muda as relações capturadas, incluindo associações mais distantes.",
+      "focus": 1,
+      "speech": "A hipótese distribucional usa contextos de ocorrência como sinal para aprender representações. A janela escolhida define quais pares positivos são extraídos da frase de treino. Aumente Raio da janela de 1 para 3 e conte os pares que passam a ligar palavras distantes. Pergunto à turma: “Uma janela maior produz apenas mais exemplos da mesma relação?” Não; além de quantidade, ela muda as relações capturadas, incluindo associações mais distantes."
+    },
+    {
+      "title": "Desenhe um espaço denso",
+      "view": "vectors",
+      "explanation": "Vetores densos usam poucas coordenadas compartilhadas. Neste plano de duas dimensões, os pontos foram escolhidos à mão para tornar a conta visível; não são embeddings de um modelo real.",
+      "action": "Altere o Ângulo da consulta e observe sua direção em relação a carro, automóvel, gato e banco.",
+      "board": "v ∈ Rᵈ; coordenadas compartilhadas",
+      "question": "Cada eixo precisa representar um conceito nomeável?",
+      "answer": "Não; em embeddings aprendidos, o significado é distribuído e a base pode ser rotacionada sem mudar as relações relevantes.",
+      "focus": 2,
+      "speech": "Vetores densos usam poucas coordenadas compartilhadas. Neste plano de duas dimensões, os pontos foram escolhidos à mão para tornar a conta visível; não são embeddings de um modelo real. Altere o Ângulo da consulta e observe sua direção em relação a carro, automóvel, gato e banco. Pergunto à turma: “Cada eixo precisa representar um conceito nomeável?” Não; em embeddings aprendidos, o significado é distribuído e a base pode ser rotacionada sem mudar as relações relevantes."
+    },
+    {
+      "title": "Calcule cosseno e produto interno",
+      "view": "cosine",
+      "explanation": "Cosseno divide o produto interno pelas normas e mede direção. Produto interno inclui também a magnitude dos vetores.",
+      "action": "Mantenha o ângulo e dobre a Norma da consulta; confira qual medida permanece estável.",
+      "board": "cos(q,v) = q·v/(||q|| ||v||)",
+      "question": "Aumentar a norma torna o cosseno maior?",
+      "answer": "Não quando a direção é mantida; o produto interno cresce, mas a normalização cancela essa escala.",
+      "focus": 2,
+      "speech": "Cosseno divide o produto interno pelas normas e mede direção. Produto interno inclui também a magnitude dos vetores. Mantenha o ângulo e dobre a Norma da consulta; confira qual medida permanece estável. Pergunto à turma: “Aumentar a norma torna o cosseno maior?” Não quando a direção é mantida; o produto interno cresce, mas a normalização cancela essa escala."
+    },
+    {
+      "title": "Ordene vizinhos e escolha uma régua",
+      "view": "ranking",
+      "explanation": "A busca vetorial calcula uma pontuação para cada documento e ordena os candidatos. O ranking exibido resulta dos vetores didáticos, não de avaliação de relevância em produção.",
+      "action": "Gire a consulta até trocar o primeiro colocado e compare a diferença entre os dois melhores.",
+      "board": "top-k = índices das maiores similaridades",
+      "question": "O maior cosseno prova que o documento responde à pergunta?",
+      "answer": "Não; similaridade oferece candidatos, e a resposta requer conferir conteúdo e critérios de relevância.",
+      "focus": 4,
+      "speech": "A busca vetorial calcula uma pontuação para cada documento e ordena os candidatos. O ranking exibido resulta dos vetores didáticos, não de avaliação de relevância em produção. Gire a consulta até trocar o primeiro colocado e compare a diferença entre os dois melhores. Pergunto à turma: “O maior cosseno prova que o documento responde à pergunta?” Não; similaridade oferece candidatos, e a resposta requer conferir conteúdo e critérios de relevância."
+    },
+    {
+      "title": "CBOW e skip-gram invertem a tarefa",
+      "view": "proxy",
+      "explanation": "CBOW usa o contexto para prever o centro; skip-gram usa o centro para prever palavras vizinhas. Em ambos, aprender vetores é uma consequência da tarefa de previsão.",
+      "action": "Mude a janela e conte quantas previsões skip-gram e quantos contextos CBOW resultam.",
+      "board": "CBOW: contexto → centro; skip-gram: centro → contexto",
+      "question": "O objetivo de treino diz diretamente quais documentos buscar?",
+      "answer": "Não; é uma tarefa-proxy, cuja representação precisa ser avaliada na aplicação desejada.",
+      "focus": 3,
+      "speech": "CBOW usa o contexto para prever o centro; skip-gram usa o centro para prever palavras vizinhas. Em ambos, aprender vetores é uma consequência da tarefa de previsão. Mude a janela e conte quantas previsões skip-gram e quantos contextos CBOW resultam. Pergunto à turma: “O objetivo de treino diz diretamente quais documentos buscar?” Não; é uma tarefa-proxy, cuja representação precisa ser avaliada na aplicação desejada."
+    },
+    {
+      "title": "O custo do vocabulário inteiro",
+      "view": "softmax",
+      "explanation": "Um softmax completo normaliza sobre todo o vocabulário. A miniatura mostra como as probabilidades dependem simultaneamente dos scores dos candidatos.",
+      "action": "Mova a consulta para aumentar o score de carro e observe as probabilidades dos demais.",
+      "board": "p(j|c) = exp(uⱼ·v꜀)/soma exp(uₖ·v꜀)",
+      "question": "Aumentar um score pode reduzir a probabilidade de outro sem mudar seu vetor?",
+      "answer": "Sim; o denominador é compartilhado, e todas as classes competem pela massa de probabilidade.",
+      "focus": 3,
+      "speech": "Um softmax completo normaliza sobre todo o vocabulário. A miniatura mostra como as probabilidades dependem simultaneamente dos scores dos candidatos. Mova a consulta para aumentar o score de carro e observe as probabilidades dos demais. Pergunto à turma: “Aumentar um score pode reduzir a probabilidade de outro sem mudar seu vetor?” Sim; o denominador é compartilhado, e todas as classes competem pela massa de probabilidade."
+    },
+    {
+      "title": "Amostragem negativa cria comparações locais",
+      "view": "negative",
+      "explanation": "O exemplo positivo recebe alvo 1 e os negativos recebem alvo 0 em perdas logísticas. Isso aproxima o centro do contexto observado e afasta exemplos amostrados segundo essa tarefa.",
+      "action": "Varie Negativos por par e compare termos da perda e esforço de cálculo.",
+      "board": "L = −log σ(v·u⁺) − soma log σ(−v·u⁻)",
+      "question": "Os negativos são afirmações de que duas palavras nunca se relacionam?",
+      "answer": "Não; são contrastes amostrados para o objetivo de treino, sujeitos a ruído e à distribuição escolhida.",
+      "focus": 3,
+      "speech": "O exemplo positivo recebe alvo 1 e os negativos recebem alvo 0 em perdas logísticas. Isso aproxima o centro do contexto observado e afasta exemplos amostrados segundo essa tarefa. Varie Negativos por par e compare termos da perda e esforço de cálculo. Pergunto à turma: “Os negativos são afirmações de que duas palavras nunca se relacionam?” Não; são contrastes amostrados para o objetivo de treino, sujeitos a ruído e à distribuição escolhida."
+    },
+    {
+      "title": "Faça um passo de atualização real",
+      "view": "update",
+      "explanation": "A simulação calcula o gradiente da perda logística e atualiza somente o vetor central. Os vetores de contexto ficam fixos para isolar o mecanismo de um passo.",
+      "action": "Altere a taxa de SGD e compare vetor antes/depois e perda recalculada.",
+      "board": "v novo = v antigo − η∇ᵥL",
+      "question": "Uma taxa maior sempre melhora a perda?",
+      "answer": "Não; um passo excessivo pode ultrapassar uma região útil, então é necessário conferir a perda após atualizar.",
+      "focus": 3,
+      "speech": "A simulação calcula o gradiente da perda logística e atualiza somente o vetor central. Os vetores de contexto ficam fixos para isolar o mecanismo de um passo. Altere a taxa de SGD e compare vetor antes/depois e perda recalculada. Pergunto à turma: “Uma taxa maior sempre melhora a perda?” Não; um passo excessivo pode ultrapassar uma região útil, então é necessário conferir a perda após atualizar."
+    },
+    {
+      "title": "Analogia é uma hipótese geométrica",
+      "view": "analogy",
+      "explanation": "Somar e subtrair vetores propõe uma direção relacional no espaço. Os vetores de rei, rainha, homem e mulher desta miniatura foram construídos para exibir a operação, sem provar raciocínio linguístico.",
+      "action": "Compare o vetor calculado com a resposta esperada e observe a origem manual dos pontos.",
+      "board": "rei − homem + mulher ≈ rainha",
+      "question": "Acertar uma analogia demonstra compreensão geral?",
+      "answer": "Não; é um resultado localizado e precisa ser testado em exemplos e relações que não foram escolhidos para funcionar.",
+      "focus": 4,
+      "speech": "Somar e subtrair vetores propõe uma direção relacional no espaço. Os vetores de rei, rainha, homem e mulher desta miniatura foram construídos para exibir a operação, sem provar raciocínio linguístico. Compare o vetor calculado com a resposta esperada e observe a origem manual dos pontos. Pergunto à turma: “Acertar uma analogia demonstra compreensão geral?” Não; é um resultado localizado e precisa ser testado em exemplos e relações que não foram escolhidos para funcionar."
+    },
+    {
+      "title": "Um vetor estático mistura sentidos",
+      "view": "polysemy",
+      "explanation": "No embedding estático, banco tem o mesmo vetor na frase financeira e na frase sobre a praça. Uma representação contextual pode depender da frase, mas a mudança exibida aqui é apenas uma ilustração manual.",
+      "action": "Troque Contexto de banco e compare o ponto estático com a representação contextual ilustrativa.",
+      "board": "v estático(banco) = constante; h(banco, contexto) pode variar",
+      "question": "Atenção é o único mecanismo capaz de contextualizar?",
+      "answer": "Não; redes recorrentes também produzem representações dependentes do contexto, como veremos na próxima sequência de aulas.",
+      "focus": 5,
+      "speech": "No embedding estático, banco tem o mesmo vetor na frase financeira e na frase sobre a praça. Uma representação contextual pode depender da frase, mas a mudança exibida aqui é apenas uma ilustração manual. Troque Contexto de banco e compare o ponto estático com a representação contextual ilustrativa. Pergunto à turma: “Atenção é o único mecanismo capaz de contextualizar?” Não; redes recorrentes também produzem representações dependentes do contexto, como veremos na próxima sequência de aulas."
+    }
+  ]
+}

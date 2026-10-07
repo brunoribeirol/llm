@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Recapitulação e fronteiras da área · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="29">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 29 / 7 — Fronteiras e Encerramento</p><h1>Recapitulação e fronteiras da área</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 29" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Reconstruir</strong> o stack de um LLM em sete camadas e <strong>localizar</strong> em qual aula e em qual lab cada camada foi construída, apontando o artefato produzido.</p></li><li><p><strong>Enunciar</strong> a dívida de avaliação anunciada na Aula 1 — o modelo foi unificado sob o próximo-token, as métricas não foram — e <strong>demonstrar</strong> com que instrumentos das Aulas 27 e 28 ela foi paga.</p></li><li><p><strong>Explicar</strong> por que um patch de imagem 16×16 é tratável como token e <strong>generalizar</strong> a abstração "sequência de vetores discretizados" para além do texto.</p></li><li><p><strong>Distinguir</strong> geração autorregressiva de geração por difusão mascarada (LLaDA) e <strong>identificar</strong> três decisões do curso — KV cache, decodificação, prompting — que deixam de valer quando o modelo não gera da esquerda para a direita.</p></li><li><p><strong>Calcular</strong> a razão entre tokens de texto e tokens visuais de uma mesma página e <strong>argumentar</strong> por onde entra a compressão em DeepSeek-OCR — pelo encoder que reduz, não pela fatia em patches.</p></li><li><p><strong>Descrever</strong> o mecanismo do colapso de modelo (perda das caudas da distribuição por realimentação recursiva) e <strong>propor</strong> duas práticas de curadoria que o mitigam.</p></li><li><p><strong>Justificar</strong> a eficiência como métrica de primeira classe, usando o argumento de que a atenção na decodificação é limitada por banda de memória e não por FLOPs.</p></li><li><p><strong>Diferenciar</strong> os caminhos de pesquisa e de engenharia de IA em termos de artefato produzido e de critério de sucesso.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · Abertura: a última aula de slide deste curso · 00:00–00:10</summary><div class="prose"><p><strong>[Projeto a grade da Aula 30 antes de qualquer outra coisa]</strong></p>
+<p>Antes de começar a aula, a logística da semana que vem, porque senão vocês vão me perguntar isso nos próximos quarenta minutos e a aula morre.</p>
+<p>Aula 30: slots de quinze minutos por equipe. Doze minutos de apresentação mais perguntas. Sete a oito equipes, ordem sorteada e publicada até a data que está no slide. Demo ao vivo é <strong>obrigatória</strong>, com o sistema real ligado, acompanhada dos números do Lab 8.</p>
+<p><strong>[Aponto os quatro artefatos à esquerda]</strong></p>
+<p>E vocês já têm tudo isso em mãos, desde a semana passada: o conjunto rotulado, a tabela por camada com o <code>n</code> declarado, o kappa do juiz e a fila de consertos priorizada.</p>
+<p>Agora a aula. Ela tem duas metades que fazem coisas opostas.</p>
+<blockquote>
+<p>Ideia central: "Na primeira metade eu mostro o que vocês construíram. Na segunda, o que a área está fazendo para derrubar parte disso."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 2 · O mapa do percurso: onde cada peça foi construída, e onde está o fundamento dela · 00:10–00:18</summary><div class="prose"><p><strong>[Subo a pilha do rodapé para o topo, camada por camada]</strong></p>
+<p>Token, Aula 2, e vocês treinaram BPE à mão no Lab 1. Representação vetorial, Aula 3, mesmo lab — e foi ali que vocês viram cosseno funcionar em paráfrase e falhar em identificador. Atenção e o bloco, Aulas 5 a 8, e no Lab 2 vocês escreveram <code>softmax(QKᵀ/√d_k)V</code> com as próprias mãos. Escala e decodificação, Aula 10, Lab 3. Pré-treino, Aula 12. SFT e PEFT, Aula 13, Lab 4. Preferências e raciocínio, 15 e 16. RAG, 18 e 19, Lab 5. Ferramentas e agentes, 21 a 26, Labs 6 e 7. Avaliação, 27, e o Lab 8 foi o harness do sistema de vocês.</p>
+<p>Isso é o <code>git log</code> da disciplina. Cada aula é um commit, e vocês conseguem apontar o diff.</p>
+<p><strong>[Acendo a segunda coluna e fico em silêncio por uns vinte segundos]</strong></p>
+<p>Agora olhem a coluna da direita. É a primeira vez no curso que ela aparece inteira.</p>
+<p>Cada camada tem um segundo endereço: onde está o <strong>fundamento formal</strong> dela. A derivação da atenção em quatro etapas, com a variância do produto escalar e a equivariância por permutação. O fator seis do <code>C ≈ 6ND</code>. O <code>ΔW = BA</code> com a contagem de parâmetros. Bradley-Terry. O estimador não-viesado de <code>pass@k</code>. BM25 e as quatro métricas. O kappa de Cohen e o intervalo de Wilson.</p>
+<p>Ao longo do semestre esses apêndices chegaram um por aula, e é fácil ler cada um como um anexo solto. Vistos juntos, eles são outra coisa: são o índice do formalismo deste curso. É o material que não expira quando a fronteira mudar, e é dele que saem os quarenta pontos de justificativa da prova.</p>
+<blockquote>
+<p>Ideia central: "A coluna da esquerda é o que vocês construíram. A da direita é por que aquilo funciona — e ela continua consultável depois que o semestre acabar."</p>
+</blockquote>
+<p><strong>[Projeto a tabela de três colunas do exercício e formo as duplas]</strong></p>
+<p>E agora vocês fazem o mesmo com o sistema de vocês. Seis minutos, a condução está na Parte 3.</p>
+<blockquote>
+<p>Ideia central: "Toda equipe tem uma camada que não foi construída em nenhum lab. Essa é a camada que eu vou perguntar na semana que vem."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 3 · A tese do próximo-token, agora verificável · 00:26–00:33</summary><div class="prose"><p>Na Aula 1 eu afirmei uma coisa a crédito: as tarefas clássicas de NLP foram unificadas sob "prever o próximo token". Vocês não tinham como verificar. Agora têm, em três níveis.</p>
+<p>Mecanismo: o decoder com máscara causal produz, por construção, uma distribuição sobre o próximo token. A tarefa não foi escolhida — ela é a arquitetura. Isso é a Aula 6.</p>
+<p>Interface: classificação, rotulagem e geração passam a ser instâncias do mesmo objeto, porque a saída é texto e a especificação da tarefa entra no prompt. Aula 10 e Lab 3.</p>
+<p>Utilidade: o que transformou o completador em assistente foi SFT e alinhamento. Não arquitetura. Aulas 13 e 15.</p>
+<blockquote>
+<p>Ideia central: "A unificação moveu a dificuldade. Ela não a eliminou — e o próximo slide cobra a conta."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 4 · A dívida da Aula 1, e a fatura paga · 00:33–00:45</summary><div class="prose"><p>A Aula 1 fechou com uma promessa incômoda, e eu vou repetir ela na mesma palavras: <strong>unificamos o modelo, não unificamos as métricas.</strong></p>
+<p>BLEU e ROUGE pressupõem referência aproximadamente única. Perplexidade só compara entre tokenizadores iguais. Acurácia mente em dados desbalanceados. Quando a interface virou geração aberta, a área herdou um instrumento que não mede o que passou a existir.</p>
+<p><strong>[Aponto a coluna do pagamento]</strong></p>
+<p>Essa dívida foi paga em dois movimentos.</p>
+<p>Aula 27, conceitual: a pergunta "esse modelo é bom?" foi substituída por "qual a menor camada que explica esta falha, e com que número eu a meço?". Rubrica com níveis observáveis. Kappa no lugar do acordo bruto. Os três vieses do juiz nomeados, com o protocolo de cada um. Factualidade por afirmações atômicas. E o limite do leaderboard.</p>
+<p>Aula 28, operacional: cada equipe construiu o harness do próprio sistema. Métrica por camada, <code>n</code> declarado, juiz calibrado contra anotação humana, falhas priorizadas por impacto sobre custo.</p>
+<blockquote>
+<p>Ideia central: "A Aula 1 prometeu que o custo da unificação tinha sido transferido para a avaliação. As Aulas 27 e 28 são a fatura paga — e o comprovante é a tabela que cada equipe leva para a semana que vem."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 5 · O que este curso deliberadamente não cobriu · 00:45–00:55</summary><div class="prose"><p>Última coisa do Bloco 1, e é a mais desconfortável. Honestidade de escopo.</p>
+<p>Pré-treino de verdade em escala: o Lab 2 é um mini-GPT em corpus de brinquedo. RLHF completo com modelo de recompensa treinado: as Aulas 15 e 16 param na formulação e no DPO. Serving em produção com batching contínuo e autoescala: não fizemos. Multimodalidade de fato: é fronteira desta aula, não conteúdo praticado. Segurança adversarial ofensiva além do que a Aula 26 introduziu. E avaliação com significância estatística — o curso exigiu <code>n</code> declarado, e o intervalo de confiança ficou no apêndice do Lab 8, não na prática de vocês.</p>
+<blockquote>
+<p>Ideia central: "Confundir 'vimos' com 'sei fazer em produção' é a distância exata desta lista."</p>
+</blockquote>
+<hr />
+<p><em>Intervalo · 00:55–01:05</em></p>
+<hr /></div></details><details><summary>Slide 6 · O token não é sobre texto: ViT e o patch de 16×16 · 01:05–01:11</summary><div class="prose"><p>Segunda metade. A partir daqui, cada slide traz num canto <strong>o pressuposto do curso que aquela fronteira ameaça</strong> — e essa é a regra de admissão do bloco. Fronteira que não desestabiliza nada do que vocês aprenderam é notícia, não fronteira.</p>
+<p>Primeira: o Vision Transformer faz uma coisa só. Corta a imagem em patches de dezesseis por dezesseis pixels, projeta cada patch linearmente num vetor de dimensão <code>d</code>, soma um embedding de posição, e joga a sequência num Transformer encoder comum.</p>
+<p><strong>[Aponto a pilha com os dois drivers de entrada embaixo]</strong></p>
+<p>Nada na arquitetura sabe que é imagem. E o que isso revela é maior que multimodalidade: o objeto central deste curso nunca foi <em>texto</em>. Foi <strong>sequência de vetores com posição</strong>. O tokenizer da Aula 2 é um caso de discretização; o patch é outro; frames de espectrograma são outro.</p>
+<blockquote>
+<p>Ideia central: "O Transformer é um processador de sequências que não pergunta de onde a sequência veio."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 7 · [Demo] A conta: 375 tokens de texto contra 3.430 patches · 01:11–01:21</summary><div class="prose"><p><strong>[Passo para a Parte 2]</strong></p>
+<p>O que muda quando a entrada é imagem é o <strong>custo</strong> dela, e agora eu vou medir. Os passos estão na Parte 2 deste roteiro.</p>
+<blockquote>
+<p>Ideia central: "A compressão é do codec, não do corte. Ninguém comprime vídeo cortando quadros em quadradinhos."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 8 · Comprimir contexto em pixels: DeepSeek-OCR · 01:21–01:27</summary><div class="prose"><p>O DeepSeek-OCR inverte o uso habitual da visão. Em vez de descrever imagens, usa a imagem como <strong>formato de compressão de texto longo</strong>: renderiza o documento como página, um encoder visual produz poucos tokens visuais, e o decoder reconstrói o texto.</p>
+<p>O artigo reporta reconstrução em torno de noventa e sete por cento de precisão de decodificação na faixa de dez tokens de texto por token visual, e isso degrada para a faixa de sessenta por cento perto de vinte vezes.</p>
+<p><strong>[Aponto os dois patamares na curva]</strong></p>
+<p>E aqui está o que eu quero que vocês levem: o número relevante nunca é a compressão sozinha. É o <strong>par</strong>.</p>
+<blockquote>
+<p>Ideia central: "Fidelidade de reconstrução é recall de conteúdo com outro nome — e o instrumento que mede é o do Lab 8."</p>
+</blockquote>
+<p>Isto é uma alternativa de engenharia ao RAG das Aulas 18 a 20, para documentos longos e estáveis. E ela tem exatamente o mesmo tipo de trade-off que vocês já sabem medir.</p>
+<hr /></div></details><details><summary>Slide 9 · Difusão para linguagem: o pressuposto que atravessou 28 aulas · 01:27–01:35</summary><div class="prose"><p>Este é o slide que eu mais gosto de dar em todo o curso.</p>
+<p>Vinte e oito aulas pressupuseram uma coisa que ninguém nomeou: geração <strong>da esquerda para a direita</strong>. A máscara causal da Aula 6. O KV cache da Aula 8. A amostragem token a token do Lab 3. Até a forma como o prompt é montado.</p>
+<p>O LLaDA treina um modelo de difusão mascarada. O processo direto mascara tokens progressivamente, e o modelo aprende a <strong>prever os mascarados</strong>. A geração é iterativa: desmascara posições em qualquer ordem, refinando a sequência inteira a cada passo. Não há máscara causal, e não há "próximo" token.</p>
+<p><strong>[Aponto as duas linhas do tempo de geração]</strong></p>
+<p>O que isso ataca, item por item. O KV cache perde o sentido, porque não existe prefixo fixo cujo estado se reaproveita. A decodificação deixa de ser escolha de amostragem por posição e passa a ser política de quantas e quais posições desmascarar por passo. A latência deixa de ser linear no número de tokens e passa a ser função do número de passos de refinamento — o que abre um paralelismo que o autorregressivo não tem. E a maldição da reversão, aquele modelo que sabe "A é B" e falha em "B é A", é atacada na raiz, porque o treino não privilegia direção nenhuma.</p>
+<blockquote>
+<p>Ideia central: "Um pressuposto que atravessa 28 aulas sem ser nomeado é um pressuposto, não uma lei."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 10 · Dados sintéticos e colapso de modelo · 01:35–01:41</summary><div class="prose"><p>Dado sintético é insumo padrão hoje. Instruções geradas para SFT, pares de preferência gerados, casos de teste gerados. Vocês mesmos usaram no Lab 8.</p>
+<p>O custo aparece quando isso é <strong>recursivo</strong>: treinar a geração <code>n+1</code> predominantemente na saída da geração <code>n</code> corrói a distribuição. Três fontes de erro somadas — amostragem finita, que perde os eventos raros; expressividade, que não representa a cauda; e otimização. E o efeito é cumulativo.</p>
+<p><strong>[Aponto as quatro distribuições em sequência]</strong></p>
+<p>Primeiro desaparecem as <strong>caudas</strong>: a variância encolhe, o raro vira improvável, e o centro continua parecido — que é justamente o que torna o problema difícil de detectar. Depois a distribuição converge para algo estreito e distante da original.</p>
+<p>É fotocópia de fotocópia. Cada geração é legível; a décima não tem mais as letras finas.</p>
+<blockquote>
+<p>Ideia central: "O resultado não é 'sintético é ruim'. É sobre realimentação recursiva sem âncora humana."</p>
+</blockquote>
+<p>E respondendo a pergunta concreta que sempre vem: caso de teste gerado por LLM e <strong>revisado por vocês</strong> é legítimo. O rótulo é humano, e isso é exatamente o que o Lab 8 exigiu. Sintético verificado por oráculo — código que passa em teste, matemática conferida — não é a mesma operação que sintético plausível.</p>
+<hr /></div></details><details><summary>Slide 11 · A fronteira do custo: pequeno, roteado, medido · 01:41–01:45</summary><div class="prose"><p>A pressão da área deslocou-se de "o maior possível" para "o suficiente pelo menor custo". Três movimentos.</p>
+<p>Modelos pequenos: um modelo de um a oito bilhões com bom SFT resolve a maior parte das tarefas de um produto. Foi o que vocês usaram nos labs, por escolha didática — que também é a escolha de engenharia. Roteamento: um classificador barato decide, por requisição, se ela vai para o modelo local, para a API ou para uma cascata com verificação, e a métrica é acerto por real gasto. Esparsidade: MoE ativa uma fração dos parâmetros por token.</p>
+<p><strong>[Aponto as duas colunas novas na tabela do Lab 8]</strong></p>
+<p>E a consequência metodológica, que é o que importa aqui: eficiência entra na tabela do Lab 8 como qualquer outra métrica. Custo por caso, latência p95, tokens por resposta, ao lado do <code>recall@k</code> e da nota do juiz.</p>
+<blockquote>
+<p>Ideia central: "Sistema que acerta mais e custa dez vezes mais é decisão de produto. Sem as duas colunas na tabela, ela não é tomada — é sofrida."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 12 · Hardware: a atenção é limitada por memória · 01:45–01:50</summary><div class="prose"><p>Última fronteira, e ela explica três coisas que vocês já usaram sem que eu tivesse derivado.</p>
+<p>Na decodificação, cada token novo precisa ler o KV cache <strong>inteiro</strong> para produzir uma posição. A razão entre operações aritméticas e bytes lidos é baixíssima — da ordem de uma operação por byte. E um acelerador moderno consegue fazer centenas de operações por byte de banda.</p>
+<p><strong>[Aponto as duas barras e a distância entre elas]</strong></p>
+<p>O acelerador passa quase todo o tempo esperando memória. Daí três coisas. FlashAttention ganha por reduzir tráfego entre HBM e SRAM, não por reduzir contas. GQA e MQA ganham por encolher o objeto que é lido. E batching ganha por amortizar a leitura dos pesos entre requisições — é o único dos três que muda a razão de fato.</p>
+<p>O pano de fundo é o <em>memory wall</em>: capacidade de cálculo e banda de memória cresceram em ritmos muito diferentes na última década, e a segunda virou o gargalo.</p>
+<blockquote>
+<p>Ideia central: "Para inferência autorregressiva, banda de memória prediz desempenho melhor do que TFLOPs de pico."</p>
+</blockquote>
+<p>E amarrando com o slide 9: difusão mascarada processa todas as posições por passo, então tem um perfil de acesso a memória diferente. É por isso que ela é interessante do ponto de vista de sistemas, não só de modelagem.</p>
+<hr /></div></details><details><summary>Slide 13 · Pesquisa, engenharia de IA, e o meio · 01:50–01:54</summary><div class="prose"><p>Três caminhos, distinguidos por <strong>artefato</strong> e <strong>critério de sucesso</strong> — não por prestígio.</p>
+<p>Pesquisa produz conhecimento novo verificável. O artefato é o paper com código, o critério é revisão por pares e reprodutibilidade. Preparação: reimplementar do zero, ler com caneta, iniciação científica, procurar orientador cujo trabalho você consegue explicar.</p>
+<p>Engenharia de IA produz sistemas que funcionam em produção. O artefato é o serviço com SLO, o critério é usuário atendido a custo sustentável. É exatamente o que esta disciplina treinou.</p>
+<p>Research engineering é o meio: infraestrutura de treino, avaliação em escala, otimização de kernels. Costuma ser o de maior alavancagem para quem gosta de sistemas e de pesquisa em doses iguais.</p>
+<blockquote>
+<p>Ideia central: "O diferencial no mercado não é saber chamar API. É saber provar com número que o sistema funciona — que é a única coisa que o Lab 8 fez."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 14 · O que estudar em seguida, na ordem · 01:54–01:57</summary><div class="prose"><p>Fundamentos primeiro. Jurafsky e Martin, capítulos de Transformers e LLMs, e o Raschka, para o lado do modelo. Huyen para o lado do sistema. Depois <strong>um</strong> paper por semana, lido a fundo, com reimplementação de um componente.</p>
+<p><strong>[Aponto o degrau zero da trilha]</strong></p>
+<p>E o degrau zero vocês já têm: os apêndices dos trinta decks. Fundamento de atenção e de otimização não tem meia-vida curta — agentes e fronteiras revisam-se a cada oferta, aquilo não.</p>
+<blockquote>
+<p>Ideia central: "O exercício que mais separa 'acompanhei o curso' de 'sei construir' é reimplementar um componente do Lab 2 sem olhar o notebook."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 15 · O arco fechado, e a ponte para a Aula 30 · 01:57–02:00</summary><div class="prose"><p><strong>[Volto à pilha do slide 2, com a coluna de fundamento acesa]</strong></p>
+<p>Na Aula 1 eu disse que a gente ia unificar o modelo e que a conta viria na avaliação. A conta veio, e vocês pagaram: cada equipe tem um harness com número por camada.</p>
+<p>E a coluna da direita é a outra metade do que vocês levam. Os apêndices dos trinta decks são o índice do formalismo deste curso — é ele que sustenta os quarenta pontos de justificativa da prova, e é ele que sustenta a defesa oral da semana que vem.</p>
+<p><strong>[Projeto a grade da Aula 30 e o checklist]</strong></p>
+<p>Semana que vem: sistema ligado, tabela do Lab 8 na mão, slide de arquitetura com o inventário que vocês fizeram hoje.</p>
+<blockquote>
+<p>Ideia central: "Na semana que vem quem fala são vocês — e a pergunta que eu faço sai da camada que a equipe não conseguiu endereçar a nenhuma aula."</p>
+</blockquote>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p>Oito minutos, <code>codigo/demo-patches-como-tokens.py</code>, no terminal, cem por cento offline e determinística. O script não baixa nada e não precisa de rede.</p>
+<p>Ele tem duas rotas para contar tokens de texto: se <code>transformers</code> estiver instalado, usa um tokenizer real e imprime o nome dele; se não, usa um contador determinístico por regex documentado no arquivo. Nos dois casos ele <strong>declara na saída qual rota usou</strong> — a mesma exigência de procedência do Lab 8.</p>
+<p><strong>1.</strong> <strong>[Rodo o script e paro no primeiro bloco]</strong> Esta é a página de texto embutida no script, um trecho de regulamento com mil quatrocentos e sessenta e seis caracteres. E aqui está a contagem: trezentos e setenta e cinco tokens pela rota offline — e olhem que ele imprimiu qual rota usou.</p>
+<p><strong>2.</strong> <strong>[Mostro o bloco da geometria]</strong> Agora a mesma página renderizada como imagem. A4 a noventa e seis DPI dá setecentos e noventa e três por mil cento e vinte e dois pixels. Com patch de dezesseis por dezesseis: quarenta e nove por setenta, <strong>três mil quatrocentos e trinta patches</strong>. <strong>[deixo o silêncio]</strong> A versão em imagem tem nove vezes <strong>mais</strong> unidades de sequência que a versão em texto.</p>
+<p><strong>3.</strong> <strong>[Vario o DPI e o tamanho do patch]</strong> E olhem uma propriedade que texto não tem: o número de patches é função da resolução e do patch, <strong>não do conteúdo</strong>. A página em branco e a página cheia têm exatamente o mesmo custo em patches. Isso já deveria acender uma luz sobre o que a imagem está comprimindo.</p>
+<p><strong>4.</strong> <strong>[Introduzo o fator de redução do encoder]</strong> Agora o passo que desfaz a confusão. Com um encoder que comprime a grade em dezesseis vezes, três mil quatrocentos e trinta viram duzentos e catorze tokens visuais. A razão texto sobre visual sai de zero vírgula onze para um vírgula setenta e cinco, e a compressão finalmente aparece. A compressão é do <strong>codec</strong>, não do corte.</p>
+<p><strong>5.</strong> <strong>[Mostro a tabela final de compressão × fidelidade]</strong> E o fecho: os patamares que o artigo reporta. Na faixa de dez vezes, precisão de decodificação em torno de noventa e sete por cento; perto de vinte vezes, na faixa de sessenta. O número relevante é o par, nunca a compressão sozinha.</p>
+<p><strong>6.</strong> <strong>[Fecho ligando ao Lab 8]</strong> E fidelidade de reconstrução é <code>recall</code> de conteúdo com outro nome. O instrumento que mede isso é o que vocês construíram na semana passada.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>Seis minutos de dupla mais dois de correção, dentro do slide 2. É o único hands-on da aula: a prática desta unidade aconteceu no Lab 8, e o resto do tempo é expositivo por decisão de desenho.</p>
+<p><strong>1.</strong> <strong>[Projeto a tabela de três colunas e formo as duplas, de preferência da mesma equipe de projeto]</strong> Seis minutos. Vocês vão escrever o sistema do próprio projeto decomposto em camadas e, ao lado de cada camada, <strong>a aula e o lab em que aquela peça foi construída</strong> e o artefato que sobrou no repositório de vocês. Quatro a seis linhas basta.</p>
+<p>Exemplo, para arrancar: tokenização e contagem de custo, Aula 2 e Lab 1, e o artefato é o notebook com tokens por língua. Recuperação, Aulas 18 e 19 e Lab 5, e o artefato é a tabela de <code>recall@k</code>.</p>
+<p><em>Como recolher:</em> dois minutos, e eu peço uma coisa só de cada dupla — <strong>nomear em voz alta uma camada do próprio sistema que ela não construiu em nenhum lab</strong>. Anoto todas. Essa é a camada que a equipe vai ter mais dificuldade de defender na Aula 30, e é de onde sai a minha pergunta. Quase sempre é a camada em que o sistema copiou código sem entender, e a defesa oral testa exatamente isso.</p>
+<p><em>Extensão opcional, para depois da aula:</em> para cada camada do inventário, responder em voz alta em uma frase por que ela existe no sistema e <strong>que número do harness prova que ela funciona</strong>. A camada que não tiver as duas respostas é a que recebe a pergunta.</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Esta parte <strong>não é fala planejada</strong>. É contingência. Mas nesta aula ela tem um peso diferente: é a <strong>última</strong> oportunidade do semestre de o formalismo ser puxado em sala, e se houver tempo vale atender com generosidade em vez de remeter.</p>
+<p><strong>Item 1 — "De onde sai esse objetivo da difusão? Ele é o MLM com outro nome?" (A.1, ~6 min).</strong>
+A melhor pergunta possível nesta aula, e a resposta é quase sim. Eu escrevo o processo direto no quadro — cada posição mascarada com probabilidade <code>t</code>, independentemente — e depois o objetivo. E aí faço a comparação que responde de verdade: o MLM da Aula 8 é este objetivo com <code>t</code> <strong>fixo</strong> em zero vírgula quinze; aqui <code>t</code> é sorteado uniformemente em zero e um. É a variação de <code>t</code> que faz a diferença, porque o MLM em taxa fixa nunca vê a sequência quase toda mascarada, e por isso não aprende a construir texto do zero. <strong>Versão de 30 segundos:</strong> "é o MLM com taxa de mascaramento variável em vez de fixa em 15% — e é essa variação que permite gerar, porque o regime de máscara quase total é geração a partir de nada. Está em A.1, com o fator <code>1/t</code> explicado."</p>
+<p><strong>Item 2 — "Isso de colapso é real ou é alarmismo?" (A.2, ~4 min).</strong>
+Pergunta cética, e ela merece o melhor argumento que eu tenho. Eu tomo o caso gaussiano: família correta, otimização exata, dado limpo, e o <strong>único</strong> mecanismo em ação é a amostragem finita. O estimador de variância por máxima verossimilhança tem esperança <code>σ²·(n−1)/n</code>. Iterando <code>k</code> gerações, a variância vai a <code>σ₀²·((n−1)/n)^k</code>. Escrevo isso, instancio com mil amostras — zero vírgula um por cento por geração, e em mil gerações resta trinta e sete por cento. <strong>Versão de 30 segundos:</strong> "no caso mais favorável possível, com família correta e otimização exata, a variância decai geometricamente só por amostragem finita. A conta está em A.2, com o motivo de essa fonte de erro não desaparecer nem com modelo perfeito."</p>
+<p><strong>Item 3 — "Por que FlashAttention acelera se não faz menos contas?" (A.3, ~5 min).</strong>
+A pergunta que fecha o arco técnico do curso, e eu adoro quando ela vem nesta aula. Escrevo a intensidade aritmética: operações por byte lido. Instancio nos dois regimes — contexto curto, dominado pelos pesos, e contexto longo, dominado pelo cache — e mostro que nos <strong>dois</strong> ela dá da ordem de um. Um acelerador faz centenas de operações por byte de banda. Então a decodificação usa uma fração de um por cento da capacidade aritmética, e reduzir bytes lidos é reduzir tempo. <strong>Versão de 30 segundos:</strong> "porque a decodificação faz cerca de uma operação por byte lido, e o acelerador conseguiria fazer centenas — o gargalo é a memória, não a conta. É a mesma razão de GQA acelerar a geração. Está em A.3, com os dois regimes instanciados e o caso do batching."</p>
+<hr /></div></details><details><summary>Encerramento · 01:57–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 15 da Parte 1 — a dívida da Aula 1 devolvida e quitada, a coluna do fundamento acesa como a segunda metade do que a turma leva, a logística da Aula 30 repetida, o checklist projetado, e os vinte segundos finais de índice do apêndice.</p>
+<blockquote>
+<p>Ideia central: "A coluna da esquerda é o que vocês construíram. A da direita é por que aquilo funciona. As duas continuam suas depois de quinta-feira."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 29 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="codigo-student.zip">↓ Notebooks e scripts do aluno</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Recapitulação e fronteiras da área</h1>
+<h2>Slide 1 · Abertura: a última aula de slide deste curso · 00:00–00:10</h2>
+<p><strong>[Projeto a grade da Aula 30 antes de qualquer outra coisa]</strong></p>
+<p>Antes de começar a aula, a logística da semana que vem, porque senão vocês vão me perguntar isso nos próximos quarenta minutos e a aula morre.</p>
+<p>Aula 30: slots de quinze minutos por equipe. Doze minutos de apresentação mais perguntas. Sete a oito equipes, ordem sorteada e publicada até a data que está no slide. Demo ao vivo é <strong>obrigatória</strong>, com o sistema real ligado, acompanhada dos números do Lab 8.</p>
+<p><strong>[Aponto os quatro artefatos à esquerda]</strong></p>
+<p>E vocês já têm tudo isso em mãos, desde a semana passada: o conjunto rotulado, a tabela por camada com o <code>n</code> declarado, o kappa do juiz e a fila de consertos priorizada.</p>
+<p>Agora a aula. Ela tem duas metades que fazem coisas opostas.</p>
+<blockquote>
+<p>Ideia central: "Na primeira metade eu mostro o que vocês construíram. Na segunda, o que a área está fazendo para derrubar parte disso."</p>
+</blockquote>
+<hr />
+<h2>Slide 2 · O mapa do percurso: onde cada peça foi construída, e onde está o fundamento dela · 00:10–00:18</h2>
+<p><strong>[Subo a pilha do rodapé para o topo, camada por camada]</strong></p>
+<p>Token, Aula 2, e vocês treinaram BPE à mão no Lab 1. Representação vetorial, Aula 3, mesmo lab — e foi ali que vocês viram cosseno funcionar em paráfrase e falhar em identificador. Atenção e o bloco, Aulas 5 a 8, e no Lab 2 vocês escreveram <code>softmax(QKᵀ/√d_k)V</code> com as próprias mãos. Escala e decodificação, Aula 10, Lab 3. Pré-treino, Aula 12. SFT e PEFT, Aula 13, Lab 4. Preferências e raciocínio, 15 e 16. RAG, 18 e 19, Lab 5. Ferramentas e agentes, 21 a 26, Labs 6 e 7. Avaliação, 27, e o Lab 8 foi o harness do sistema de vocês.</p>
+<p>Isso é o <code>git log</code> da disciplina. Cada aula é um commit, e vocês conseguem apontar o diff.</p>
+<p><strong>[Acendo a segunda coluna e fico em silêncio por uns vinte segundos]</strong></p>
+<p>Agora olhem a coluna da direita. É a primeira vez no curso que ela aparece inteira.</p>
+<p>Cada camada tem um segundo endereço: onde está o <strong>fundamento formal</strong> dela. A derivação da atenção em quatro etapas, com a variância do produto escalar e a equivariância por permutação. O fator seis do <code>C ≈ 6ND</code>. O <code>ΔW = BA</code> com a contagem de parâmetros. Bradley-Terry. O estimador não-viesado de <code>pass@k</code>. BM25 e as quatro métricas. O kappa de Cohen e o intervalo de Wilson.</p>
+<p>Ao longo do semestre esses apêndices chegaram um por aula, e é fácil ler cada um como um anexo solto. Vistos juntos, eles são outra coisa: são o índice do formalismo deste curso. É o material que não expira quando a fronteira mudar, e é dele que saem os quarenta pontos de justificativa da prova.</p>
+<blockquote>
+<p>Ideia central: "A coluna da esquerda é o que vocês construíram. A da direita é por que aquilo funciona — e ela continua consultável depois que o semestre acabar."</p>
+</blockquote>
+<p><strong>[Projeto a tabela de três colunas do exercício e formo as duplas]</strong></p>
+<p>E agora vocês fazem o mesmo com o sistema de vocês. Seis minutos, a condução está na Parte 3.</p>
+<blockquote>
+<p>Ideia central: "Toda equipe tem uma camada que não foi construída em nenhum lab. Essa é a camada que eu vou perguntar na semana que vem."</p>
+</blockquote>
+<hr />
+<h2>Slide 3 · A tese do próximo-token, agora verificável · 00:26–00:33</h2>
+<p>Na Aula 1 eu afirmei uma coisa a crédito: as tarefas clássicas de NLP foram unificadas sob "prever o próximo token". Vocês não tinham como verificar. Agora têm, em três níveis.</p>
+<p>Mecanismo: o decoder com máscara causal produz, por construção, uma distribuição sobre o próximo token. A tarefa não foi escolhida — ela é a arquitetura. Isso é a Aula 6.</p>
+<p>Interface: classificação, rotulagem e geração passam a ser instâncias do mesmo objeto, porque a saída é texto e a especificação da tarefa entra no prompt. Aula 10 e Lab 3.</p>
+<p>Utilidade: o que transformou o completador em assistente foi SFT e alinhamento. Não arquitetura. Aulas 13 e 15.</p>
+<blockquote>
+<p>Ideia central: "A unificação moveu a dificuldade. Ela não a eliminou — e o próximo slide cobra a conta."</p>
+</blockquote>
+<hr />
+<h2>Slide 4 · A dívida da Aula 1, e a fatura paga · 00:33–00:45</h2>
+<p>A Aula 1 fechou com uma promessa incômoda, e eu vou repetir ela na mesma palavras: <strong>unificamos o modelo, não unificamos as métricas.</strong></p>
+<p>BLEU e ROUGE pressupõem referência aproximadamente única. Perplexidade só compara entre tokenizadores iguais. Acurácia mente em dados desbalanceados. Quando a interface virou geração aberta, a área herdou um instrumento que não mede o que passou a existir.</p>
+<p><strong>[Aponto a coluna do pagamento]</strong></p>
+<p>Essa dívida foi paga em dois movimentos.</p>
+<p>Aula 27, conceitual: a pergunta "esse modelo é bom?" foi substituída por "qual a menor camada que explica esta falha, e com que número eu a meço?". Rubrica com níveis observáveis. Kappa no lugar do acordo bruto. Os três vieses do juiz nomeados, com o protocolo de cada um. Factualidade por afirmações atômicas. E o limite do leaderboard.</p>
+<p>Aula 28, operacional: cada equipe construiu o harness do próprio sistema. Métrica por camada, <code>n</code> declarado, juiz calibrado contra anotação humana, falhas priorizadas por impacto sobre custo.</p>
+<blockquote>
+<p>Ideia central: "A Aula 1 prometeu que o custo da unificação tinha sido transferido para a avaliação. As Aulas 27 e 28 são a fatura paga — e o comprovante é a tabela que cada equipe leva para a semana que vem."</p>
+</blockquote>
+<hr />
+<h2>Slide 5 · O que este curso deliberadamente não cobriu · 00:45–00:55</h2>
+<p>Última coisa do Bloco 1, e é a mais desconfortável. Honestidade de escopo.</p>
+<p>Pré-treino de verdade em escala: o Lab 2 é um mini-GPT em corpus de brinquedo. RLHF completo com modelo de recompensa treinado: as Aulas 15 e 16 param na formulação e no DPO. Serving em produção com batching contínuo e autoescala: não fizemos. Multimodalidade de fato: é fronteira desta aula, não conteúdo praticado. Segurança adversarial ofensiva além do que a Aula 26 introduziu. E avaliação com significância estatística — o curso exigiu <code>n</code> declarado, e o intervalo de confiança ficou no apêndice do Lab 8, não na prática de vocês.</p>
+<blockquote>
+<p>Ideia central: "Confundir 'vimos' com 'sei fazer em produção' é a distância exata desta lista."</p>
+</blockquote>
+<hr />
+<p><em>Intervalo · 00:55–01:05</em></p>
+<hr />
+<h2>Slide 6 · O token não é sobre texto: ViT e o patch de 16×16 · 01:05–01:11</h2>
+<p>Segunda metade. A partir daqui, cada slide traz num canto <strong>o pressuposto do curso que aquela fronteira ameaça</strong> — e essa é a regra de admissão do bloco. Fronteira que não desestabiliza nada do que vocês aprenderam é notícia, não fronteira.</p>
+<p>Primeira: o Vision Transformer faz uma coisa só. Corta a imagem em patches de dezesseis por dezesseis pixels, projeta cada patch linearmente num vetor de dimensão <code>d</code>, soma um embedding de posição, e joga a sequência num Transformer encoder comum.</p>
+<p><strong>[Aponto a pilha com os dois drivers de entrada embaixo]</strong></p>
+<p>Nada na arquitetura sabe que é imagem. E o que isso revela é maior que multimodalidade: o objeto central deste curso nunca foi <em>texto</em>. Foi <strong>sequência de vetores com posição</strong>. O tokenizer da Aula 2 é um caso de discretização; o patch é outro; frames de espectrograma são outro.</p>
+<blockquote>
+<p>Ideia central: "O Transformer é um processador de sequências que não pergunta de onde a sequência veio."</p>
+</blockquote>
+<hr />
+<h2>Slide 7 · [Demo] A conta: 375 tokens de texto contra 3.430 patches · 01:11–01:21</h2>
+<p><strong>[Passo para a Parte 2]</strong></p>
+<p>O que muda quando a entrada é imagem é o <strong>custo</strong> dela, e agora eu vou medir. Os passos estão na Parte 2 deste roteiro.</p>
+<blockquote>
+<p>Ideia central: "A compressão é do codec, não do corte. Ninguém comprime vídeo cortando quadros em quadradinhos."</p>
+</blockquote>
+<hr />
+<h2>Slide 8 · Comprimir contexto em pixels: DeepSeek-OCR · 01:21–01:27</h2>
+<p>O DeepSeek-OCR inverte o uso habitual da visão. Em vez de descrever imagens, usa a imagem como <strong>formato de compressão de texto longo</strong>: renderiza o documento como página, um encoder visual produz poucos tokens visuais, e o decoder reconstrói o texto.</p>
+<p>O artigo reporta reconstrução em torno de noventa e sete por cento de precisão de decodificação na faixa de dez tokens de texto por token visual, e isso degrada para a faixa de sessenta por cento perto de vinte vezes.</p>
+<p><strong>[Aponto os dois patamares na curva]</strong></p>
+<p>E aqui está o que eu quero que vocês levem: o número relevante nunca é a compressão sozinha. É o <strong>par</strong>.</p>
+<blockquote>
+<p>Ideia central: "Fidelidade de reconstrução é recall de conteúdo com outro nome — e o instrumento que mede é o do Lab 8."</p>
+</blockquote>
+<p>Isto é uma alternativa de engenharia ao RAG das Aulas 18 a 20, para documentos longos e estáveis. E ela tem exatamente o mesmo tipo de trade-off que vocês já sabem medir.</p>
+<hr />
+<h2>Slide 9 · Difusão para linguagem: o pressuposto que atravessou 28 aulas · 01:27–01:35</h2>
+<p>Este é o slide que eu mais gosto de dar em todo o curso.</p>
+<p>Vinte e oito aulas pressupuseram uma coisa que ninguém nomeou: geração <strong>da esquerda para a direita</strong>. A máscara causal da Aula 6. O KV cache da Aula 8. A amostragem token a token do Lab 3. Até a forma como o prompt é montado.</p>
+<p>O LLaDA treina um modelo de difusão mascarada. O processo direto mascara tokens progressivamente, e o modelo aprende a <strong>prever os mascarados</strong>. A geração é iterativa: desmascara posições em qualquer ordem, refinando a sequência inteira a cada passo. Não há máscara causal, e não há "próximo" token.</p>
+<p><strong>[Aponto as duas linhas do tempo de geração]</strong></p>
+<p>O que isso ataca, item por item. O KV cache perde o sentido, porque não existe prefixo fixo cujo estado se reaproveita. A decodificação deixa de ser escolha de amostragem por posição e passa a ser política de quantas e quais posições desmascarar por passo. A latência deixa de ser linear no número de tokens e passa a ser função do número de passos de refinamento — o que abre um paralelismo que o autorregressivo não tem. E a maldição da reversão, aquele modelo que sabe "A é B" e falha em "B é A", é atacada na raiz, porque o treino não privilegia direção nenhuma.</p>
+<blockquote>
+<p>Ideia central: "Um pressuposto que atravessa 28 aulas sem ser nomeado é um pressuposto, não uma lei."</p>
+</blockquote>
+<hr />
+<h2>Slide 10 · Dados sintéticos e colapso de modelo · 01:35–01:41</h2>
+<p>Dado sintético é insumo padrão hoje. Instruções geradas para SFT, pares de preferência gerados, casos de teste gerados. Vocês mesmos usaram no Lab 8.</p>
+<p>O custo aparece quando isso é <strong>recursivo</strong>: treinar a geração <code>n+1</code> predominantemente na saída da geração <code>n</code> corrói a distribuição. Três fontes de erro somadas — amostragem finita, que perde os eventos raros; expressividade, que não representa a cauda; e otimização. E o efeito é cumulativo.</p>
+<p><strong>[Aponto as quatro distribuições em sequência]</strong></p>
+<p>Primeiro desaparecem as <strong>caudas</strong>: a variância encolhe, o raro vira improvável, e o centro continua parecido — que é justamente o que torna o problema difícil de detectar. Depois a distribuição converge para algo estreito e distante da original.</p>
+<p>É fotocópia de fotocópia. Cada geração é legível; a décima não tem mais as letras finas.</p>
+<blockquote>
+<p>Ideia central: "O resultado não é 'sintético é ruim'. É sobre realimentação recursiva sem âncora humana."</p>
+</blockquote>
+<p>E respondendo a pergunta concreta que sempre vem: caso de teste gerado por LLM e <strong>revisado por vocês</strong> é legítimo. O rótulo é humano, e isso é exatamente o que o Lab 8 exigiu. Sintético verificado por oráculo — código que passa em teste, matemática conferida — não é a mesma operação que sintético plausível.</p>
+<hr />
+<h2>Slide 11 · A fronteira do custo: pequeno, roteado, medido · 01:41–01:45</h2>
+<p>A pressão da área deslocou-se de "o maior possível" para "o suficiente pelo menor custo". Três movimentos.</p>
+<p>Modelos pequenos: um modelo de um a oito bilhões com bom SFT resolve a maior parte das tarefas de um produto. Foi o que vocês usaram nos labs, por escolha didática — que também é a escolha de engenharia. Roteamento: um classificador barato decide, por requisição, se ela vai para o modelo local, para a API ou para uma cascata com verificação, e a métrica é acerto por real gasto. Esparsidade: MoE ativa uma fração dos parâmetros por token.</p>
+<p><strong>[Aponto as duas colunas novas na tabela do Lab 8]</strong></p>
+<p>E a consequência metodológica, que é o que importa aqui: eficiência entra na tabela do Lab 8 como qualquer outra métrica. Custo por caso, latência p95, tokens por resposta, ao lado do <code>recall@k</code> e da nota do juiz.</p>
+<blockquote>
+<p>Ideia central: "Sistema que acerta mais e custa dez vezes mais é decisão de produto. Sem as duas colunas na tabela, ela não é tomada — é sofrida."</p>
+</blockquote>
+<hr />
+<h2>Slide 12 · Hardware: a atenção é limitada por memória · 01:45–01:50</h2>
+<p>Última fronteira, e ela explica três coisas que vocês já usaram sem que eu tivesse derivado.</p>
+<p>Na decodificação, cada token novo precisa ler o KV cache <strong>inteiro</strong> para produzir uma posição. A razão entre operações aritméticas e bytes lidos é baixíssima — da ordem de uma operação por byte. E um acelerador moderno consegue fazer centenas de operações por byte de banda.</p>
+<p><strong>[Aponto as duas barras e a distância entre elas]</strong></p>
+<p>O acelerador passa quase todo o tempo esperando memória. Daí três coisas. FlashAttention ganha por reduzir tráfego entre HBM e SRAM, não por reduzir contas. GQA e MQA ganham por encolher o objeto que é lido. E batching ganha por amortizar a leitura dos pesos entre requisições — é o único dos três que muda a razão de fato.</p>
+<p>O pano de fundo é o <em>memory wall</em>: capacidade de cálculo e banda de memória cresceram em ritmos muito diferentes na última década, e a segunda virou o gargalo.</p>
+<blockquote>
+<p>Ideia central: "Para inferência autorregressiva, banda de memória prediz desempenho melhor do que TFLOPs de pico."</p>
+</blockquote>
+<p>E amarrando com o slide 9: difusão mascarada processa todas as posições por passo, então tem um perfil de acesso a memória diferente. É por isso que ela é interessante do ponto de vista de sistemas, não só de modelagem.</p>
+<hr />
+<h2>Slide 13 · Pesquisa, engenharia de IA, e o meio · 01:50–01:54</h2>
+<p>Três caminhos, distinguidos por <strong>artefato</strong> e <strong>critério de sucesso</strong> — não por prestígio.</p>
+<p>Pesquisa produz conhecimento novo verificável. O artefato é o paper com código, o critério é revisão por pares e reprodutibilidade. Preparação: reimplementar do zero, ler com caneta, iniciação científica, procurar orientador cujo trabalho você consegue explicar.</p>
+<p>Engenharia de IA produz sistemas que funcionam em produção. O artefato é o serviço com SLO, o critério é usuário atendido a custo sustentável. É exatamente o que esta disciplina treinou.</p>
+<p>Research engineering é o meio: infraestrutura de treino, avaliação em escala, otimização de kernels. Costuma ser o de maior alavancagem para quem gosta de sistemas e de pesquisa em doses iguais.</p>
+<blockquote>
+<p>Ideia central: "O diferencial no mercado não é saber chamar API. É saber provar com número que o sistema funciona — que é a única coisa que o Lab 8 fez."</p>
+</blockquote>
+<hr />
+<h2>Slide 14 · O que estudar em seguida, na ordem · 01:54–01:57</h2>
+<p>Fundamentos primeiro. Jurafsky e Martin, capítulos de Transformers e LLMs, e o Raschka, para o lado do modelo. Huyen para o lado do sistema. Depois <strong>um</strong> paper por semana, lido a fundo, com reimplementação de um componente.</p>
+<p><strong>[Aponto o degrau zero da trilha]</strong></p>
+<p>E o degrau zero vocês já têm: os apêndices dos trinta decks. Fundamento de atenção e de otimização não tem meia-vida curta — agentes e fronteiras revisam-se a cada oferta, aquilo não.</p>
+<blockquote>
+<p>Ideia central: "O exercício que mais separa 'acompanhei o curso' de 'sei construir' é reimplementar um componente do Lab 2 sem olhar o notebook."</p>
+</blockquote>
+<hr />
+<h2>Slide 15 · O arco fechado, e a ponte para a Aula 30 · 01:57–02:00</h2>
+<p><strong>[Volto à pilha do slide 2, com a coluna de fundamento acesa]</strong></p>
+<p>Na Aula 1 eu disse que a gente ia unificar o modelo e que a conta viria na avaliação. A conta veio, e vocês pagaram: cada equipe tem um harness com número por camada.</p>
+<p>E a coluna da direita é a outra metade do que vocês levam. Os apêndices dos trinta decks são o índice do formalismo deste curso — é ele que sustenta os quarenta pontos de justificativa da prova, e é ele que sustenta a defesa oral da semana que vem.</p>
+<p><strong>[Projeto a grade da Aula 30 e o checklist]</strong></p>
+<p>Semana que vem: sistema ligado, tabela do Lab 8 na mão, slide de arquitetura com o inventário que vocês fizeram hoje.</p>
+<blockquote>
+<p>Ideia central: "Na semana que vem quem fala são vocês — e a pergunta que eu faço sai da camada que a equipe não conseguiu endereçar a nenhuma aula."</p>
+</blockquote>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p>Oito minutos, <code>codigo/demo-patches-como-tokens.py</code>, no terminal, cem por cento offline e determinística. O script não baixa nada e não precisa de rede.</p>
+<p>Ele tem duas rotas para contar tokens de texto: se <code>transformers</code> estiver instalado, usa um tokenizer real e imprime o nome dele; se não, usa um contador determinístico por regex documentado no arquivo. Nos dois casos ele <strong>declara na saída qual rota usou</strong> — a mesma exigência de procedência do Lab 8.</p>
+<p><strong>1.</strong> <strong>[Rodo o script e paro no primeiro bloco]</strong> Esta é a página de texto embutida no script, um trecho de regulamento com mil quatrocentos e sessenta e seis caracteres. E aqui está a contagem: trezentos e setenta e cinco tokens pela rota offline — e olhem que ele imprimiu qual rota usou.</p>
+<p><strong>2.</strong> <strong>[Mostro o bloco da geometria]</strong> Agora a mesma página renderizada como imagem. A4 a noventa e seis DPI dá setecentos e noventa e três por mil cento e vinte e dois pixels. Com patch de dezesseis por dezesseis: quarenta e nove por setenta, <strong>três mil quatrocentos e trinta patches</strong>. <strong>[deixo o silêncio]</strong> A versão em imagem tem nove vezes <strong>mais</strong> unidades de sequência que a versão em texto.</p>
+<p><strong>3.</strong> <strong>[Vario o DPI e o tamanho do patch]</strong> E olhem uma propriedade que texto não tem: o número de patches é função da resolução e do patch, <strong>não do conteúdo</strong>. A página em branco e a página cheia têm exatamente o mesmo custo em patches. Isso já deveria acender uma luz sobre o que a imagem está comprimindo.</p>
+<p><strong>4.</strong> <strong>[Introduzo o fator de redução do encoder]</strong> Agora o passo que desfaz a confusão. Com um encoder que comprime a grade em dezesseis vezes, três mil quatrocentos e trinta viram duzentos e catorze tokens visuais. A razão texto sobre visual sai de zero vírgula onze para um vírgula setenta e cinco, e a compressão finalmente aparece. A compressão é do <strong>codec</strong>, não do corte.</p>
+<p><strong>5.</strong> <strong>[Mostro a tabela final de compressão × fidelidade]</strong> E o fecho: os patamares que o artigo reporta. Na faixa de dez vezes, precisão de decodificação em torno de noventa e sete por cento; perto de vinte vezes, na faixa de sessenta. O número relevante é o par, nunca a compressão sozinha.</p>
+<p><strong>6.</strong> <strong>[Fecho ligando ao Lab 8]</strong> E fidelidade de reconstrução é <code>recall</code> de conteúdo com outro nome. O instrumento que mede isso é o que vocês construíram na semana passada.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>Seis minutos de dupla mais dois de correção, dentro do slide 2. É o único hands-on da aula: a prática desta unidade aconteceu no Lab 8, e o resto do tempo é expositivo por decisão de desenho.</p>
+<p><strong>1.</strong> <strong>[Projeto a tabela de três colunas e formo as duplas, de preferência da mesma equipe de projeto]</strong> Seis minutos. Vocês vão escrever o sistema do próprio projeto decomposto em camadas e, ao lado de cada camada, <strong>a aula e o lab em que aquela peça foi construída</strong> e o artefato que sobrou no repositório de vocês. Quatro a seis linhas basta.</p>
+<p>Exemplo, para arrancar: tokenização e contagem de custo, Aula 2 e Lab 1, e o artefato é o notebook com tokens por língua. Recuperação, Aulas 18 e 19 e Lab 5, e o artefato é a tabela de <code>recall@k</code>.</p>
+<p><em>Como recolher:</em> dois minutos, e eu peço uma coisa só de cada dupla — <strong>nomear em voz alta uma camada do próprio sistema que ela não construiu em nenhum lab</strong>. Anoto todas. Essa é a camada que a equipe vai ter mais dificuldade de defender na Aula 30, e é de onde sai a minha pergunta. Quase sempre é a camada em que o sistema copiou código sem entender, e a defesa oral testa exatamente isso.</p>
+<p><em>Extensão opcional, para depois da aula:</em> para cada camada do inventário, responder em voz alta em uma frase por que ela existe no sistema e <strong>que número do harness prova que ela funciona</strong>. A camada que não tiver as duas respostas é a que recebe a pergunta.</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Esta parte <strong>não é fala planejada</strong>. É contingência. Mas nesta aula ela tem um peso diferente: é a <strong>última</strong> oportunidade do semestre de o formalismo ser puxado em sala, e se houver tempo vale atender com generosidade em vez de remeter.</p>
+<p><strong>Item 1 — "De onde sai esse objetivo da difusão? Ele é o MLM com outro nome?" (A.1, ~6 min).</strong>
+A melhor pergunta possível nesta aula, e a resposta é quase sim. Eu escrevo o processo direto no quadro — cada posição mascarada com probabilidade <code>t</code>, independentemente — e depois o objetivo. E aí faço a comparação que responde de verdade: o MLM da Aula 8 é este objetivo com <code>t</code> <strong>fixo</strong> em zero vírgula quinze; aqui <code>t</code> é sorteado uniformemente em zero e um. É a variação de <code>t</code> que faz a diferença, porque o MLM em taxa fixa nunca vê a sequência quase toda mascarada, e por isso não aprende a construir texto do zero. <strong>Versão de 30 segundos:</strong> "é o MLM com taxa de mascaramento variável em vez de fixa em 15% — e é essa variação que permite gerar, porque o regime de máscara quase total é geração a partir de nada. Está em A.1, com o fator <code>1/t</code> explicado."</p>
+<p><strong>Item 2 — "Isso de colapso é real ou é alarmismo?" (A.2, ~4 min).</strong>
+Pergunta cética, e ela merece o melhor argumento que eu tenho. Eu tomo o caso gaussiano: família correta, otimização exata, dado limpo, e o <strong>único</strong> mecanismo em ação é a amostragem finita. O estimador de variância por máxima verossimilhança tem esperança <code>σ²·(n−1)/n</code>. Iterando <code>k</code> gerações, a variância vai a <code>σ₀²·((n−1)/n)^k</code>. Escrevo isso, instancio com mil amostras — zero vírgula um por cento por geração, e em mil gerações resta trinta e sete por cento. <strong>Versão de 30 segundos:</strong> "no caso mais favorável possível, com família correta e otimização exata, a variância decai geometricamente só por amostragem finita. A conta está em A.2, com o motivo de essa fonte de erro não desaparecer nem com modelo perfeito."</p>
+<p><strong>Item 3 — "Por que FlashAttention acelera se não faz menos contas?" (A.3, ~5 min).</strong>
+A pergunta que fecha o arco técnico do curso, e eu adoro quando ela vem nesta aula. Escrevo a intensidade aritmética: operações por byte lido. Instancio nos dois regimes — contexto curto, dominado pelos pesos, e contexto longo, dominado pelo cache — e mostro que nos <strong>dois</strong> ela dá da ordem de um. Um acelerador faz centenas de operações por byte de banda. Então a decodificação usa uma fração de um por cento da capacidade aritmética, e reduzir bytes lidos é reduzir tempo. <strong>Versão de 30 segundos:</strong> "porque a decodificação faz cerca de uma operação por byte lido, e o acelerador conseguiria fazer centenas — o gargalo é a memória, não a conta. É a mesma razão de GQA acelerar a geração. Está em A.3, com os dois regimes instanciados e o caso do batching."</p>
+<hr />
+<h2>Encerramento · 01:57–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 15 da Parte 1 — a dívida da Aula 1 devolvida e quitada, a coluna do fundamento acesa como a segunda metade do que a turma leva, a logística da Aula 30 repetida, o checklist projetado, e os vinte segundos finais de índice do apêndice.</p>
+<blockquote>
+<p>Ideia central: "A coluna da esquerda é o que vocês construíram. A da direita é por que aquilo funciona. As duas continuam suas depois de quinta-feira."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 29 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-28/index.html">← Aula anterior</a><a class="button" href="../aula-30/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

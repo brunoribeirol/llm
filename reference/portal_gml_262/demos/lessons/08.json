@@ -1,0 +1,246 @@
+{
+  "id": 8,
+  "title": "Famílias de Transformers e a conta da atenção",
+  "subtitle": "Máscaras, tarefas, cache KV, atenção local e destilação",
+  "nodes": [
+    "Acesso",
+    "Objetivo",
+    "Família",
+    "Cache",
+    "Eficiência",
+    "Escolha"
+  ],
+  "controls": [
+    {
+      "key": "family",
+      "label": "Família",
+      "type": "select",
+      "value": "encoder",
+      "options": [
+        {
+          "value": "encoder",
+          "label": "Encoder"
+        },
+        {
+          "value": "decoder",
+          "label": "Decoder"
+        },
+        {
+          "value": "seq2seq",
+          "label": "Encoder–decoder"
+        }
+      ]
+    },
+    {
+      "key": "length",
+      "label": "Comprimento do contexto",
+      "type": "range",
+      "min": 4,
+      "max": 64,
+      "step": 4,
+      "value": 16
+    },
+    {
+      "key": "heads",
+      "label": "Cabeças de query",
+      "type": "range",
+      "min": 4,
+      "max": 32,
+      "step": 4,
+      "value": 8
+    },
+    {
+      "key": "kv",
+      "label": "Cabeças KV",
+      "type": "select",
+      "value": 8,
+      "options": [
+        {
+          "value": 1,
+          "label": "1 (MQA)"
+        },
+        {
+          "value": 2,
+          "label": "2"
+        },
+        {
+          "value": 4,
+          "label": "4"
+        },
+        {
+          "value": 8,
+          "label": "8"
+        },
+        {
+          "value": 16,
+          "label": "16"
+        },
+        {
+          "value": 32,
+          "label": "32"
+        }
+      ]
+    },
+    {
+      "key": "layers",
+      "label": "Camadas",
+      "type": "range",
+      "min": 1,
+      "max": 32,
+      "step": 1,
+      "value": 12
+    },
+    {
+      "key": "radius",
+      "label": "Raio da janela local",
+      "type": "range",
+      "min": 1,
+      "max": 8,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "temperature",
+      "label": "Temperatura da distribuição docente",
+      "type": "range",
+      "min": 0.5,
+      "max": 4,
+      "step": 0.5,
+      "value": 2
+    }
+  ],
+  "steps": [
+    {
+      "title": "A primeira escolha é quem pode ler quem",
+      "view": "mask",
+      "explanation": "Uma máscara determina quais pares de posições podem interagir em um bloco. O padrão de acesso deve combinar com a informação disponível na tarefa.",
+      "action": "Alterne Encoder e Decoder e leia a primeira linha da máscara.",
+      "board": "Bidirecional: j livre; causal: j ≤ i",
+      "question": "Permitir acesso ao token futuro é válido ao prever o próximo token?",
+      "answer": "Não durante a previsão causal; isso introduziria informação indisponível no momento de gerar.",
+      "focus": 0,
+      "speech": "Uma máscara determina quais pares de posições podem interagir em um bloco. O padrão de acesso deve combinar com a informação disponível na tarefa. Alterne Encoder e Decoder e leia a primeira linha da máscara. Pergunto à turma: “Permitir acesso ao token futuro é válido ao prever o próximo token?” Não durante a previsão causal; isso introduziria informação indisponível no momento de gerar."
+    },
+    {
+      "title": "Encoder: represente uma entrada completa",
+      "view": "encoder",
+      "explanation": "Um encoder bidirecional transforma cada posição usando contexto dos dois lados. Isso é adequado quando a entrada inteira está disponível antes de produzir uma classificação ou representação.",
+      "action": "Escolha Encoder e observe as conexões que chegam à posição central.",
+      "board": "Entrada completa → estados contextualizados",
+      "question": "O encoder é um gerador autorregressivo pronto por definição?",
+      "answer": "Não; ele produz representações, e a tarefa de saída requer uma cabeça e um objetivo compatíveis.",
+      "focus": 1,
+      "speech": "Um encoder bidirecional transforma cada posição usando contexto dos dois lados. Isso é adequado quando a entrada inteira está disponível antes de produzir uma classificação ou representação. Escolha Encoder e observe as conexões que chegam à posição central. Pergunto à turma: “O encoder é um gerador autorregressivo pronto por definição?” Não; ele produz representações, e a tarefa de saída requer uma cabeça e um objetivo compatíveis."
+    },
+    {
+      "title": "MLM: recupere uma lacuna",
+      "view": "mlm",
+      "explanation": "Na previsão de tokens mascarados, parte da entrada é escondida e o modelo usa o contexto disponível para reconstruí-la. Os candidatos desta tela são ilustrativos e não vêm de um modelo BERT em execução.",
+      "action": "Compare a lacuna com o contexto à esquerda e à direita no diagrama.",
+      "board": "texto corrompido → prever posições selecionadas",
+      "question": "Ver o lado direito nesse objetivo é vazamento?",
+      "answer": "Não; faz parte da entrada permitida para reconstruir a lacuna, diferentemente da geração causal.",
+      "focus": 1,
+      "speech": "Na previsão de tokens mascarados, parte da entrada é escondida e o modelo usa o contexto disponível para reconstruí-la. Os candidatos desta tela são ilustrativos e não vêm de um modelo BERT em execução. Compare a lacuna com o contexto à esquerda e à direita no diagrama. Pergunto à turma: “Ver o lado direito nesse objetivo é vazamento?” Não; faz parte da entrada permitida para reconstruir a lacuna, diferentemente da geração causal."
+    },
+    {
+      "title": "Cabeça de classificação: uma saída supervisionada",
+      "view": "classification",
+      "explanation": "Uma representação agregada pode alimentar uma camada que prevê rótulos. O custo de uma decisão não exige gerar uma frase inteira quando a saída desejada é um enum.",
+      "action": "Compare a linha de classificação com a linha de geração de vários tokens.",
+      "board": "h agregado → W h + b → softmax de classes",
+      "question": "O token CLS sabe classificar sem treinamento adequado?",
+      "answer": "Não; sua utilidade depende do pré-treinamento, da cabeça e do ajuste ou protocolo usados.",
+      "focus": 2,
+      "speech": "Uma representação agregada pode alimentar uma camada que prevê rótulos. O custo de uma decisão não exige gerar uma frase inteira quando a saída desejada é um enum. Compare a linha de classificação com a linha de geração de vários tokens. Pergunto à turma: “O token CLS sabe classificar sem treinamento adequado?” Não; sua utilidade depende do pré-treinamento, da cabeça e do ajuste ou protocolo usados."
+    },
+    {
+      "title": "Encoder–decoder: entrada e saída separadas",
+      "view": "seq2seq",
+      "explanation": "O encoder lê a origem inteira e o decoder gera o destino causalmente. Cross-attention permite ao decoder consultar estados da origem em cada passo.",
+      "action": "Escolha Encoder–decoder e acompanhe separadamente autoatenção de origem, destino e atenção cruzada.",
+      "board": "Origem → encoder; prefixo → decoder; decoder consulta encoder",
+      "question": "A máscara causal do destino proíbe ler o fim da origem?",
+      "answer": "Não; restringe o futuro do destino, enquanto toda a origem já está disponível.",
+      "focus": 2,
+      "speech": "O encoder lê a origem inteira e o decoder gera o destino causalmente. Cross-attention permite ao decoder consultar estados da origem em cada passo. Escolha Encoder–decoder e acompanhe separadamente autoatenção de origem, destino e atenção cruzada. Pergunto à turma: “A máscara causal do destino proíbe ler o fim da origem?” Não; restringe o futuro do destino, enquanto toda a origem já está disponível."
+    },
+    {
+      "title": "Decoder: prever uma continuação",
+      "view": "decoder",
+      "explanation": "Um decoder causal prevê a continuação a partir de um prefixo. Durante o treino, várias posições podem ser processadas em paralelo com máscara, mas gerar novos tokens continua sequencial.",
+      "action": "Escolha Decoder e avance o comprimento; compare treino com laço de geração.",
+      "board": "P(x₁…x_T)=produto P(xₜ|x_<ₜ)",
+      "question": "Máscara causal impede paralelismo de treino?",
+      "answer": "Não; todas as entradas do lote já são conhecidas, e a máscara impede acesso indevido sem exigir uma RNN.",
+      "focus": 2,
+      "speech": "Um decoder causal prevê a continuação a partir de um prefixo. Durante o treino, várias posições podem ser processadas em paralelo com máscara, mas gerar novos tokens continua sequencial. Escolha Decoder e avance o comprimento; compare treino com laço de geração. Pergunto à turma: “Máscara causal impede paralelismo de treino?” Não; todas as entradas do lote já são conhecidas, e a máscara impede acesso indevido sem exigir uma RNN."
+    },
+    {
+      "title": "Identifique o trabalho repetido na geração",
+      "view": "cacheflow",
+      "explanation": "As keys e values de posições anteriores não precisam ser recalculadas a cada novo token em um decoder causal usual. O cache reutiliza esses tensores, mas cresce com contexto, camadas e lote.",
+      "action": "Dobre Comprimento e observe a quantidade de posições armazenadas.",
+      "board": "Novo token: calcular Q,K,V novos; reutilizar K,V anteriores",
+      "question": "KV cache guarda as probabilidades finais de todos os tokens?",
+      "answer": "Não; armazena keys e values intermediários por camada para evitar recomputação.",
+      "focus": 3,
+      "speech": "As keys e values de posições anteriores não precisam ser recalculadas a cada novo token em um decoder causal usual. O cache reutiliza esses tensores, mas cresce com contexto, camadas e lote. Dobre Comprimento e observe a quantidade de posições armazenadas. Pergunto à turma: “KV cache guarda as probabilidades finais de todos os tokens?” Não; armazena keys e values intermediários por camada para evitar recomputação."
+    },
+    {
+      "title": "Calcule a memória do KV cache",
+      "view": "cache",
+      "explanation": "A conta usa lote 1, dimensão de cabeça 64 e dois bytes por elemento. O número de cabeças KV efetivo é ajustado para um divisor válido das cabeças de query escolhidas.",
+      "action": "Dobre Camadas e depois Contexto; veja a memória dobrar em cada alteração.",
+      "board": "Bytes = 2 × B × L × T × H_KV × d_head × bytes/elemento",
+      "question": "O fator inicial 2 representa duas cabeças?",
+      "answer": "Não; representa os dois tensores, keys e values.",
+      "focus": 3,
+      "speech": "A conta usa lote 1, dimensão de cabeça 64 e dois bytes por elemento. O número de cabeças KV efetivo é ajustado para um divisor válido das cabeças de query escolhidas. Dobre Camadas e depois Contexto; veja a memória dobrar em cada alteração. Pergunto à turma: “O fator inicial 2 representa duas cabeças?” Não; representa os dois tensores, keys e values."
+    },
+    {
+      "title": "Corte pares com uma janela local",
+      "view": "local",
+      "explanation": "Atenção local lê posições próximas e reduz a quantidade de conexões por camada. O gráfico usa uma janela bidirecional didática; posições globais precisam ser planejadas separadamente.",
+      "action": "Aumente Raio e compare a matriz esparsa com o total de pares densos.",
+      "board": "Pares densos ≈ T²; locais ≈ T(2r+1), com bordas",
+      "question": "Uma janela de raio r conecta qualquer posição em uma camada?",
+      "answer": "Não; o alcance cresce ao empilhar camadas, e nós globais podem criar atalhos adicionais.",
+      "focus": 4,
+      "speech": "Atenção local lê posições próximas e reduz a quantidade de conexões por camada. O gráfico usa uma janela bidirecional didática; posições globais precisam ser planejadas separadamente. Aumente Raio e compare a matriz esparsa com o total de pares densos. Pergunto à turma: “Uma janela de raio r conecta qualquer posição em uma camada?” Não; o alcance cresce ao empilhar camadas, e nós globais podem criar atalhos adicionais."
+    },
+    {
+      "title": "Compartilhe K e V entre queries",
+      "view": "gqa",
+      "explanation": "MQA usa um único conjunto KV e GQA compartilha conjuntos entre grupos de queries. A redução de cache depende das cabeças KV, não de reduzir automaticamente o número de cabeças de query.",
+      "action": "Mantenha Heads=8 e compare KV=8, 2 e 1.",
+      "board": "MHA: H_KV=H_Q; GQA: 1<H_KV<H_Q; MQA: H_KV=1",
+      "question": "A memória de KV cai quatro vezes de 8 para 2 cabeças KV?",
+      "answer": "Sim com lote, camadas, contexto, dimensão e precisão fixos nesta conta.",
+      "focus": 4,
+      "speech": "MQA usa um único conjunto KV e GQA compartilha conjuntos entre grupos de queries. A redução de cache depende das cabeças KV, não de reduzir automaticamente o número de cabeças de query. Mantenha Heads=8 e compare KV=8, 2 e 1. Pergunto à turma: “A memória de KV cai quatro vezes de 8 para 2 cabeças KV?” Sim com lote, camadas, contexto, dimensão e precisão fixos nesta conta."
+    },
+    {
+      "title": "Destile uma distribuição, não só um rótulo",
+      "view": "distillation",
+      "explanation": "A distribuição do professor mostra relações entre classes além da primeira colocada. Temperatura maior torna essa distribuição mais suave; esta miniatura calcula softmax de logits fixos.",
+      "action": "Aumente Temperatura e observe a massa nas classes não vencedoras.",
+      "board": "p_T = softmax(logits/T); aluno aproxima a distribuição docente",
+      "question": "Aumentar a temperatura cria novos conhecimentos?",
+      "answer": "Não; torna diferenças relativas de scores mais visíveis ao objetivo, sem acrescentar evidência externa.",
+      "focus": 4,
+      "speech": "A distribuição do professor mostra relações entre classes além da primeira colocada. Temperatura maior torna essa distribuição mais suave; esta miniatura calcula softmax de logits fixos. Aumente Temperatura e observe a massa nas classes não vencedoras. Pergunto à turma: “Aumentar a temperatura cria novos conhecimentos?” Não; torna diferenças relativas de scores mais visíveis ao objetivo, sem acrescentar evidência externa."
+    },
+    {
+      "title": "Escolha pela tarefa e pelo gargalo",
+      "view": "decision",
+      "explanation": "Família, máscara, cache e padrão de atenção são decisões conectadas ao caso de uso. A comparação final explicita representações, geração e memória, sem eleger uma arquitetura universal.",
+      "action": "Configure uma classificação curta e depois uma geração longa; diga qual gargalo mudou.",
+      "board": "Objetivo → acesso permitido → saída → orçamento",
+      "question": "Um modelo mais recente é automaticamente a melhor escolha?",
+      "answer": "Não; adequação da tarefa, qualidade medida, latência, memória e custo precisam orientar a decisão.",
+      "focus": 5,
+      "speech": "Família, máscara, cache e padrão de atenção são decisões conectadas ao caso de uso. A comparação final explicita representações, geração e memória, sem eleger uma arquitetura universal. Configure uma classificação curta e depois uma geração longa; diga qual gargalo mudou. Pergunto à turma: “Um modelo mais recente é automaticamente a melhor escolha?” Não; adequação da tarefa, qualidade medida, latência, memória e custo precisam orientar a decisão."
+    }
+  ]
+}

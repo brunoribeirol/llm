@@ -1,0 +1,225 @@
+{
+  "id": 19,
+  "title": "Recuperação híbrida, reranking e métricas",
+  "subtitle": "Compare busca lexical e vetorial, funda posições e localize onde a evidência se perdeu.",
+  "controls": [
+    {
+      "key": "query",
+      "label": "Consulta",
+      "type": "select",
+      "options": [
+        {
+          "value": "prazo",
+          "label": "prazo de matrícula"
+        },
+        {
+          "value": "codigo",
+          "label": "código ZX-42"
+        },
+        {
+          "value": "apoio",
+          "label": "auxílio financeiro"
+        }
+      ],
+      "value": "prazo"
+    },
+    {
+      "key": "k",
+      "label": "Resultados entregues",
+      "type": "range",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "candidates",
+      "label": "Candidatos para reranking",
+      "type": "range",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "rrf",
+      "label": "Constante do RRF",
+      "type": "range",
+      "min": 1,
+      "max": 60,
+      "step": 1,
+      "value": 20
+    },
+    {
+      "key": "k1",
+      "label": "Saturação BM25 k1",
+      "type": "range",
+      "min": 0.2,
+      "max": 2.5,
+      "step": 0.1,
+      "value": 1.2
+    },
+    {
+      "key": "b",
+      "label": "Normalização de tamanho b",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 0.1,
+      "value": 0.7
+    }
+  ],
+  "nodes": [
+    "Consulta",
+    "Lexical",
+    "Denso",
+    "Fusão",
+    "Reranking",
+    "Métricas"
+  ],
+  "steps": [
+    {
+      "title": "O erro começa com a consulta",
+      "view": "queries",
+      "explanation": "Consultas com identificador exato e consultas com sinônimos desafiam representações diferentes. O acervo fictício tem cinco documentos para permitir inspeção completa.",
+      "action": "Troque a consulta e leia os rótulos de relevância.",
+      "board": "Relevância depende da consulta",
+      "speech": "Não existe documento relevante em abstrato. Os rótulos foram definidos manualmente neste acervo didático. Eles não são escores produzidos pela busca.",
+      "question": "Uma busca sem resultados exatos é sempre ruim?",
+      "answer": "Não; uma paráfrase relevante pode não repetir as palavras da consulta.",
+      "focus": 0
+    },
+    {
+      "title": "O índice invertido encontra termos",
+      "view": "inverted",
+      "explanation": "Busca lexical começa pelas ocorrências de cada termo. Identificadores raros podem ser informativos mesmo sem significado semântico.",
+      "action": "Escolha a consulta de código e localize o termo nos documentos.",
+      "board": "termo → lista de documentos",
+      "speech": "Aqui a correspondência literal é uma vantagem. Uma representação densa pode diluir um identificador raro. A lista de ocorrências explica por que o documento entrou como candidato.",
+      "question": "Por que um código favorece busca lexical?",
+      "answer": "Porque a identidade exata do token pode ser o critério de relevância.",
+      "focus": 0
+    },
+    {
+      "title": "BM25 satura frequência",
+      "view": "bm25",
+      "explanation": "Repetir um termo aumenta contribuição com ganho decrescente. BM25 também considera raridade do termo e comprimento do documento.",
+      "action": "Varie k1 e b e acompanhe os escores calculados.",
+      "board": "IDF × tf(k1+1)/(tf+k1(1−b+b|d|/média))",
+      "speech": "As frequências vêm dos textos visíveis. O cálculo é feito localmente com uma variante positiva de IDF. Os parâmetros mudam a sensibilidade, não os rótulos de relevância.",
+      "question": "Repetir uma palavra cem vezes multiplica linearmente o score?",
+      "answer": "Não; a saturação limita o ganho de frequência.",
+      "focus": 0
+    },
+    {
+      "title": "Busca densa encontra outra vizinhança",
+      "view": "dense",
+      "explanation": "O ranking denso usa vetores 3D definidos manualmente para temas de prazo, identificação e apoio. Ele ilustra proximidade semântica sem executar um encoder real.",
+      "action": "Troque a consulta e compare os cossenos.",
+      "board": "score denso = cosseno(q,d)",
+      "speech": "Os vetores foram escolhidos para tornar os erros compreensíveis. Não são resultados de um modelo de embedding. Compare agora o que o lexical perdeu e o denso recuperou.",
+      "question": "Um bom resultado neste espaço prova qualidade de um encoder?",
+      "answer": "Não; é uma simulação geométrica explícita.",
+      "focus": 1
+    },
+    {
+      "title": "Os erros podem se complementar",
+      "view": "compare",
+      "explanation": "Um documento pode aparecer bem em um ranking e mal no outro. A tabela coloca posições lado a lado para evitar comparar escalas incompatíveis.",
+      "action": "Troque entre código e auxílio e compare posições.",
+      "board": "Lexical e denso: sinais diferentes",
+      "speech": "Um escore BM25 não tem a mesma unidade de um cosseno. Somá-los diretamente cria uma ponderação implícita arbitrária. Posições oferecem uma forma simples de fusão.",
+      "question": "Por que não somar os scores sem tratamento?",
+      "answer": "Porque suas escalas e distribuições não são comparáveis.",
+      "focus": 1
+    },
+    {
+      "title": "RRF soma evidência de posição",
+      "view": "rrf",
+      "explanation": "Reciprocal Rank Fusion soma 1/(c+posição) em cada lista. Documentos consistentes em várias listas podem subir no ranking combinado.",
+      "action": "Mude a constante e calcule a contribuição de cada ranking.",
+      "board": "RRF(d)=Σ listas 1/(c+rank(d))",
+      "speech": "As posições começam em um. Uma constante maior suaviza diferenças entre primeiras posições. A fusão não usa o rótulo de relevância.",
+      "question": "RRF precisa de scores calibrados?",
+      "answer": "Não; usa posições, embora ainda exija escolher rankings e parâmetros.",
+      "focus": 2
+    },
+    {
+      "title": "Bi-encoder calcula separado",
+      "view": "encoders",
+      "explanation": "Bi-encoder permite pré-calcular documentos e comparar vetores. Cross-encoder processa consulta e documento juntos, normalmente com maior custo por par.",
+      "action": "Compare os caminhos e conte pares candidatos.",
+      "board": "Bi: f(q),g(d); cross: h(q,d)",
+      "speech": "O benefício do bi-encoder está na reutilização do documento. O segundo estágio paga processamento conjunto para poucos candidatos. A figura não executa redes neurais reais.",
+      "question": "Por que não aplicar cross-encoder ao acervo inteiro sempre?",
+      "answer": "Porque o custo de avaliar todos os pares pode ser alto.",
+      "focus": 2
+    },
+    {
+      "title": "Reranking só reordena candidatos",
+      "view": "rerank",
+      "explanation": "O reranker didático usa uma regra lexical explícita para priorizar compatibilidade de termos. Ele não cria documentos ausentes do conjunto candidato.",
+      "action": "Reduza candidatos e observe se o documento relevante desaparece.",
+      "board": "Saída do reranker ⊆ candidatos",
+      "speech": "Esta regra não é um cross-encoder treinado. Ela permite observar a limitação estrutural do segundo estágio. Um documento perdido na recuperação não pode reaparecer por reordenação.",
+      "question": "Reranking pode recuperar um documento fora dos candidatos?",
+      "answer": "Não, a menos que o sistema faça uma nova busca.",
+      "focus": 3
+    },
+    {
+      "title": "Precisão e recall respondem perguntas distintas",
+      "view": "metrics",
+      "explanation": "Precisão mede fração relevante entre entregues. Recall mede fração dos relevantes que chegaram; MRR usa a primeira posição relevante.",
+      "action": "Varie k e calcule os três valores.",
+      "board": "P@k=acertos/k; R@k=acertos/total relevantes; RR=1/primeiro relevante",
+      "speech": "Mudar k altera o compromisso entre cobertura e ruído. Um ranking pode ter boa precisão e perder evidências necessárias. Para uma consulta mostramos RR; MRR exige média sobre consultas.",
+      "question": "Precisão alta garante recall alto?",
+      "answer": "Não; recuperar um relevante entre muitos possíveis pode ter precisão perfeita e recall baixo.",
+      "focus": 3
+    },
+    {
+      "title": "nDCG observa a ordem inteira",
+      "view": "ndcg",
+      "explanation": "DCG desconta a contribuição de posições mais baixas. A normalização compara com a melhor ordenação possível dos rótulos usados.",
+      "action": "Compare ranking atual com o ideal para o mesmo k.",
+      "board": "DCG=Σ relᵢ/log₂(i+1); nDCG=DCG/IDCG",
+      "speech": "Neste exemplo os rótulos são binários. Relevância graduada permitiria pesos diferentes. A referência ideal depende de quantos documentos relevantes existem.",
+      "question": "nDCG igual a um significa o quê?",
+      "answer": "Que a ordenação alcançou o ganho ideal para os rótulos e corte considerados.",
+      "focus": 4
+    },
+    {
+      "title": "O teto vem da recuperação inicial",
+      "view": "ceiling",
+      "explanation": "O recall no conjunto candidato limita o que o reranking pode entregar. Reordenar todos os mesmos candidatos preserva a presença dos relevantes nesse conjunto.",
+      "action": "Compare recall dos candidatos antes e depois da reordenação.",
+      "board": "Recall@K_candidatos é invariante à permutação",
+      "speech": "Esta invariância é matemática. A melhoria no top-k menor é uma questão empírica. São dois tipos de afirmação que não devemos misturar.",
+      "question": "O reranking é obrigado a melhorar recall@3?",
+      "answer": "Não; ele só tem a possibilidade de melhorar as posições dentro do conjunto.",
+      "focus": 4
+    },
+    {
+      "title": "Documentos são dados, não instruções",
+      "view": "failure",
+      "explanation": "Um trecho recuperado pode conter texto que tenta dar ordens ao sistema. Controle de origem, delimitação e validação devem impedir que a fonte receba autoridade indevida.",
+      "action": "Inspecione o cartão de conteúdo não confiável.",
+      "board": "Fonte recuperada fornece evidência, não política do sistema",
+      "speech": "A instrução maliciosa aqui é apenas um exemplo visível. Não precisamos executá-la para entender o risco. O sistema deve separar conteúdo documental de instruções autorizadas.",
+      "question": "Uma fonte relevante pode conter uma instrução indevida?",
+      "answer": "Sim; relevância de busca não confere autoridade operacional.",
+      "focus": 5
+    },
+    {
+      "title": "Depurar da entrada para a resposta",
+      "view": "diagnosis",
+      "explanation": "A falha pode estar na consulta, no conjunto candidato, na ordenação ou no uso da evidência. Métricas separadas tornam o diagnóstico verificável.",
+      "action": "Escolha uma consulta e explique o primeiro estágio em que o alvo se perde.",
+      "board": "Consulta → cobertura → ordem → contexto → resposta",
+      "speech": "Antes de trocar o modelo gerador, verifiquem se ele recebeu a evidência. Antes de trocar o reranker, verifiquem se o candidato existia. Essa ordem evita mudanças caras sem relação com a causa.",
+      "question": "Qual ajuste investigar quando o alvo não aparece entre candidatos?",
+      "answer": "Consulta, chunking, representação e estratégia de recuperação inicial.",
+      "focus": 5
+    }
+  ]
+}

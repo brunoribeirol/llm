@@ -1,0 +1,197 @@
+{
+  "id": 24,
+  "title": "Sistemas multiagentes: dividir tem um preço",
+  "subtitle": "Compare arquiteturas com contas explícitas de tokens, dependências, latência e probabilidade. Os números são parâmetros didáticos, não benchmarks de frameworks.",
+  "nodes": [
+    "Tarefa",
+    "Divisão",
+    "Coordenação",
+    "Custo",
+    "Falhas",
+    "Decisão"
+  ],
+  "controls": [
+    {
+      "key": "workers",
+      "label": "Trabalhadores / estágios",
+      "type": "range",
+      "min": 2,
+      "max": 6,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "steps",
+      "label": "Passos por trabalhador",
+      "type": "range",
+      "min": 1,
+      "max": 6,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "accuracy",
+      "label": "Acerto de cada estágio (%)",
+      "type": "range",
+      "min": 50,
+      "max": 99,
+      "step": 1,
+      "value": 90
+    },
+    {
+      "key": "context",
+      "label": "Contexto por trabalhador (tokens)",
+      "type": "range",
+      "min": 100,
+      "max": 2000,
+      "step": 100,
+      "value": 500
+    },
+    {
+      "key": "parallel",
+      "label": "Subtarefas independentes em paralelo",
+      "type": "checkbox",
+      "value": true
+    },
+    {
+      "key": "leak",
+      "label": "Copiar histórico inteiro para cada trabalhador",
+      "type": "checkbox",
+      "value": false
+    }
+  ],
+  "steps": [
+    {
+      "title": "A mesma tarefa, duas arquiteturas",
+      "view": "task",
+      "explanation": "Comparar arquiteturas exige manter objetivo e resultado verificável constantes. O exemplo distribui subtarefas de pesquisa independentes e depois sintetiza as evidências.",
+      "action": "Defina três trabalhadores e compare a tarefa nos dois desenhos.",
+      "board": "mesmo objetivo + mesmo conjunto de teste",
+      "speech": "Se mudarmos a tarefa junto com a arquitetura, perdemos a comparação. Primeiro fixamos o que precisa ser entregue. Depois medimos que coordenação foi adicionada.",
+      "question": "Mais agentes é evidência de maior qualidade?",
+      "answer": "Não. É uma mudança de arquitetura que deve ser avaliada na mesma tarefa.",
+      "focus": 0
+    },
+    {
+      "title": "As três razões para dividir",
+      "view": "reasons",
+      "explanation": "Especialização, paralelismo e redução de contexto podem justificar a divisão. Cada razão corresponde a uma propriedade observável do trabalho, não apenas a um nome de papel.",
+      "action": "Aumente trabalhadores e compare competências e dados necessários.",
+      "board": "especialização; independência; contexto necessário",
+      "speech": "Um pesquisador e um revisor só são diferentes se têm decisões ou evidências distintas. Rótulos sozinhos não reduzem incerteza. Quero saber o que cada participante vê e pode fazer.",
+      "question": "Quando trocar só o prompt pode ser suficiente?",
+      "answer": "Quando não há novas ferramentas, dados ou decisões independentes que justifiquem coordenação persistente.",
+      "focus": 0
+    },
+    {
+      "title": "Orquestrador e trabalhadores",
+      "view": "orchestrator",
+      "explanation": "O orquestrador distribui subproblemas e recebe produtos delimitados. Se todos recebem a conversa inteira, parte do benefício de limitar contexto desaparece.",
+      "action": "Marque copiar histórico inteiro e compare os pacotes enviados.",
+      "board": "tarefa local + evidências necessárias → resultado verificável",
+      "speech": "A unidade de delegação precisa caber numa instrução clara. O trabalhador deve saber o que entregar e como verificar. Repassar tudo transfere também ambiguidades e custo.",
+      "question": "O que um bom resultado de trabalhador contém?",
+      "answer": "Resposta ao subproblema, evidências, incertezas e um formato que o orquestrador consiga verificar.",
+      "focus": 1
+    },
+    {
+      "title": "Pipeline com dependências",
+      "view": "pipeline",
+      "explanation": "Em um pipeline, a saída de um estágio alimenta o seguinte. Esses estágios não podem ser executados em paralelo apenas porque existem trabalhadores disponíveis.",
+      "action": "Compare o diagrama serial com a opção de paralelismo da pesquisa independente.",
+      "board": "A → B → C: dependência impõe ordem",
+      "speech": "O botão de paralelismo não remove uma dependência de dados. Extrair precisa terminar antes de validar o que foi extraído. A arquitetura deve refletir a tarefa, não a quantidade de processos.",
+      "question": "Por que uma busca independente pode ser paralela e uma transformação encadeada não?",
+      "answer": "Na busca, os ramos já possuem as entradas; na transformação, cada entrada só existe após o estágio anterior.",
+      "focus": 1
+    },
+    {
+      "title": "Debate e crítico",
+      "view": "critic",
+      "explanation": "Um crítico pode verificar uma resposta contra fontes ou regras. Dois agentes concordarem entre si não cria evidência independente quando ambos herdaram o mesmo erro.",
+      "action": "Altere a taxa de acerto e observe o contraste entre revisão com verificador e mera concordância.",
+      "board": "concordância ≠ verificação independente",
+      "speech": "Peço ao crítico uma condição verificável, não uma opinião mais confiante. Sem fonte, ele pode repetir o erro com outras palavras. A utilidade do debate depende do que ele consegue detectar.",
+      "question": "Votar entre cópias do mesmo raciocínio elimina erro correlacionado?",
+      "answer": "Não. A correlação limita o ganho; a hipótese de independência deve ser justificada.",
+      "focus": 2
+    },
+    {
+      "title": "Painel de especialistas",
+      "view": "panel",
+      "explanation": "Um painel produz perspectivas em paralelo e exige uma regra de agregação. Somar respostas conflitantes não resolve o conflito nem substitui uma verificação de fontes.",
+      "action": "Aumente trabalhadores e conte resultados que precisam ser integrados.",
+      "board": "N saídas → agregação + resolução de conflitos",
+      "speech": "O painel desloca parte do problema para a síntese. Alguém precisa comparar evidências incompatíveis. Esse trabalho tem custo e deve aparecer no orçamento.",
+      "question": "Quem decide quando dois especialistas divergem?",
+      "answer": "Uma regra de agregação ou um responsável com acesso às evidências, não a mera quantidade de textos.",
+      "focus": 2
+    },
+    {
+      "title": "Custo é soma, latência pode ser máximo",
+      "view": "latency",
+      "explanation": "Ramos independentes podem terminar em paralelo. O tempo de parede se aproxima do ramo mais lento mais coordenação, enquanto o trabalho total continua sendo a soma.",
+      "action": "Alterne paralelismo e compare tempo serial, paralelo e trabalho total.",
+      "board": "latência ≈ max(tᵢ)+overhead; trabalho = Σtᵢ",
+      "speech": "Aqui a mesma quantidade de trabalho acontece em menos tempo de parede. Isso é útil, mas não é desconto automático na fatura. Limites de concorrência também podem reduzir o ganho.",
+      "question": "Paralelismo reduz necessariamente os tokens pagos?",
+      "answer": "Não. As mesmas chamadas continuam existindo e podem ganhar contexto de coordenação.",
+      "focus": 3
+    },
+    {
+      "title": "O preço do contexto compartilhado",
+      "view": "context",
+      "explanation": "Cada trabalhador recebe um pacote de entrada. Copiar a trajetória inteira aumenta esse pacote e multiplica sua repetição entre trabalhadores e passos.",
+      "action": "Aumente contexto e marque copiar histórico inteiro; compare os totais.",
+      "board": "tokens de entrada = trabalhadores × passos × pacote",
+      "speech": "A mensagem enviada ao trabalhador é uma decisão de arquitetura. Um resumo verificável pode ser menor que o histórico bruto. O corte precisa preservar as evidências necessárias à subtarefa.",
+      "question": "Resumir sempre melhora o sistema?",
+      "answer": "Não. Pode economizar contexto e também remover detalhes que o trabalhador precisa para acertar.",
+      "focus": 3
+    },
+    {
+      "title": "Orçamentos que se multiplicam",
+      "view": "budget",
+      "explanation": "Um teto por trabalhador não equivale a um teto global. Se o orquestrador abre N trabalhadores com b passos, só eles já podem consumir N vezes b chamadas.",
+      "action": "Aumente trabalhadores e passos e observe as chamadas máximas.",
+      "board": "B global ≥ coordenação + Σ bᵢ",
+      "speech": "O limite precisa existir onde os recursos são compartilhados. Dar a cada trabalhador o orçamento inteiro multiplica a exposição. O total da execução deve incluir planejamento e síntese.",
+      "question": "Quem deve controlar o orçamento total?",
+      "answer": "O coordenador ou runtime que vê todas as chamadas, além dos limites locais.",
+      "focus": 4
+    },
+    {
+      "title": "Erro propagado pelo pipeline",
+      "view": "reliability",
+      "explanation": "Se todos os estágios precisam acertar e os erros são independentes, a probabilidade de sucesso é p elevado a N. A independência é uma hipótese didática, não uma propriedade automática de agentes reais.",
+      "action": "Aumente estágios mantendo noventa por cento de acerto e acompanhe a queda.",
+      "board": "P(todos corretos) = ∏ pᵢ, sob independência",
+      "speech": "Noventa por cento por estágio parece confortável. Multipliquem ao encadear vários estágios obrigatórios. Se os erros forem correlacionados, precisaremos de outro modelo, não de repetir esta conta sem ressalva.",
+      "question": "Um pipeline com cinco estágios a 90% acerta 90% no total?",
+      "answer": "Sob as hipóteses indicadas, não: 0,9⁵ é aproximadamente 59%.",
+      "focus": 4
+    },
+    {
+      "title": "Verificar e tentar novamente",
+      "view": "retry",
+      "explanation": "Com uma nova tentativa independente após erro perfeitamente detectado, a chance por estágio passa a 1−(1−p)². Esse ganho pressupõe um verificador ideal e consome chamadas adicionais.",
+      "action": "Compare sem repetição e uma repetição para os mesmos estágios e acerto.",
+      "board": "p′ = 1−(1−p)²; custo extra não é zero",
+      "speech": "A melhoria vem de detectar a falha antes de propagá-la. Se o verificador aprovar uma resposta errada, esta fórmula deixa de representar o sistema. Medir a qualidade do verificador faz parte da avaliação.",
+      "question": "Repetir duas vezes garante independência das tentativas?",
+      "answer": "Não. O mesmo contexto e o mesmo modelo podem repetir o mesmo erro.",
+      "focus": 5
+    },
+    {
+      "title": "Escolher a arquitetura mínima suficiente",
+      "view": "decision",
+      "explanation": "A escolha deve declarar a razão da divisão, a informação exclusiva de cada agente e o lugar onde se lê a trajetória completa. Custo, latência e confiabilidade precisam ser avaliados na mesma tarefa.",
+      "action": "Escolha uma configuração e defenda se um pipeline ou agente único resolveria o mesmo objetivo.",
+      "board": "por que dividir? quem vê o quê? onde depurar?",
+      "speech": "Peço uma arquitetura que possamos explicar e medir. Se um componente não muda evidências, decisões ou paralelismo, tentamos removê-lo. Depois verificamos se a versão menor preserva o resultado.",
+      "question": "Qual comparação sustenta a adoção de multiagentes?",
+      "answer": "Uma avaliação controlada contra uma arquitetura mais simples, mostrando ganho relevante e seu custo.",
+      "focus": 5
+    }
+  ]
+}

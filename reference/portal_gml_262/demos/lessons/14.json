@@ -1,0 +1,200 @@
+{
+  "id": 14,
+  "title": "Laboratório de adaptação: do dado ao adaptador",
+  "subtitle": "Execute um treino minúsculo de verdade e interprete o protocolo de um fine-tuning.",
+  "controls": [
+    {
+      "key": "rank",
+      "label": "Posto",
+      "type": "range",
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "lr",
+      "label": "Taxa de aprendizado",
+      "type": "range",
+      "min": 0.01,
+      "max": 0.8,
+      "step": 0.01,
+      "value": 0.15
+    },
+    {
+      "key": "epochs",
+      "label": "Passos de atualização",
+      "type": "range",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "value": 20
+    },
+    {
+      "key": "batch",
+      "label": "Exemplos por passo",
+      "type": "range",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "context",
+      "label": "Contexto estimado",
+      "type": "range",
+      "min": 128,
+      "max": 2048,
+      "step": 128,
+      "value": 512
+    },
+    {
+      "key": "template",
+      "label": "Template consistente",
+      "type": "checkbox",
+      "value": true
+    }
+  ],
+  "nodes": [
+    "Ambiente",
+    "Baseline",
+    "Dados",
+    "Adaptador",
+    "Treino",
+    "Entrega"
+  ],
+  "steps": [
+    {
+      "title": "Dois tamanhos, um protocolo",
+      "view": "profiles",
+      "explanation": "O mesmo protocolo serve para uma demonstração pequena e para um modelo real. Aqui treinamos uma regressão linear com adaptador, não um LLM.",
+      "action": "Compare as dimensões do experimento com o perfil de GPU ilustrativo.",
+      "board": "Objeto treinado aqui: y=(W₀+BA)x",
+      "speech": "O navegador consegue mostrar toda a conta porque o modelo é minúsculo. Isso não mede a qualidade de um LLM. O que transferimos é o protocolo de configuração, medição e comparação.",
+      "question": "O simulador substitui o notebook de GPU?",
+      "answer": "Não; prepara a compreensão e executa apenas o problema linear declarado.",
+      "focus": 0
+    },
+    {
+      "title": "Verificar memória antes de carregar",
+      "view": "memory",
+      "explanation": "A base quantizada economiza armazenamento, mas treino também precisa de ativações e estados do adaptador. Lote e contexto podem causar falta de memória mesmo com pesos pequenos.",
+      "action": "Aumente lote e contexto e compare parcelas estimadas.",
+      "board": "Memória = base + adaptador/estados + ativações",
+      "speech": "Estas parcelas são aproximações de planejamento. O pico real deve ser medido no ambiente do notebook. Deixar uma margem evita tratar toda memória física como disponível.",
+      "question": "Por que uma base que cabe pode falhar no primeiro passo?",
+      "answer": "Porque backward e ativações acrescentam memória além dos pesos.",
+      "focus": 0
+    },
+    {
+      "title": "Salvar uma linha de base",
+      "view": "baseline",
+      "explanation": "Antes de ajustar, registre previsões nos mesmos exemplos que serão usados na comparação. O conjunto de controle deve permanecer separado do treino.",
+      "action": "Selecione zero passos e leia previsões e erros.",
+      "board": "Baseline: mesmas entradas, nenhuma atualização",
+      "speech": "Sem baseline não sabemos o que mudou. Vamos guardar previsões, não apenas uma impressão geral. Nos próximos passos compararemos exatamente essas entradas.",
+      "question": "Comparar perguntas diferentes antes e depois é válido?",
+      "answer": "Não para atribuir a diferença ao ajuste; precisamos controlar as entradas.",
+      "focus": 1
+    },
+    {
+      "title": "Inspecionar a representação do dado",
+      "view": "dataset",
+      "explanation": "O treino linear usa pares numéricos explícitos. O painel de conversa ao lado ilustra como instrução e resposta exigem formatação consistente no laboratório real.",
+      "action": "Alterne template e identifique a mudança de interface.",
+      "board": "Dado de treino = entrada + alvo + contrato",
+      "speech": "No problema numérico o alvo está visível. No LLM a resposta é uma sequência de alvos. Em ambos os casos um erro de preparação muda a tarefa efetivamente aprendida.",
+      "question": "Dados válidos em JSON garantem tarefa correta?",
+      "answer": "Não; estrutura sintática e significado supervisionado são verificações diferentes.",
+      "focus": 1
+    },
+    {
+      "title": "Separar treino, validação e controle",
+      "view": "split",
+      "explanation": "Treino orienta atualizações, validação acompanha generalização e controle monitora comportamento a preservar. Reutilizar o mesmo conjunto para todos os papéis esconde falhas.",
+      "action": "Compare quais entradas pertencem a cada partição.",
+      "board": "Treino ≠ validação ≠ controle",
+      "speech": "O controle aqui preserva um comportamento original da base. Ele não participa da otimização. Uma melhoria no alvo pode ter um custo visível nesse conjunto.",
+      "question": "Por que não escolher a configuração pelo teste final?",
+      "answer": "Porque isso torna o teste parte da otimização e contamina a estimativa final.",
+      "focus": 2
+    },
+    {
+      "title": "Construir o adaptador treinável",
+      "view": "adapter",
+      "explanation": "A base 1×3 fica congelada. A adaptação usa A de r×3 e B de 1×r, inicialmente com B nulo.",
+      "action": "Mude o posto e conte as entradas das matrizes.",
+      "board": "Nₐ = r(3+1)",
+      "speech": "A base continua participando da previsão. Apenas A e B recebem atualizações. Em uma matriz tão pequena, o adaptador não precisa economizar parâmetros para ilustrar o mecanismo.",
+      "question": "Por que usar este caso pequeno mesmo sem economia?",
+      "answer": "Porque permite auditar a atualização; economia de memória exige dimensões maiores.",
+      "focus": 2
+    },
+    {
+      "title": "Ver o primeiro gradiente",
+      "view": "gradient",
+      "explanation": "A derivada da perda quadrática determina a direção da atualização. Com B inicialmente zero, o primeiro gradiente de A é zero e o de B pode ser não nulo.",
+      "action": "Compare zero e um passo.",
+      "board": "L = média(ŷ−y)²; θ ← θ−η∇L",
+      "speech": "Agora vemos a assimetria de inicialização em ação. Primeiro B começa a se mover. Em passos posteriores A também pode receber gradiente.",
+      "question": "A inicialização com B zero bloqueia o treino?",
+      "answer": "Não; A não nula permite gradiente em B.",
+      "focus": 3
+    },
+    {
+      "title": "Treinar e ler o histórico",
+      "view": "training",
+      "explanation": "Os passos exibidos são calculados no navegador por descida de gradiente. A curva responde à taxa, ao lote e ao número de atualizações.",
+      "action": "Aumente passos e compare taxas 0,05 e 0,7.",
+      "board": "Não selecionar modelo só pela perda de treino",
+      "speech": "O eixo horizontal representa atualizações reais deste problema pequeno. Taxa alta pode provocar oscilação ou divergência. Quando houver valores não finitos, precisamos reconhecer falha numérica.",
+      "question": "Uma curva decrescente garante bom comportamento externo?",
+      "answer": "Não; ela mede o objetivo de treino, não todas as capacidades desejadas.",
+      "focus": 3
+    },
+    {
+      "title": "Lote muda o estimador do gradiente",
+      "view": "batch",
+      "explanation": "Um lote pequeno usa menos exemplos por atualização. O simulador percorre os exemplos ciclicamente, sem sorteio oculto.",
+      "action": "Compare lote 1 e lote 4 com a mesma taxa.",
+      "board": "∇L_lote = média dos gradientes do lote",
+      "speech": "Aqui controlamos até a ordem dos exemplos. Assim fica claro qual diferença veio do tamanho do lote. Em treino real também registraríamos semente e embaralhamento.",
+      "question": "Menos exemplos por passo implica mesmo número de exemplos vistos?",
+      "answer": "Não; comparar por passos e comparar por épocas completas são protocolos diferentes.",
+      "focus": 4
+    },
+    {
+      "title": "Antes e depois na mesma tabela",
+      "view": "comparison",
+      "explanation": "A comparação mostra previsões e erros em entradas fixas. O resultado numérico é do modelo linear, sem atribuição de desempenho a um LLM.",
+      "action": "Mude passos e compare o erro em cada partição.",
+      "board": "Δ erro = erro depois − erro antes",
+      "speech": "Olhem as linhas, não só a média. Um item pode melhorar e outro piorar. É essa tabela pareada que precisamos guardar no notebook real.",
+      "question": "Uma média menor exclui regressões individuais?",
+      "answer": "Não; ganhos em alguns casos podem esconder perdas em outros.",
+      "focus": 4
+    },
+    {
+      "title": "Poucos exemplos limitam a afirmação",
+      "view": "uncertainty",
+      "explanation": "Uma avaliação minúscula permite depurar, mas sustenta conclusões limitadas. Mesmo observar sucesso em todos os casos não prova taxa real de 100%.",
+      "action": "Leia a resolução de uma avaliação de oito itens.",
+      "board": "Um item em 8 = 12,5 pontos percentuais",
+      "speech": "Não vamos vender certeza a partir de uma demonstração. O caso pequeno é ótimo para encontrar bugs. Para comparar modelos precisamos de conjunto maior e representativo.",
+      "question": "Oito sucessos provam perfeição?",
+      "answer": "Não; há incerteza e possível falta de cobertura.",
+      "focus": 5
+    },
+    {
+      "title": "Empacotar o que permite reproduzir",
+      "view": "package",
+      "explanation": "O adaptador depende da base, do template e da configuração. Um pacote útil registra versões, hiperparâmetros, métricas e limitações.",
+      "action": "Confira o manifesto calculado com seus controles.",
+      "board": "base + A/B + config + template + avaliação",
+      "speech": "Salvar apenas as matrizes não conta toda a história. Outra pessoa precisa reconstruir o mesmo caminho de inferência. O manifesto exibido é um exemplo do que documentar, não um arquivo de pesos de LLM.",
+      "question": "Qual informação torna um adaptador isolado insuficiente?",
+      "answer": "A identidade e versão da base, além de arquitetura, módulos, escala, tokenizer e template compatíveis.",
+      "focus": 5
+    }
+  ]
+}

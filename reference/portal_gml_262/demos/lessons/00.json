@@ -1,0 +1,190 @@
+{
+  "id": 0,
+  "title": "Recepção: construa seu mapa do curso",
+  "subtitle": "Do diagnóstico inicial ao primeiro artefato reproduzível",
+  "nodes": [
+    "Diagnóstico",
+    "Mapa",
+    "Contrato",
+    "Materiais",
+    "Ambiente",
+    "Evidência"
+  ],
+  "controls": [
+    {
+      "key": "python",
+      "label": "Domínio de Python (autoavaliação)",
+      "type": "range",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "math",
+      "label": "Álgebra linear (autoavaliação)",
+      "type": "range",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "hours",
+      "label": "Horas semanais de estudo",
+      "type": "range",
+      "min": 1,
+      "max": 12,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "labs",
+      "label": "Média dos sete melhores laboratórios",
+      "type": "range",
+      "min": 0,
+      "max": 10,
+      "step": 0.1,
+      "value": 7
+    },
+    {
+      "key": "exam",
+      "label": "Nota da prova",
+      "type": "range",
+      "min": 0,
+      "max": 10,
+      "step": 0.1,
+      "value": 7
+    },
+    {
+      "key": "project",
+      "label": "Nota do projeto",
+      "type": "range",
+      "min": 0,
+      "max": 10,
+      "step": 0.1,
+      "value": 8
+    },
+    {
+      "key": "done",
+      "label": "Laboratórios concluídos",
+      "type": "range",
+      "min": 0,
+      "max": 8,
+      "step": 1,
+      "value": 0
+    }
+  ],
+  "steps": [
+    {
+      "title": "O produto que construiremos",
+      "view": "map",
+      "explanation": "O semestre conecta representação de texto, modelos, recuperação, ferramentas e avaliação. Cada camada produz um artefato que pode ser inspecionado e reproduzido.",
+      "action": "Mova Laboratórios concluídos de 0 a 8 e acompanhe a passagem entre os produtos.",
+      "board": "Texto → modelo → RAG → ferramentas → agente → avaliação",
+      "question": "Um chat funcionando prova que um sistema está pronto?",
+      "answer": "Não: ainda faltam evidências de qualidade, limites de custo e comportamento diante de falhas.",
+      "focus": 0,
+      "speech": "O semestre conecta representação de texto, modelos, recuperação, ferramentas e avaliação. Cada camada produz um artefato que pode ser inspecionado e reproduzido. Mova Laboratórios concluídos de 0 a 8 e acompanhe a passagem entre os produtos. Pergunto à turma: “Um chat funcionando prova que um sistema está pronto?” Não: ainda faltam evidências de qualidade, limites de custo e comportamento diante de falhas."
+    },
+    {
+      "title": "Diagnostique os pré-requisitos",
+      "view": "diagnosis",
+      "explanation": "A autoavaliação organiza o estudo inicial e não atribui nota. Python sustenta os laboratórios e álgebra linear sustenta a leitura das representações e da atenção.",
+      "action": "Compare Python 1/Álgebra 4 com Python 4/Álgebra 1; leia as recomendações específicas.",
+      "board": "Python: listas, funções, matrizes; matemática: produto interno e probabilidade",
+      "question": "Um pré-requisito fraco impede começar?",
+      "answer": "Ele indica uma lacuna para trabalhar cedo; a demonstração propõe tarefas concretas de revisão.",
+      "focus": 0,
+      "speech": "A autoavaliação organiza o estudo inicial e não atribui nota. Python sustenta os laboratórios e álgebra linear sustenta a leitura das representações e da atenção. Compare Python 1/Álgebra 4 com Python 4/Álgebra 1; leia as recomendações específicas. Pergunto à turma: “Um pré-requisito fraco impede começar?” Ele indica uma lacuna para trabalhar cedo; a demonstração propõe tarefas concretas de revisão."
+    },
+    {
+      "title": "Percorra as sete camadas",
+      "view": "layers",
+      "explanation": "O curso parte do texto e chega a sistemas avaliáveis. Um erro na camada de recuperação pede uma intervenção diferente de um erro de geração.",
+      "action": "Avance o número de laboratórios e identifique o último artefato disponível.",
+      "board": "Representação → arquitetura → treino → adaptação → RAG → agentes → avaliação",
+      "question": "Onde investigar uma resposta sem documento de apoio?",
+      "answer": "Primeiro na recuperação e na evidência entregue ao modelo; trocar a arquitetura sem diagnóstico não localiza a falha.",
+      "focus": 1,
+      "speech": "O curso parte do texto e chega a sistemas avaliáveis. Um erro na camada de recuperação pede uma intervenção diferente de um erro de geração. Avance o número de laboratórios e identifique o último artefato disponível. Pergunto à turma: “Onde investigar uma resposta sem documento de apoio?” Primeiro na recuperação e na evidência entregue ao modelo; trocar a arquitetura sem diagnóstico não localiza a falha."
+    },
+    {
+      "title": "Planeje o tempo que existe",
+      "view": "time",
+      "explanation": "Uma agenda precisa reservar execução, leitura e análise dos resultados. A divisão exibida é uma sugestão ajustável de organização pessoal, não uma carga oficial adicional.",
+      "action": "Altere Horas semanais de 2 para 8 e compare o tempo sugerido para testar e escrever conclusões.",
+      "board": "Tempo disponível = leitura + implementação + análise",
+      "question": "Por que reservar tempo para análise além do código?",
+      "answer": "O entregável exige interpretar o que foi medido; terminar a execução sem explicar o resultado deixa a aprendizagem incompleta.",
+      "focus": 1,
+      "speech": "Uma agenda precisa reservar execução, leitura e análise dos resultados. A divisão exibida é uma sugestão ajustável de organização pessoal, não uma carga oficial adicional. Altere Horas semanais de 2 para 8 e compare o tempo sugerido para testar e escrever conclusões. Pergunto à turma: “Por que reservar tempo para análise além do código?” O entregável exige interpretar o que foi medido; terminar a execução sem explicar o resultado deixa a aprendizagem incompleta."
+    },
+    {
+      "title": "Calcule a composição da avaliação",
+      "view": "grades",
+      "explanation": "O plano do curso prevê laboratórios com peso 30%, prova com 30% e projeto com 40%. O campo de laboratórios representa a média após o descarte da menor entre oito notas.",
+      "action": "Altere apenas Projeto em um ponto e observe a variação de 0,4 na nota ponderada.",
+      "board": "Nota = 0,30 L + 0,30 P + 0,40 J",
+      "question": "Aumentar a prova em um ponto produz o mesmo efeito do projeto?",
+      "answer": "Não: produz 0,3 contra 0,4; os pesos multiplicam a variação individual.",
+      "focus": 2,
+      "speech": "O plano do curso prevê laboratórios com peso 30%, prova com 30% e projeto com 40%. O campo de laboratórios representa a média após o descarte da menor entre oito notas. Altere apenas Projeto em um ponto e observe a variação de 0,4 na nota ponderada. Pergunto à turma: “Aumentar a prova em um ponto produz o mesmo efeito do projeto?” Não: produz 0,3 contra 0,4; os pesos multiplicam a variação individual."
+    },
+    {
+      "title": "Entenda o percurso dos laboratórios",
+      "view": "labs",
+      "explanation": "Os oito laboratórios deixam produtos progressivos: tokenização, mini-GPT, decodificação, adaptação, RAG, ferramentas, agente e avaliação. Concluir um laboratório significa conseguir mostrar o artefato e defender uma medição.",
+      "action": "Selecione 3 e depois 6 laboratórios concluídos; identifique o próximo produto.",
+      "board": "Executar → medir → interpretar → versionar",
+      "question": "O que distingue um notebook executado de um entregável?",
+      "answer": "Um entregável inclui entradas, configuração, resultados e interpretação suficientes para outra pessoa repetir o experimento.",
+      "focus": 2,
+      "speech": "Os oito laboratórios deixam produtos progressivos: tokenização, mini-GPT, decodificação, adaptação, RAG, ferramentas, agente e avaliação. Concluir um laboratório significa conseguir mostrar o artefato e defender uma medição. Selecione 3 e depois 6 laboratórios concluídos; identifique o próximo produto. Pergunto à turma: “O que distingue um notebook executado de um entregável?” Um entregável inclui entradas, configuração, resultados e interpretação suficientes para outra pessoa repetir o experimento."
+    },
+    {
+      "title": "Escolha o material pela pergunta",
+      "view": "materials",
+      "explanation": "O plano informa objetivos, o guia ajuda no estudo e o notebook contém a execução. A demonstração interativa torna as relações visíveis, enquanto os roteiros de fala orientam o professor.",
+      "action": "Compare os cartões e associe a dúvida sobre uma fórmula ao material de estudo adequado.",
+      "board": "Objetivo: plano; intuição: demonstração; execução: notebook; revisão: guia",
+      "question": "Todos os materiais precisam ser lidos na mesma ordem?",
+      "answer": "Não: a pergunta guia a consulta, mas objetivo, evidência e reflexão precisam estar conectados ao final.",
+      "focus": 3,
+      "speech": "O plano informa objetivos, o guia ajuda no estudo e o notebook contém a execução. A demonstração interativa torna as relações visíveis, enquanto os roteiros de fala orientam o professor. Compare os cartões e associe a dúvida sobre uma fórmula ao material de estudo adequado. Pergunto à turma: “Todos os materiais precisam ser lidos na mesma ordem?” Não: a pergunta guia a consulta, mas objetivo, evidência e reflexão precisam estar conectados ao final."
+    },
+    {
+      "title": "Use IA com responsabilidade acadêmica",
+      "view": "evidence",
+      "explanation": "Uma resposta produzida com ajuda de IA precisa continuar verificável e explicável pelo aluno. Registrar como a ferramenta foi usada permite distinguir assistência de evidência.",
+      "action": "Aumente Laboratórios concluídos e leia qual registro deve acompanhar o artefato atual.",
+      "board": "Ajuda recebida + verificação própria + limites encontrados",
+      "question": "Uma resposta eloquente substitui uma medição?",
+      "answer": "Não: previsões devem ser confrontadas com execução ou fontes adequadas; registre o que foi conferido e o que continua incerto.",
+      "focus": 3,
+      "speech": "Uma resposta produzida com ajuda de IA precisa continuar verificável e explicável pelo aluno. Registrar como a ferramenta foi usada permite distinguir assistência de evidência. Aumente Laboratórios concluídos e leia qual registro deve acompanhar o artefato atual. Pergunto à turma: “Uma resposta eloquente substitui uma medição?” Não: previsões devem ser confrontadas com execução ou fontes adequadas; registre o que foi conferido e o que continua incerto."
+    },
+    {
+      "title": "Prepare um ambiente reproduzível",
+      "view": "setup",
+      "explanation": "O ambiente precisa importar dependências e executar um exemplo mínimo antes do trabalho principal. Esta tela é um checklist didático e não executa comandos no computador do aluno.",
+      "action": "Observe a sequência de verificação e relacione a recomendação à sua autoavaliação de Python.",
+      "board": "Ambiente isolado → dependências → execução mínima → versões",
+      "question": "Por que registrar versões se hoje tudo funciona?",
+      "answer": "Uma atualização pode alterar resultados ou APIs; o registro ajuda a distinguir mudança do código de mudança do ambiente.",
+      "focus": 4,
+      "speech": "O ambiente precisa importar dependências e executar um exemplo mínimo antes do trabalho principal. Esta tela é um checklist didático e não executa comandos no computador do aluno. Observe a sequência de verificação e relacione a recomendação à sua autoavaliação de Python. Pergunto à turma: “Por que registrar versões se hoje tudo funciona?” Uma atualização pode alterar resultados ou APIs; o registro ajuda a distinguir mudança do código de mudança do ambiente."
+    },
+    {
+      "title": "Feche com um plano observável",
+      "view": "summary",
+      "explanation": "O objetivo da recepção é sair com um próximo passo concreto, tempo reservado e entendimento da avaliação. Os números exibidos são uma simulação de planejamento, não o boletim real do curso.",
+      "action": "Configure sua disponibilidade e uma meta de laboratório; leia o próximo passo calculado.",
+      "board": "Próximo passo + prazo pessoal + evidência de conclusão",
+      "question": "Que evidência mostra que a recepção cumpriu seu objetivo?",
+      "answer": "O aluno consegue abrir o material correto, executar o exemplo inicial e explicar o produto que construirá em seguida.",
+      "focus": 5,
+      "speech": "O objetivo da recepção é sair com um próximo passo concreto, tempo reservado e entendimento da avaliação. Os números exibidos são uma simulação de planejamento, não o boletim real do curso. Configure sua disponibilidade e uma meta de laboratório; leia o próximo passo calculado. Pergunto à turma: “Que evidência mostra que a recepção cumpriu seu objetivo?” O aluno consegue abrir o material correto, executar o exemplo inicial e explicar o produto que construirá em seguida."
+    }
+  ]
+}

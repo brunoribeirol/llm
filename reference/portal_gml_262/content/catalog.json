@@ -1,0 +1,2078 @@
+{
+  "schema_version": 1,
+  "title": "Grandes Modelos de Linguagem: do Transformer aos Agentes de IA",
+  "source": "Materiais autorais da revisão V2",
+  "lessons": [
+    {
+      "id": 0,
+      "title": "Aula 0 — Recepção: o mapa do curso, os materiais e o ambiente",
+      "module": "0 — Recepção (extra-classe)",
+      "kind": "recepcao",
+      "duration": 60,
+      "objectives": [
+        "**Descrever** o artefato final da disciplina — um sistema com LLM, defendido em 12 minutos com demo ao vivo e uma tabela de métricas por camada — e dizer o que a pergunta de defesa vai cobrar.",
+        "**Localizar** qualquer uma das sete camadas do curso na pilha, nomeando a aula e o laboratório em que ela é construída.",
+        "**Enunciar** a composição da própria avaliação: a fórmula AV1/AV2, os pesos, os três marcos do projeto com data, e a distribuição da prova em 42/40/8/10.",
+        "**Distinguir** o fluxo do apêndice num material da disciplina, e dizer o que estudar em cada um antes de uma aula e antes da prova.",
+        "**Aplicar** a política de uso de IA: o que a declaração de uso precisa conter, e qual é a régua (defender o que se entrega).",
+        "**Ter** o ambiente funcionando: Colab com GPU habilitada, token do Hugging Face, chave de API testada, repositório criado com `.gitignore` que exclui chaves."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-00/guia-estudo.md",
+          "role": "student",
+          "bytes": 19289,
+          "sha256": "a156724c42a0a1788508f06258e518524050c9f7b1f4bdd08a663a5854b2f4ad"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-00/plano.md",
+          "role": "teacher",
+          "bytes": 16064,
+          "sha256": "4c7b0402fe0d500052de9b4cf2dfd35386521cf36a0b0bfcce95753c7d02962e"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-00/roteiro.md",
+          "role": "teacher",
+          "bytes": 27601,
+          "sha256": "db8d261b6d2242abb4c126d8bfd7938ae490ab94080c9e6a1ef5bedd6578ace9"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-00/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 34535,
+          "sha256": "1b47ca42e0a6fdb16b80df76ef522ff76aeab13d89c0bf07d43bde3a2d383534"
+        }
+      ],
+      "source": "v2/aulas/aula-00",
+      "step_count": 17
+    },
+    {
+      "id": 1,
+      "title": "Apresentação da disciplina; panorama de LLMs; tarefas e métricas de NLP",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Situar** os cinco saltos técnicos que vão de ELIZA ao ChatGPT, identificando o que cada um resolveu que o anterior não resolvia.",
+        "**Classificar** uma tarefa de NLP arbitrária em uma das três famílias — classificação de sequência, rotulagem de tokens, geração — a partir da forma da saída.",
+        "**Diagnosticar** por que um número de acurácia alto pode não significar nada, comparando-o com o piso trivial `1 − π`, e **calcular** precisão, revocação e `F₁` a partir de uma matriz de confusão dada (derivação em A.1 e A.2).",
+        "**Decidir**, para um caso de uso concreto, qual das duas métricas — precisão ou revocação — importa mais, justificando pelo **custo do erro** naquele caso, e **dizer** o que o `F₁` esconde ao tratar as duas como igualmente importantes.",
+        "**Explicar** o que BLEU, ROUGE e perplexidade medem, e **justificar** por que métricas baseadas em referência falham em geração aberta (derivação em A.3 e A.4).",
+        "**Enunciar** a tese do curso: o próximo-token como interface única, e o custo que essa unificação transferiu da modelagem para a avaliação — e **explicar** por que perplexidade não atravessa tokenizadores (derivação em A.5)."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-01/guia-estudo.md",
+          "role": "student",
+          "bytes": 41169,
+          "sha256": "7088d4e58e463ad3100972ebe025fc130865883c312d41026dfcad5dead6b9a4"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-01/plano.md",
+          "role": "teacher",
+          "bytes": 28813,
+          "sha256": "5ee1d97e8da19a0a69dbdda743183ac5765cad12c5a2db9e7e8aff779c8f9660"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-01/roteiro.md",
+          "role": "teacher",
+          "bytes": 53601,
+          "sha256": "6747f86d1df029d15f6495271eaf7e74460a1edc509c5c8855e82e084898df69"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-01/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 84162,
+          "sha256": "075fdc85bc6f8ea4b55b9e60315cb63783ec5e821e07cd30c467d1e56d6920e7"
+        }
+      ],
+      "source": "v2/aulas/aula-01",
+      "step_count": 20
+    },
+    {
+      "id": 2,
+      "title": "Tokenização",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Justificar** por que nem palavra nem caractere serve como unidade de entrada, nomeando o custo específico de cada extremo (vocabulário aberto e OOV de um lado, comprimento de sequência do outro).",
+        "**Enunciar** o algoritmo do BPE e **explicar** o que ele produz — uma lista ordenada de merges, aplicada na ordem em que foi aprendida — e **prever** a segmentação de uma palavra nova a partir de uma lista dada (execução completa em A.1).",
+        "**Distinguir** BPE, WordPiece e Unigram pelo critério de decisão de cada um, e **separar** SentencePiece (implementação) de Unigram (algoritmo) (fundamentos em A.2 e A.3).",
+        "**Relacionar** tamanho de vocabulário, comprimento de sequência e custo da atenção, e **dizer em que regime** encurtar a sequência dá ganho quadrático e em que regime dá ganho linear (contagem em A.5).",
+        "**Medir** a fertilidade de um tokenizador em português e em inglês sobre o mesmo texto e **interpretar** a razão em dinheiro e em janela de contexto, sabendo qual das duas médias usar (formalização em A.4).",
+        "**Explicar** por que a perplexidade de dois modelos só é comparável sob o mesmo tokenizador, e **dizer quanto** ela muda — uma potência, não um fator — e qual normalização torna a comparação honesta (conta em A.6)."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-02/guia-estudo.md",
+          "role": "student",
+          "bytes": 38957,
+          "sha256": "eec1699da093fda7fbf1a5e7890655a2ff8973878c87dc6179b3c519eb8ddce0"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-02/plano.md",
+          "role": "teacher",
+          "bytes": 29943,
+          "sha256": "8731ae52ef37a0d1eba5d64c22f372ff2835a95bdadb886d7e46cbf787b17d0e"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-02/roteiro.md",
+          "role": "teacher",
+          "bytes": 48145,
+          "sha256": "003612e931af960e24cb3a701e712af6ecebbb37904624594a03170be886a360"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-02/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 72685,
+          "sha256": "e5c5c92a65d5bf41587b3df00d6bc9f8e37f1d5538726029979d3686967c2b50"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-02/codigo-student.zip",
+          "derived_from": "aulas/aula-02/codigo",
+          "bytes": 4626,
+          "sha256": "fb0ebf0e3c9e3885b828e1b13ebd1ef9c3085c0792dc1dd3a2f6ba26d227d5c8"
+        }
+      ],
+      "source": "v2/aulas/aula-02",
+      "step_count": 18
+    },
+    {
+      "id": 3,
+      "title": "Embeddings e representações vetoriais",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Explicar** por que a representação one-hot impede generalização, partindo da ortogonalidade dos vetores e do cosseno nulo entre quaisquer duas palavras distintas.",
+        "**Enunciar** a hipótese distribucional e **derivar** dela o critério operacional de proximidade entre vetores de palavras.",
+        "**Calcular** a similaridade de cosseno entre dois vetores e **justificar** por que se usa cosseno em vez de distância euclidiana em espaços de palavras.",
+        "**Distinguir** CBOW de skip-gram pela tarefa-proxy que cada um resolve e pelo regime de dados em que cada um é preferível.",
+        "**Explicar** a amostragem negativa como reescrita do objetivo de treino em classificação binária, e **estimar** a economia de custo por exemplo.",
+        "**Identificar** o limite do embedding estático em palavras ambíguas e **justificar** a necessidade de representações contextuais."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-03/guia-estudo.md",
+          "role": "student",
+          "bytes": 36293,
+          "sha256": "736fc93da6d657fa01964e16a0b4998ef877ab7b551db00ae50efc138c4465e7"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-03/plano.md",
+          "role": "teacher",
+          "bytes": 30962,
+          "sha256": "4343753b3b8556d4f567e47edcd2e8711342bb2bc4c91e6c3fda811e61850f13"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-03/roteiro.md",
+          "role": "teacher",
+          "bytes": 45699,
+          "sha256": "5a319371c9391823d7d2190d4c28038c05bc8467f5c389e2582eda73f74117b7"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-03/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 80015,
+          "sha256": "2ddfe46fc72aa7bc53ba8948e8009e546d6129966a0454c5be21343121b02a8f"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-03/codigo-student.zip",
+          "derived_from": "aulas/aula-03/codigo",
+          "bytes": 18126,
+          "sha256": "00a290f8fa683ceef1472d6d25bc1b6d95375dfbab6a10136fd29545bb729ed2"
+        }
+      ],
+      "source": "v2/aulas/aula-03",
+      "step_count": 19
+    },
+    {
+      "id": 4,
+      "title": "Laboratório 1: Tokenizadores e embeddings",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "laboratorio",
+      "duration": 120,
+      "objectives": [
+        "**Carregar** tokenizadores de famílias diferentes (BPE byte-level, WordPiece, Unigram/SentencePiece) via Hugging Face e **comparar** contagem de tokens e fertilidade sobre um mesmo texto.",
+        "**Medir** a razão de tokens PT/EN num corpus paralelo e **projetar** a consequência dessa razão em custo relativo e em ocupação de janela de contexto.",
+        "**Treinar** um modelo Word2Vec skip-gram com `gensim` sobre corpus em português, reportando vocabulário resultante e tempo de treino.",
+        "**Visualizar** embeddings em 2D com PCA e t-SNE e **interpretar** o agrupamento por grupo semântico.",
+        "**Testar** analogias vetoriais e **explicar**, com evidência do próprio notebook, por que a maioria falha num corpus pequeno.",
+        "**Justificar** qual intervenção — trocar de tokenizador ou treinar embeddings próprios — tem mais impacto num sistema em português, citando um número que ele mesmo mediu."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-04/guia-estudo.md",
+          "role": "student",
+          "bytes": 37170,
+          "sha256": "43cfc770515ef40566341b01ed58506a61393107c6d438066694e2bd0c4ecf54"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-04/plano.md",
+          "role": "teacher",
+          "bytes": 34561,
+          "sha256": "420d2e2e456e251102917b0e48a5577365b6764efb8267ee38e94e3eed983f4d"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-04/roteiro.md",
+          "role": "teacher",
+          "bytes": 48854,
+          "sha256": "f65c63bec7a32cefbf8d603948da4c1b5011194cfb4d15d86638a93d27f4b177"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-04/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 77847,
+          "sha256": "76598bbac670e3f869cf4eb9257d0bef8b4de2e627ac7d27f645c5ec92694412"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-04/codigo-student.zip",
+          "derived_from": "aulas/aula-04/codigo",
+          "bytes": 29099,
+          "sha256": "41b8a09bff1719360cf90f376665160ba3a22af865772d63134da8e0e2c3cb92"
+        }
+      ],
+      "source": "v2/aulas/aula-04",
+      "step_count": 15
+    },
+    {
+      "id": 5,
+      "title": "Modelos sequenciais e o nascimento da atenção",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Ler** a recorrência `h_t = f(h_(t-1), x_t)` e **explicar** por que a ordem dos tokens altera a saída e por que o número de parâmetros não depende do comprimento (fundamento em A.1).",
+        "**Diagnosticar** um modelo que não aprende dependências longas a partir do produto de fatores no caminho de volta, e **distinguir** o problema de otimização do problema de capacidade (derivação em A.2).",
+        "**Identificar** quais das três dívidas estruturais (dependência longa, gradiente, ausência de paralelismo) o LSTM ataca e quais ele deixa intactas, e **justificar** o veredito de cada uma (equações em A.3).",
+        "**Diagnosticar** o gargalo do vetor de contexto fixo em uma arquitetura seq2seq a partir da curva de qualidade × comprimento, e **prever** em que tipo de entrada ele falha primeiro (argumento em A.4).",
+        "**Interpretar** um vetor de contexto de Bahdanau a partir de scores de alinhamento dados — dizer para onde o modelo olhou, o que mudaria se os scores mudassem de escala — e **calcular** `α_(t,j)` e `c_t` quando pedido (derivação e exemplo numérico em A.5).",
+        "**Mapear** os papéis Query, Key e Value sobre a atenção aditiva — consulta derivada do estado do decoder, chave derivada de cada estado do encoder e valor lido desse estado — e **distinguir** esse mapeamento conceitual das projeções matriciais da Aula 6 (A.6)."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-05/guia-estudo.md",
+          "role": "student",
+          "bytes": 33027,
+          "sha256": "f21fa7e2279202cf57562eea8469ad71f89bc161afbdcef1de6497cdb39cb481"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-05/plano.md",
+          "role": "teacher",
+          "bytes": 24835,
+          "sha256": "d4ce9de2023d1fe040ac664d86a2bdfa150920ce6c457db7be8d76aad55680c4"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-05/roteiro.md",
+          "role": "teacher",
+          "bytes": 40092,
+          "sha256": "75c4b2a77a0368755b778dd2c15a0ca538063f8c25fb07952cdc476e0abd569d"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-05/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 69136,
+          "sha256": "10447a2856b842948118e8a3edc7584efd46735e6a12f93d919d91f8e24ac9e0"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-05/codigo-student.zip",
+          "derived_from": "v2/aulas/aula-05/codigo",
+          "bytes": 1010,
+          "sha256": "36cf0d72049ddeeb88a1e1a785be7c586945653b69268127bf5c178d3751dce8"
+        }
+      ],
+      "source": "v2/aulas/aula-05",
+      "step_count": 27
+    },
+    {
+      "id": 6,
+      "title": "Transformer I: self-attention e a arquitetura",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Explicar** os papéis de Q, K e V e por que as três projeções vêm da mesma entrada na self-attention.",
+        "**Enunciar** `Attention(Q,K,V) = softmax(QKᵀ/√d_k)V` e **descrever** a função de cada termo.",
+        "**Investigar** a saturação do softmax como possível causa de dificuldade no treinamento e **justificar** o fator de escala com o argumento desenvolvido em A.2.",
+        "**Reconhecer** sinais de possível vazamento de futuro e **verificar** a ordem entre máscara e softmax, com apoio da análise em A.3.",
+        "**Descrever** o que as várias cabeças de atenção acrescentam e **explicar** por que um mapa de pesos, sozinho, não determina a função de uma cabeça no modelo.",
+        "**Estimar** a memória ocupada pela matriz de atenção e **relacionar** essa estimativa ao comprimento de contexto que cabe no hardware disponível.",
+        "**Localizar** encoder, decoder, self-attention causal e cross-attention no diagrama e **explicar** a geração de texto token a token."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-06/guia-estudo.md",
+          "role": "student",
+          "bytes": 25447,
+          "sha256": "31bf3f7855596a73fd5f5c13a8665dd140cb639994a3dd7f97982114424bcea6"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-06/plano.md",
+          "role": "teacher",
+          "bytes": 15095,
+          "sha256": "d4fda11cf508e9c42e038cb472760fd75f479ab87b5babfd5f57221bdb518660"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-06/roteiro.md",
+          "role": "teacher",
+          "bytes": 29651,
+          "sha256": "42aa6786903855c5a504bc354391aec8fe6db0ecf0a1e2164156616bc23c4928"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-06/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 51101,
+          "sha256": "c580dd8b3f19b5283ab7d24faba09cc4c58df70660c828d3de7ec20164581f31"
+        },
+        {
+          "name": "Transformer completo — versão do professor",
+          "label": "Transformer completo — versão do professor",
+          "mime": "text/html",
+          "path": "aula-06/transformer-arquitetura-interativa.html",
+          "role": "teacher",
+          "bytes": 64466,
+          "sha256": "35d54e2e35fff4ec92deaab185b54f44b3c8d8e4ce117a8c8ed7a3117846d3b4",
+          "derived_from": "aula-06/transformer-arquitetura-interativa.html",
+          "source_sha256": "353e5ad8984c936292a455f25ee8991f53e079331d2a07ce1431f1a37bb6b927"
+        },
+        {
+          "name": "Encoder e decoder — demonstração",
+          "label": "Encoder e decoder — demonstração",
+          "mime": "text/html",
+          "path": "aula-06/encoder-decoder-visual.html",
+          "role": "teacher",
+          "bytes": 26458,
+          "sha256": "096979f1ed92068c82ab1e025137f0cfc1e85cff6ff6c3792d292e6d7ff48fe8",
+          "derived_from": "aula-06/encoder-decoder-visual.html",
+          "source_sha256": "fa0bdd61379972d2fde0bcfb90a22a5f4f7cd1c755a2063fac09c5558d92fad1"
+        },
+        {
+          "name": "Transformer completo — versão de estudo",
+          "label": "Transformer completo — versão de estudo",
+          "mime": "text/html",
+          "role": "student",
+          "path": "aula-06/transformer-arquitetura-estudante.html",
+          "derived_from": "aula-06/transformer-arquitetura-interativa.html",
+          "bytes": 55005,
+          "sha256": "46deb9e25a9d018102c33f032bb67888fcb008629929dddb5f1b825477cdba89"
+        },
+        {
+          "name": "Fala passo a passo da demonstração Transformer",
+          "label": "Fala passo a passo da demonstração Transformer",
+          "mime": "text/markdown",
+          "path": "aula-06/roteiro-de-fala-demonstracao-transformer.md",
+          "role": "teacher",
+          "bytes": 67392,
+          "sha256": "d08dbb394916de14d2f11ed645d52fcef69d7b6e65b845d4e67915eb05bf8439"
+        },
+        {
+          "name": "Aula para o quadro branco",
+          "label": "Aula para o quadro branco",
+          "mime": "text/markdown",
+          "path": "aula-06/aula-quadro-branco.md",
+          "role": "teacher",
+          "bytes": 51095,
+          "sha256": "4139049c26ac5f848fe6335eb716b9ede2a87ccc993083d9128a5ef3da060d3e"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-06/codigo-student.zip",
+          "derived_from": "v2/aulas/aula-06/codigo",
+          "bytes": 38600,
+          "sha256": "aacf8f775313e98158529c5fc9db05c5e052746850180816e5f6aefc94bad4d5"
+        }
+      ],
+      "source": "v2/aulas/aula-06",
+      "step_count": 25
+    },
+    {
+      "id": 7,
+      "title": "Transformer II: posição, normalização e o bloco moderno",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Reconhecer** o sintoma da invariância a permutação (`Attention(P X) = P · Attention(X)`) e **explicar** por que a máscara causal não resolve isso e por que no encoder o problema aparece puro.",
+        "**Distinguir** as três estratégias de codificação posicional — senoidal, aprendida e RoPE — pelo ponto exato do cálculo em que cada uma injeta a posição, e **prever** o modo de falha de cada uma (fundamento em A.1 e A.2).",
+        "**Explicar** por que rotacionar Q e K faz o score depender de `m − n` e não de `m` e `n` isoladamente, **justificar** por que a rotação não se aplica a V, e **interpretar** a medição que mostra o mesmo score dentro e fora do comprimento de treino (demonstração em A.2).",
+        "**Justificar** a conexão residual pelo termo identidade na derivada de `y = x + f(x)` e **prever** o que acontece com uma pilha profunda sem ela (derivação em A.3).",
+        "**Comparar** LayerNorm com RMSNorm e pré-norm com pós-norm, apontando o que cada troca compra em estabilidade e o que ela custa (derivações em A.4 e A.5).",
+        "**Montar** o bloco Transformer moderno na ordem correta e **calcular** a divisão de parâmetros entre atenção e feed-forward em função de `d_model`, incluindo o efeito de dobrar `d_model` (contagem em A.6)."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-07/guia-estudo.md",
+          "role": "student",
+          "bytes": 32681,
+          "sha256": "f092aa58e8fcfceba87b28d3385cb8a220723523d863b821ceb0d1113d467e27"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-07/plano.md",
+          "role": "teacher",
+          "bytes": 25080,
+          "sha256": "0761ff5c6c272a4856d5fe0bc3b8af59bb9c269d669d8bdb2d5c22f21cd92525"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-07/roteiro.md",
+          "role": "teacher",
+          "bytes": 39401,
+          "sha256": "b45514060952e3cd9c65d2731c5cb14be27062d05bba3319ae18703eb1ef7f57"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-07/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 74710,
+          "sha256": "8c1e500be3e0ee6bd6c15826af7d1a1feb943221aae42cf9ffb129078c4f6496"
+        }
+      ],
+      "source": "v2/aulas/aula-07",
+      "step_count": 22
+    },
+    {
+      "id": 8,
+      "title": "Famílias de modelos e atenção eficiente",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Distinguir** encoder-only, encoder-decoder e decoder-only pela máscara de atenção e pelo objetivo de pré-treino — não pelo tamanho, pelo nome ou pela data do modelo.",
+        "**Explicar** o objetivo MLM e o papel do token `[CLS]`, e **descrever** como um fine-tuning troca a cabeça de tarefa sobre o mesmo corpo pré-treinado.",
+        "**Justificar** por que a previsão do próximo token dominou, e **apontar** dois cenários concretos em que um encoder-only continua sendo a escolha certa.",
+        "**Calcular** o tamanho do KV cache a partir de `n_layers`, `n_kv_heads`, `d_head`, `n_tokens` e bytes por valor, e **derivar** o fator de redução de MQA e GQA.",
+        "**Comparar** o custo de atenção plena, de janela deslizante e de janela com atenção global em função de `n` e `w`, e **explicar** como a informação de longa distância sobrevive à janela.",
+        "**Explicar** o que a destilação transfere do professor para o aluno que um rótulo duro não transfere."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-08/guia-estudo.md",
+          "role": "student",
+          "bytes": 41941,
+          "sha256": "ffa66e7a662d687bda37f11ebed3c10aabacd59b1d298b83581617f87c51966e"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-08/plano.md",
+          "role": "teacher",
+          "bytes": 41287,
+          "sha256": "11cd5e16b65dd2f7d2e8eec78b6cdc7f5b4e6a0300ce52572dc2f14be734f140"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-08/roteiro.md",
+          "role": "teacher",
+          "bytes": 53491,
+          "sha256": "6d33e61086b601876846448c552add744ac4482118aa50a173cd4f9c139e9d99"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-08/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 82130,
+          "sha256": "05494970e5ccb0a96a5cf7ec86cf74885507ffdb9b07f77f113685bfe354803d"
+        }
+      ],
+      "source": "v2/aulas/aula-08",
+      "step_count": 19
+    },
+    {
+      "id": 9,
+      "title": "Laboratório 2: Mini-GPT do zero em PyTorch",
+      "module": "1 — Fundamentos: do texto ao Transformer",
+      "kind": "laboratorio",
+      "duration": 120,
+      "objectives": [
+        "**Implementar** scaled dot-product attention com masking causal em PyTorch a partir da fórmula `softmax(QKᵀ/√d_k)V`, e **verificar** a causalidade por teste automatizado.",
+        "**Construir** multi-head attention por reshape de tensores — cabeças como dimensão de lote, sem laço em Python.",
+        "**Montar** um bloco Transformer pré-norm completo (residual + LayerNorm + feed-forward) e **empilhá-lo** num decoder-only com embedding posicional aprendido.",
+        "**Treinar** o modelo em corpus pequeno com AdamW e **gerar** texto por amostragem autorregressiva com controle de temperatura.",
+        "**Medir** perplexidade por caractere com `PPL = exp(loss)` e **justificar** por que ela não é comparável com a perplexidade de um tokenizador de subword.",
+        "**Comparar** configurações de hiperparâmetros (cabeças, camadas, contexto) pela loss de validação e **enunciar** o que uma única execução não permite concluir."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-09/guia-estudo.md",
+          "role": "student",
+          "bytes": 38201,
+          "sha256": "5a729974697029e023f140e97a0dfe8f736dcdef1613eea0e7cd764cbb99727f"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-09/plano.md",
+          "role": "teacher",
+          "bytes": 32333,
+          "sha256": "c732f59afc9988aaced0a34e23b4e40f29c31bf0341dee64bbab28d42ff637d4"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-09/roteiro.md",
+          "role": "teacher",
+          "bytes": 50099,
+          "sha256": "5d25764aaa0a1b2462110d64208004c8dfe860fed75b99e57969b3c7f4fce04c"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-09/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 86433,
+          "sha256": "79195f41d97cd2c696d3d831b3950b2ab094c6b7203df4e36ee3857167817086"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-09/codigo-student.zip",
+          "derived_from": "aulas/aula-09/codigo",
+          "bytes": 12720,
+          "sha256": "304ee1807d46c52589fb7328027e006d9b6299fe107bd9b3ebf2ab22a7b569a5"
+        },
+        {
+          "name": "Código e soluções do professor",
+          "label": "Código e soluções do professor",
+          "mime": "application/zip",
+          "role": "teacher",
+          "path": "aula-09/codigo-teacher.zip",
+          "derived_from": "aulas/aula-09/codigo",
+          "bytes": 18182,
+          "sha256": "924804ea00dccb40396d7d8bb3081450f42c2d5402efbde6e274bab8a497fb7c"
+        }
+      ],
+      "source": "v2/aulas/aula-09",
+      "step_count": 14
+    },
+    {
+      "id": 10,
+      "title": "Do Transformer ao LLM: escala, MoE, decodificação e prompting",
+      "module": "2 — Do Transformer ao LLM: escala e inferência",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "Distinguir parâmetros **totais** de parâmetros **ativos por token** num modelo Mixture of Experts, e explicar por que os dois números divergem.",
+        "Reconhecer o **colapso de roteamento** pelo sintoma observável e nomear o mecanismo que o previne.",
+        "Prever, dada uma distribuição de próximo token, quais candidatos sobrevivem a `top-k` e a `top-p`, e o que a temperatura faz com essa distribuição.",
+        "Justificar por que o beam search encontra a sequência de maior probabilidade conjunta e ainda assim produz respostas curtas e genéricas.",
+        "Diagnosticar, a partir de um comportamento relatado, **qual parâmetro de decodificação** foi mal escolhido — e dizer que medição confirmaria o diagnóstico.",
+        "Explicar por que uma janela de contexto grande não é memória confiável, e nomear os três gargalos de serving (memória do cache, banda, ocupação) com a resposta técnica de cada um."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-10/guia-estudo.md",
+          "role": "student",
+          "bytes": 40851,
+          "sha256": "d9c1b79ae8495868c07be4a0af5cd58e8014db3f21ff17fc2d9689fd4bd13829"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-10/plano.md",
+          "role": "teacher",
+          "bytes": 15869,
+          "sha256": "a59fe6534b9397c450862fadd9e32e284f6f74eb01e0f0a8f31875c76be4334b"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-10/roteiro.md",
+          "role": "teacher",
+          "bytes": 50175,
+          "sha256": "494d6192fb47e1cdf40b5abbddc405d310add37f0f1570a3fd340f55f473bc02"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-10/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 81467,
+          "sha256": "82a3541ec2304ad1fe07841701e30f0078abd894ecef6a7f605815d1d028225f"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-10/codigo-student.zip",
+          "derived_from": "aulas/aula-10/codigo",
+          "bytes": 5114,
+          "sha256": "70279f0e97a82be4ccf4b901eda58a2fab4c594af48ca429bd4e862385507d63"
+        }
+      ],
+      "source": "v2/aulas/aula-10",
+      "step_count": 20
+    },
+    {
+      "id": 11,
+      "title": "Laboratório 3: Decodificação e prompting na prática",
+      "module": "2 — Do Transformer ao LLM: escala e inferência",
+      "kind": "laboratorio",
+      "duration": 120,
+      "objectives": [
+        "Implementar temperatura, `top-k` e `top-p` sobre uma distribuição de próximo token, aplicando a temperatura **no logit** e renormalizando após o truncamento.",
+        "Prever e verificar que o tamanho do nucleus **não encolhe** quando a temperatura sobe.",
+        "Separar erro de rótulo de resposta fora do espaço de rótulos, e dizer qual dos dois o few-shot resolve.",
+        "Quantificar o custo do chain-of-thought em tokens de saída por ponto de acurácia ganho — e interpretar corretamente o caso em que o ganho é nulo.",
+        "Construir uma tabela de comparação gerada por código, com mediana de três repetições e a dispersão ao lado, e dizer o que ela **não** permite concluir.",
+        "Escolher entre modelo local pequeno e modelo de API para um cenário dado, justificando com os três eixos medidos."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-11/guia-estudo.md",
+          "role": "student",
+          "bytes": 15843,
+          "sha256": "52b23abcd94f84f3e7f89d212e4b15be9092ab30089970aaa0513c31ca670b7d"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-11/plano.md",
+          "role": "teacher",
+          "bytes": 18275,
+          "sha256": "53f0e4aa16b4b1c89c396aa8e14297ae4acc0325e39df808d10837ef3db53b9d"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-11/roteiro.md",
+          "role": "teacher",
+          "bytes": 22966,
+          "sha256": "b1a77cba5437386e60e8e0f020b2558b637b500a8089b77d5498ad83a8f5b7a7"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-11/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 73556,
+          "sha256": "9b31770bede1683207c997fd19798e298b7c68f0a81df1e4c7ad14f24a8e1e61"
+        },
+        {
+          "name": "Código e soluções do professor",
+          "label": "Código e soluções do professor",
+          "mime": "application/zip",
+          "role": "teacher",
+          "path": "aula-11/codigo-teacher.zip",
+          "derived_from": "aulas/aula-11/codigo",
+          "bytes": 11817,
+          "sha256": "135694c9529b13c6afe97da94e75263a0894e6a34da124049096022d371c6b7e"
+        }
+      ],
+      "source": "v2/aulas/aula-11",
+      "step_count": 14
+    },
+    {
+      "id": 12,
+      "title": "Pré-treinamento: dados, leis de escala e sistemas",
+      "module": "3 — Treinamento: pré-treino, SFT e PEFT",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "Estimar o custo de treino em FLOPs por `C ≈ 6ND` e o custo de inferência por `C ≈ 2N`, explicando a assimetria entre o que se paga uma vez e o que se paga para sempre.",
+        "Calcular a alocação compute-optimal de Chinchilla para um orçamento dado e **justificar por que 20 tokens por parâmetro não é constante universal**.",
+        "Decompor a memória de treino nos quatro consumidores — pesos, gradientes, estados do otimizador, ativações — e diagnosticar qual deles estourou.",
+        "Distinguir paralelismo de dados, de tensor e de pipeline pelo que cada um particiona e pelo que cada um passa a comunicar.",
+        "Explicar por que a curadoria de corpus é decisão de modelagem e não de infraestrutura, nomeando os efeitos da duplicata sobre memorização e contaminação.",
+        "Justificar por que FlashAttention acelera sem reduzir a complexidade assintótica."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-12/guia-estudo.md",
+          "role": "student",
+          "bytes": 26591,
+          "sha256": "ba7fc813e59567d5009014f2862414c904cb018872e85e52893258e56756de07"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-12/plano.md",
+          "role": "teacher",
+          "bytes": 20720,
+          "sha256": "be5b0f40c07769c9c733082455ccaf45fd42209cfc9a4c98852e962e6e94a7b9"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-12/roteiro.md",
+          "role": "teacher",
+          "bytes": 33394,
+          "sha256": "524576ee488b2a824c341ca51ae4ea4bfdc739cf5b3fc2c80eeae1d5a16837f6"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-12/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 105847,
+          "sha256": "fb52462864c66e19791bb2212b808d6b6fc85c995996f60997f51af048f0bd8c"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-12/codigo-student.zip",
+          "derived_from": "aulas/aula-12/codigo",
+          "bytes": 6512,
+          "sha256": "95871704956aa99383ad5e83cdfa7522b3a633a0bf15da1e1105662f526ccbe5"
+        }
+      ],
+      "source": "v2/aulas/aula-12",
+      "step_count": 20
+    },
+    {
+      "id": 13,
+      "title": "SFT e fine-tuning eficiente: LoRA e QLoRA",
+      "module": "3 — Treinamento: pré-treino, SFT e PEFT",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Explicar** por que um modelo pré-treinado continua texto em vez de responder, e **justificar** por que esse comportamento é a consequência correta do objetivo de pré-treino e não um defeito.",
+        "**Descrever** o que o SFT muda e o que ele não muda: a mesma perda de próximo token, sobre dados de instrução formatados por um template de chat com tokens especiais de papel.",
+        "**Identificar** os dois riscos do SFT — esquecimento catastrófico e overfitting em dataset pequeno — pelos sintomas observáveis de cada um.",
+        "**Calcular** o número de parâmetros treináveis de uma configuração LoRA (`r · (d_in + d_out)` por módulo) e **expressá-lo** como fração do modelo base.",
+        "**Explicar** por que a inicialização `B = 0` faz o modelo adaptado começar idêntico ao base, e por que os adaptadores podem ser fundidos sem custo de latência na inferência.",
+        "**Distinguir** quantização para inferência de quantização para treino, e **descrever** o que o QLoRA congela em 4 bits e o que mantém em precisão alta.",
+        "**Aplicar** o framework de decisão prompting × RAG × fine-tuning a um caso novo, nomeando o que a alavanca escolhida resolve, o que ela não resolve e o que nenhuma das três resolve."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-13/guia-estudo.md",
+          "role": "student",
+          "bytes": 48367,
+          "sha256": "d42bff6fd92b627f039fe52e84864abcabda7df4f1820c431c3bd3c1d774db33"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-13/plano.md",
+          "role": "teacher",
+          "bytes": 43375,
+          "sha256": "e437d354bc149d385a98c603b3b1e8e80ced38d7130521b6ca3aa10d44ed891d"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-13/roteiro.md",
+          "role": "teacher",
+          "bytes": 60783,
+          "sha256": "9542aa98d03f027810193ba754d888ae320c9e2b6626418e4f78a05c001cc150"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-13/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 117434,
+          "sha256": "b622223a3c13372913fe10315182c4186bddf180eaa7678d4cd6513e6147ca66"
+        }
+      ],
+      "source": "v2/aulas/aula-13",
+      "step_count": 20
+    },
+    {
+      "id": 14,
+      "title": "Laboratório 4: Fine-tuning com LoRA/QLoRA",
+      "module": "3 — Treinamento: pré-treino, SFT e PEFT",
+      "kind": "laboratorio",
+      "duration": 120,
+      "objectives": [
+        "**Carregar** um modelo causal aberto com quantização NF4 de 4 bits via `BitsAndBytesConfig` e **medir** a memória de GPU efetivamente ocupada pelos pesos.",
+        "**Formatar** um conjunto de instruções com `apply_chat_template` e **inspecionar** a string tokenizada, identificando os tokens especiais de papel e o token que abre o turno do assistente.",
+        "**Configurar** LoRA com `peft.LoraConfig` e **conferir** a saída de `print_trainable_parameters()` contra a conta `r · (d_in + d_out)` feita à mão na Aula 13.",
+        "**Treinar** o adaptador com `Trainer`, acumulação de gradiente e recomputação de ativações, e **registrar** perda de treino, perda de validação, memória de pico e tempo.",
+        "**Comparar** o modelo antes e depois nos **mesmos** prompts, separando ganho de **formato** de ganho de **acerto**, e **medir** esquecimento com um conjunto de controle fora do domínio treinado.",
+        "**Salvar e recarregar apenas o adaptador**, e **declarar** o tamanho do arquivo do adaptador ao lado do tamanho do modelo base.",
+        "**Declarar a proveniência** de cada número do relatório: modelo, base quantizada ou não, dispositivo, número de passos e tamanho do conjunto."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-14/guia-estudo.md",
+          "role": "student",
+          "bytes": 35725,
+          "sha256": "013aedf771e20a8d808d78bcb0575f1b31f93bba2ec8d15f8d47dea95d526cb6"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-14/plano.md",
+          "role": "teacher",
+          "bytes": 40198,
+          "sha256": "2a0866f4874077f2496d6580cd9507e85dac379a2e8988afda8925a76a7db6fc"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-14/roteiro.md",
+          "role": "teacher",
+          "bytes": 50671,
+          "sha256": "d0f195d134d8d4b65521ede3363e63e67f218586d1f0a4804652abce6d84d855"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-14/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 91153,
+          "sha256": "b9212cbe77acc4bfc11154317b6428444da23670d07c6d614c9ec7d6aea3d9af"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-14/codigo-student.zip",
+          "derived_from": "aulas/aula-14/codigo",
+          "bytes": 23784,
+          "sha256": "84019fa48b4494e6f1658803d5459004ed3e1a6530f66a43323bea22b3e2e132"
+        },
+        {
+          "name": "Código e soluções do professor",
+          "label": "Código e soluções do professor",
+          "mime": "application/zip",
+          "role": "teacher",
+          "path": "aula-14/codigo-teacher.zip",
+          "derived_from": "aulas/aula-14/codigo",
+          "bytes": 44808,
+          "sha256": "a9bcc079142ab18f8ba780c7b93206f83fb5f798afcf3ece346c5ab7fdc122f0"
+        }
+      ],
+      "source": "v2/aulas/aula-14",
+      "step_count": 14
+    },
+    {
+      "id": 15,
+      "title": "Alinhamento: RLHF, PPO e DPO",
+      "module": "4 — Alinhamento e Raciocínio",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Explicar** por que maximizar a verossimilhança de bons exemplos (SFT) não ensina o modelo a evitar respostas ruins, e citar duas classes de falha que só o sinal de preferência corrige.",
+        "**Enunciar** a perda do modelo de recompensa de Bradley-Terry, **ler** cada termo, e **justificar** por que apenas as *diferenças* de recompensa são identificáveis (derivação em A.1).",
+        "**Mapear** a geração de texto para o vocabulário de RL — política, estado, ação, recompensa terminal — e **localizar** nesse mapa o papel do clipping, da vantagem e da regularização KL (A.2 e A.3).",
+        "**Diagnosticar** um caso de reward hacking a partir de sintomas observáveis (bajulação, inflação de comprimento, recusa excessiva), **propor a medição que o confirma** e indicar uma mitigação.",
+        "**Calcular** o custo de Best-of-N em tokens e latência, **ler** o desvio de KL que ele induz como orçamento equivalente (A.5), e decidir se ele cabe num orçamento de inferência dado.",
+        "**Escolher** entre DPO e PPO para um cenário concreto, justificando pela natureza dos dados, pela infraestrutura disponível e pela origem da recompensa."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-15/guia-estudo.md",
+          "role": "student",
+          "bytes": 37270,
+          "sha256": "d651da2430067c93867c9f36bca871bdb97ea428f6ac6defd8c3b65fbf498f57"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-15/plano.md",
+          "role": "teacher",
+          "bytes": 23555,
+          "sha256": "d051b6ad05fd6b97ee137b308fc8c6f7c9689775906a4ae9130be3183645adc3"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-15/roteiro.md",
+          "role": "teacher",
+          "bytes": 45740,
+          "sha256": "43e739b99e84f62f45be2b04ebb1af3244303575f1e4950e134559200729b3ba"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-15/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 75977,
+          "sha256": "edd40df78c768254a98deba47c8c40197174ec8bc4d4a488cb9cf72564560d66"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-15/codigo-student.zip",
+          "derived_from": "aulas/aula-15/codigo",
+          "bytes": 3897,
+          "sha256": "2f76cf072a8950e1079c72afddb2d3da8ef65e620b907e284806fc88f2884123"
+        }
+      ],
+      "source": "v2/aulas/aula-15",
+      "step_count": 20
+    },
+    {
+      "id": 16,
+      "title": "Modelos de raciocínio: GRPO e DeepSeek-R1",
+      "module": "4 — Alinhamento e Raciocínio",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Enunciar** a definição operacional de raciocínio usada no curso e **apontar** por que ela não é uma definição científica assentada.",
+        "**Quantificar** o custo de um modelo de raciocínio em três eixos — latência, preço por resposta e contexto consumido — e **decidir** quando ele não se justifica.",
+        "**Interpretar** `pass@k` a partir do estimador enunciado, **distinguir** o que ele mede do que `consensus@k` mede, e **usar** a distância entre os dois como argumento de decisão (derivação em A.1 e A.2).",
+        "**Explicar** o que torna uma recompensa verificável, **classificar** tarefas entre as que admitem verificador automático e as que não admitem, e **nomear o que o verificador não confere**.",
+        "**Descrever** o GRPO como vantagem relativa ao grupo de completações e **justificar** por que ele dispensa a função de valor aprendida do PPO (demonstração em A.3).",
+        "**Reconstituir** as quatro etapas do pipeline DeepSeek-R1 e **explicar** que problema cada etapa resolve da anterior.",
+        "**Diagnosticar** o crescimento de comprimento como efeito colateral do objetivo de RL, **dizer por onde ele entra** (o gradiente, não a recompensa) e **citar** as duas mitigações vistas (normalização de comprimento, budget forcing) — incluindo o viés que a primeira introduz (A.5)."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-16/guia-estudo.md",
+          "role": "student",
+          "bytes": 40806,
+          "sha256": "f0ff771adc24e882669d6ae5c7269c012e62e6db4e199464b7b97d12a3a042be"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-16/plano.md",
+          "role": "teacher",
+          "bytes": 26940,
+          "sha256": "9010b2ea1ebc84c254dfe79b264df8d3a474522150f7bc46afb396f96a72d6b3"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-16/roteiro.md",
+          "role": "teacher",
+          "bytes": 49025,
+          "sha256": "763baece4a587feb8f06f1299af9c4b87321d74e3f3d0e66d90f6432606771b0"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-16/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 67601,
+          "sha256": "db45e7b453e0cc3c8745d8bb4398989cc7869f386b1e457a70d1757bf8c34d72"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-16/codigo-student.zip",
+          "derived_from": "aulas/aula-16/codigo",
+          "bytes": 6692,
+          "sha256": "ee25667585516c854046de936ffb7e3bff6989f66e2a90cd37a6abe0acbf9d64"
+        }
+      ],
+      "source": "v2/aulas/aula-16",
+      "step_count": 19
+    },
+    {
+      "id": 17,
+      "title": "Prova (conteúdo das Aulas 1 a 16)",
+      "module": "4 — Alinhamento e Raciocínio",
+      "kind": "avaliacao",
+      "duration": 120,
+      "objectives": [
+        "**Diagnosticar** uma falha de treino ou de inferência a partir do sintoma, nomeando a causa e a evidência que a confirmaria.",
+        "**Interpretar** um resultado experimental (tabela de métricas, curva, saída de modelo) e dizer o que ele permite e o que **não** permite concluir.",
+        "**Justificar** uma escolha de arquitetura, técnica ou hiperparâmetro para um cenário com restrições dadas.",
+        "**Enunciar e aplicar** corretamente os fundamentos centrais do curso.",
+        "**Derivar** um resultado formal, quando a derivação for o instrumento da justificativa."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-17/guia-estudo.md",
+          "role": "student",
+          "bytes": 2369,
+          "sha256": "a9e94e8d29a8861f51c82af5ad37104307777c0439b4eb9f7295e4feaeeb00cc"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-17/plano.md",
+          "role": "teacher",
+          "bytes": 12212,
+          "sha256": "21737f642ce3b70947357f8bdbc4dad4de1405c8755525f954bb305af4cb6528"
+        },
+        {
+          "name": "Gabarito reservado da avaliação",
+          "label": "Gabarito reservado da avaliação",
+          "mime": "text/markdown",
+          "path": "aula-17/gabarito.md",
+          "role": "teacher",
+          "bytes": 15717,
+          "sha256": "aeee29fba9c32f3ace0077c360810f84fa2f02d27423067c18af143cddb4d149"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-17/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 11878,
+          "sha256": "8a72afa84bf418e195b3b347f5cf7e17e30e7a45725b9da42170e74825fa6be3"
+        }
+      ],
+      "source": "v2/aulas/aula-17",
+      "step_count": 5
+    },
+    {
+      "id": 18,
+      "title": "RAG I: geração aumentada por recuperação",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Justificar** a escolha de recuperação sobre re-treino e sobre contexto longo, usando três eixos concretos: custo, atualidade e auditabilidade.",
+        "**Enumerar** as nove etapas do pipeline de RAG na ordem correta e **separar** as que rodam offline (ingestão) das que rodam por consulta (online).",
+        "**Comparar** chunking de tamanho fixo, por fronteira semântica e contextual, e **prever** o modo de falha que cada um produz na recuperação.",
+        "**Explicar** por que um encoder pré-treinado cru não serve para busca e o que o treino contrastivo do Sentence-BERT muda na geometria do espaço.",
+        "**Distinguir** busca exata de busca aproximada (ANN) e **nomear** o parâmetro que troca recall por latência num índice HNSW.",
+        "**Formular** uma proposta de projeto final que satisfaça os quatro requisitos da ementa: duas técnicas do curso, avaliação quantitativa, repositório reproduzível e custo próximo de zero."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-18/guia-estudo.md",
+          "role": "student",
+          "bytes": 34224,
+          "sha256": "b065c01fb245da16ed1d71ca8b8ee389e7509aa406f6e8a14ea326284390dce5"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-18/plano.md",
+          "role": "teacher",
+          "bytes": 25169,
+          "sha256": "956b3dbb70c3d9b9d71fdaf49aabbf578e75f372baafaf073f846dd425e92077"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-18/roteiro.md",
+          "role": "teacher",
+          "bytes": 41729,
+          "sha256": "e13db9e374b0e940c6563aa3271ded350a7893e6fffba275dd221e78aa3c2489"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-18/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 55235,
+          "sha256": "8bb870d79e350a8d665b1fb69fe33d3003f272305e4f910f2015e31759afe6df"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-18/codigo-student.zip",
+          "derived_from": "aulas/aula-18/codigo",
+          "bytes": 4689,
+          "sha256": "dd24c0dc7c5f29359bba53893c242a67bd3869d5dcfa8469f3962bdb9d75aa8a"
+        }
+      ],
+      "source": "v2/aulas/aula-18",
+      "step_count": 19
+    },
+    {
+      "id": 19,
+      "title": "RAG II: retrieval híbrido, reranking e métricas",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Prever** qual estratégia — densa, esparsa (BM25) ou híbrida — vence numa consulta dada, a partir da presença de identificador, código, nome próprio raro ou paráfrase.",
+        "**Explicar** os dois parâmetros do BM25 (`k₁` de saturação de frequência e `b` de normalização por comprimento) e **justificar** por que somar scores de BM25 e cosseno diretamente é incorreto.",
+        "**Aplicar** Reciprocal Rank Fusion para fundir dois rankings e **argumentar** por que fundir por posição é mais robusto que fundir por score.",
+        "**Distinguir** bi-encoder de cross-encoder pelo momento em que a consulta encontra o documento, e **dimensionar** o custo de reranking em número de inferências por consulta.",
+        "**Calcular** `recall@k`, `precision@k`, MRR e nDCG@k a partir de uma lista de resultados rotulados, e **defender** por que `recall@k` do primeiro estágio é o teto do sistema inteiro.",
+        "**Nomear** três modos de falha de RAG — chunk mal cortado, contexto irrelevante competindo com a instrução e injeção de prompt via documento recuperado — e **apontar** em que etapa do pipeline cada um nasce."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-19/guia-estudo.md",
+          "role": "student",
+          "bytes": 32426,
+          "sha256": "cac388ab12334c79cae0ed3b32f77151dd3f706f8294d226062acd1669f95e5a"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-19/plano.md",
+          "role": "teacher",
+          "bytes": 26142,
+          "sha256": "2fb2c0a6405d11498ea341cc54c87c5bdf84d12d8a5fb3c707105b769be0bbef"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-19/roteiro.md",
+          "role": "teacher",
+          "bytes": 39926,
+          "sha256": "7ea2b5627fa1603476b3995b7d16921c7c5db19f60d2b6c039f03091f873430c"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-19/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 65034,
+          "sha256": "d2a21751642ec92b03e15950b79fe36619935a3138e01907a9acb9011f47f070"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-19/codigo-student.zip",
+          "derived_from": "aulas/aula-19/codigo",
+          "bytes": 7139,
+          "sha256": "7700f79c2615846e5e536bc4da7f6d8d6a7a7c6ce808ed8535d88a07828e6fa0"
+        }
+      ],
+      "source": "v2/aulas/aula-19",
+      "step_count": 19
+    },
+    {
+      "id": 20,
+      "title": "Laboratório 5: Pipeline RAG completo",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "laboratorio",
+      "duration": 120,
+      "objectives": [
+        "**Fatiar** um corpus em chunks com metadados de fonte e seção, e **inspecionar** a distribuição de tamanhos para detectar dispositivo cortado no meio.",
+        "**Indexar** os chunks com um modelo de embedding leve em Chroma (ou FAISS, ou matriz densa) e **recuperar** por similaridade de cosseno com `top-k` parametrizável.",
+        "**Fundir** o ranking denso com o ranking BM25 por Reciprocal Rank Fusion, e **verificar** que a fusão não depende de calibrar escala de score.",
+        "**Reordenar** os candidatos do primeiro estágio com um cross-encoder e **dimensionar** o custo em número de inferências por consulta.",
+        "**Gerar** uma resposta que cita as fontes recuperadas e **validar** por código que toda citação existe no contexto entregue ao modelo.",
+        "**Medir** `recall@k`, `precision@k` e MRR sobre um conjunto de 15 a 20 consultas rotuladas, **comparar** as três estratégias e **demonstrar** que o reranking mexe em `recall@3` e **não** mexe no `recall@k_ret`."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-20/guia-estudo.md",
+          "role": "student",
+          "bytes": 34119,
+          "sha256": "d63758e77a7377c36ae8a997887c05c665eea0bf30e08d16a8b693a8411d8006"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-20/plano.md",
+          "role": "teacher",
+          "bytes": 35804,
+          "sha256": "9f74240a6631394f2ff9fcf8182fb195f0fef94d85c4ee283aec83758f6eff6f"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-20/roteiro.md",
+          "role": "teacher",
+          "bytes": 44936,
+          "sha256": "99ffa109fee3952ed07645bca94732d599b228124da91315832fd2aa376f6599"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-20/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 84550,
+          "sha256": "a2147e2fe2f3362c17f9015879faa53828808bb6e2f23658f120c998f5fb51d8"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-20/codigo-student.zip",
+          "derived_from": "aulas/aula-20/codigo",
+          "bytes": 21904,
+          "sha256": "6e513a7d99330cae19696e9968e4ee9e5d97a4122b42d4448d362283f984dc43"
+        },
+        {
+          "name": "Código e soluções do professor",
+          "label": "Código e soluções do professor",
+          "mime": "application/zip",
+          "role": "teacher",
+          "path": "aula-20/codigo-teacher.zip",
+          "derived_from": "aulas/aula-20/codigo",
+          "bytes": 37040,
+          "sha256": "414592d3c4bf5a01e6a456957d707fc161d174f9a2e4f822e702d4fea8aa344d"
+        }
+      ],
+      "source": "v2/aulas/aula-20",
+      "step_count": 16
+    },
+    {
+      "id": 21,
+      "title": "Tool calling e Model Context Protocol (MCP)",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Descrever** os cinco passos do ciclo de tool calling e **apontar**, em cada um, quem executa: o modelo, o host ou a ferramenta.",
+        "**Ler** e **escrever** uma chamada de ferramenta em JSON — nome, argumentos, identificador de correlação — e **explicar** por que o resultado volta como mensagem de papel `tool`.",
+        "**Justificar** por que nome, descrição e nomes de parâmetro de uma ferramenta são **parte do prompt**, e **prever** o efeito de degradá-los sobre a taxa de acerto.",
+        "**Distinguir** as três formas pelas quais um modelo passa a usar ferramentas — exemplos no prompt, SFT de formato e auto-supervisão à la Toolformer.",
+        "**Avaliar** um schema de ferramenta contra seis propriedades (estreita, bem nomeada, validável, permissionada, observável, com efeito colateral determinístico) e **reescrever** um schema ruim.",
+        "**Explicar** a arquitetura host/cliente/servidor do MCP, **distinguir** recurso de ferramenta pelo que decide o uso, e **argumentar** por que padronizar vence N integrações um-a-um."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-21/guia-estudo.md",
+          "role": "student",
+          "bytes": 29621,
+          "sha256": "741dc27dcdcaf90e70be4603ee0716abe82d401415c31207314f1b569608069b"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-21/plano.md",
+          "role": "teacher",
+          "bytes": 26422,
+          "sha256": "f255ce9b0be565677adfa16c0d0f5b2bea9bb383b2c1869c3207ee21ee4f6965"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-21/roteiro.md",
+          "role": "teacher",
+          "bytes": 37006,
+          "sha256": "233704476a0f4782858b6da79ce3a1008c07d7ce89092d6407f3d468e4bc1a3d"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-21/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 40083,
+          "sha256": "341c268eed4ca6e775ab7ef476e4377d794e7899692c57e6057195e28dbe8ae4"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-21/codigo-student.zip",
+          "derived_from": "aulas/aula-21/codigo",
+          "bytes": 6437,
+          "sha256": "ab1dd6a52e69bb9ba78664a9e45285bc8eb274aebb37ba5c59ccd5f1e04f7f91"
+        }
+      ],
+      "source": "v2/aulas/aula-21",
+      "step_count": 18
+    },
+    {
+      "id": 22,
+      "title": "Laboratório 6: Tool calling e MCP — Entrega 1 do projeto",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "laboratorio",
+      "duration": 120,
+      "objectives": [
+        "**Escrever** o schema de uma ferramenta com nome, descrição e parâmetros redigidos para o modelo ler, e **validar** argumentos contra esse schema antes de executar qualquer coisa.",
+        "**Implementar** o loop de tool calling sem framework, nomeando no código os cinco passos da Aula 21, com **orçamento de passos** e tratamento de erro de ferramenta como resultado.",
+        "**Inspecionar** uma trajetória — a lista de mensagens `system`/`user`/`assistant`/`tool` — e **apontar** nela a correlação entre a chamada e o resultado.",
+        "**Conectar** um cliente MCP a um servidor existente por `stdio` e **descobrir** suas capacidades com `initialize`, `tools/list` e `tools/call`.",
+        "**Publicar** um servidor MCP próprio que expõe a base do Lab 5 como **ferramenta** e o índice do acervo como **recurso**, e **justificar** a diferença pelo critério de quem decide usar.",
+        "**Defender** a proposta do projeto final contra cinco critérios: problema verificável, duas técnicas do curso, plano de avaliação por camada, divisão de trabalho e viabilidade em free tier."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-22/guia-estudo.md",
+          "role": "student",
+          "bytes": 31010,
+          "sha256": "38446a6a5720b8ceeba9e9e2005fc30100444f28c07fa763276773193ca26a62"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-22/plano.md",
+          "role": "teacher",
+          "bytes": 33959,
+          "sha256": "6cad5e4439715f5ee9605e6e08184913da5d850a2e0bff2a35bfc407da0c0a43"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-22/roteiro.md",
+          "role": "teacher",
+          "bytes": 41399,
+          "sha256": "d4d172d828e9e07b90818e024ee669b00be1375f54838939aacd024179987133"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-22/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 60974,
+          "sha256": "d5602ba5bc8dc54f82231fca0a24a0adb3afd4573ee5117c52fa4528b3e47c31"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-22/codigo-student.zip",
+          "derived_from": "aulas/aula-22/codigo",
+          "bytes": 19188,
+          "sha256": "6b7968a1106792e7f48f36c3ca2811af9d62cdeb8d2aaf50b99550614184daf8"
+        },
+        {
+          "name": "Código e soluções do professor",
+          "label": "Código e soluções do professor",
+          "mime": "application/zip",
+          "role": "teacher",
+          "path": "aula-22/codigo-teacher.zip",
+          "derived_from": "aulas/aula-22/codigo",
+          "bytes": 30168,
+          "sha256": "a09ab1753e82d29b72c98e879cb2ce58df1d1cbf3b81d8100c898a52f732794b"
+        }
+      ],
+      "source": "v2/aulas/aula-22",
+      "step_count": 15
+    },
+    {
+      "id": 23,
+      "title": "Agentes de IA: loops, planejamento e memória",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Enunciar** as cinco peças da definição operacional de agente e **apontá-las** no código de um loop de 40 linhas, nomeando o que falta quando uma delas está ausente.",
+        "**Descrever** o ciclo observar → planejar → agir → refletir e **localizar** cada fase numa trajetória real registrada.",
+        "**Explicar** o que o ReAct (Yao et al., arXiv 2210.03629) intercala e **justificar** por que o raciocínio explícito antes da ação melhora a escolha de ferramenta.",
+        "**Distinguir** memória de curto prazo (a trajetória dentro da janela de contexto) de memória de longo prazo (o que persiste entre sessões) e **decidir** o que promover de uma para a outra.",
+        "**Decidir** entre agente e workflow determinístico aplicando dois testes: o caminho é conhecido? existe verificador para o passo intermediário?",
+        "**Calcular** o custo de um loop em chamadas e tokens em função do número de passos e **diagnosticar** as duas paradas mal projetadas: o loop que não termina e o que termina cedo."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-23/guia-estudo.md",
+          "role": "student",
+          "bytes": 31053,
+          "sha256": "61ae00d65709b4373a7c9b495c9db2f094d36b160371fde5b844e9403fc0baa9"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-23/plano.md",
+          "role": "teacher",
+          "bytes": 25428,
+          "sha256": "87e181ae4331874c62658e89697a48bac8317b399e308272bc0263d3b199e0c6"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-23/roteiro.md",
+          "role": "teacher",
+          "bytes": 38829,
+          "sha256": "1636adc5be208a438103fdf70cacf38cc1236d4cbd12699bc715b2df3f66c722"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-23/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 40531,
+          "sha256": "97588639dcb8037d2da199f6bbae3aa94f92c262d928eacb3d8a97dbb4b36aca"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-23/codigo-student.zip",
+          "derived_from": "aulas/aula-23/codigo",
+          "bytes": 5485,
+          "sha256": "0f8847a81c520cf223ebb02d58fcfcbb93adaede52402f4f06ee6019c62ebd17"
+        }
+      ],
+      "source": "v2/aulas/aula-23",
+      "step_count": 19
+    },
+    {
+      "id": 24,
+      "title": "Sistemas multiagente e orquestração",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Nomear** as três razões que justificam dividir um sistema em vários agentes — especialização, paralelismo e contexto limitado por agente — e **identificar** qual delas se aplica a um caso dado.",
+        "**Desenhar** os quatro padrões (orquestrador-trabalhadores, pipeline de estágios, debate/crítico, painel de especialistas) indicando quem decide, quem executa e por onde a informação passa.",
+        "**Estimar** o custo de uma arquitetura multiagente em chamadas e tokens e **compará-lo** com o de um agente único na mesma tarefa.",
+        "**Calcular** a taxa de sucesso composta de um pipeline de N estágios e **explicar** por que acrescentar estágio confiável piora o resultado final.",
+        "**Aplicar** o teste de três perguntas que separa multiagente necessário de multiagente decorativo, e **reescrever** uma arquitetura inflada numa mais simples.",
+        "**Situar** LangGraph, CrewAI e SDKs de agentes pelo que cada um resolve (estado, papéis, transporte) e **justificar** por que o curso implementa o loop na mão antes de adotar framework."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-24/guia-estudo.md",
+          "role": "student",
+          "bytes": 31356,
+          "sha256": "7c0da86e95ef5747bb06b74b9cbf935c7228c59c09e1e532c6f9a19dbe09c0d5"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-24/plano.md",
+          "role": "teacher",
+          "bytes": 25767,
+          "sha256": "239e51460937a2eb491aabf6d4a1be0b4cea5a3cf0bacc8573c214cd6d741885"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-24/roteiro.md",
+          "role": "teacher",
+          "bytes": 38134,
+          "sha256": "fad118fad384da06a44fff0b03fe96409d55a376e84eb4e6572d0a8313d9286c"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-24/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 43496,
+          "sha256": "a52c212ce94994fbb3d11e42eda778fba9acd9f4712523fd65fbfbbbc725a11c"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-24/codigo-student.zip",
+          "derived_from": "aulas/aula-24/codigo",
+          "bytes": 4561,
+          "sha256": "edcb7bfa0a48bb2483b930dd6eb40578b907e3c705b5f8e4050351135031eced"
+        }
+      ],
+      "source": "v2/aulas/aula-24",
+      "step_count": 20
+    },
+    {
+      "id": 25,
+      "title": "Laboratório 7: Construindo um agente autônomo",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "laboratorio",
+      "duration": 120,
+      "objectives": [
+        "**Escrever** um prompt de sistema que carrega objetivo, catálogo de ferramentas e contrato de formato, e **justificar** por que a proibição de o modelo emitir `Observation:` é parte do contrato.",
+        "**Implementar** o parsing de ação ReAct em texto puro de modo que formato inválido volte como observação em vez de levantar exceção, e **demonstrar** com teste que o parser rejeita ação malformada.",
+        "**Construir** o loop com as três paradas — orçamento de passos, resposta final sustentada por observação e detecção de repetição sem progresso — e **provocar** cada uma delas com um defeito roteirado.",
+        "**Reaproveitar** o índice construído no Lab 5 (Aula 20) como ferramenta do agente, trocando o corpus embutido pelo próprio `chunks.json` sem alterar a assinatura da ferramenta.",
+        "**Registrar** a trajetória completa em JSON — pensamento, ação, argumentos, observação, decisão e tokens por passo — e **analisar** uma execução por escrito, apontando onde o agente acertou, onde vacilou e quanto custou.",
+        "**Comparar** o loop escrito na mão com a mesma lógica em um framework de grafo de estado, **nomeando** qual peça o framework assume e qual continua sendo do programador."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-25/guia-estudo.md",
+          "role": "student",
+          "bytes": 39420,
+          "sha256": "4fe3461637309a9bd179fe88977392333753d4d047a03c447e42b9a80e6fea45"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-25/plano.md",
+          "role": "teacher",
+          "bytes": 38448,
+          "sha256": "1636bff2e8904da22b4ca47f46982e62ac296d910dd1ce9fa4ed7c95a459007d"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-25/roteiro.md",
+          "role": "teacher",
+          "bytes": 50752,
+          "sha256": "918c7161ce677b519d35c728bebb42c89d79096dafdf86ada850b778f8599ab5"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-25/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 74154,
+          "sha256": "e43f9140101b73aa68612b695c9ef520a6b83c1387c6388a580c38b24edd36ad"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-25/codigo-student.zip",
+          "derived_from": "aulas/aula-25/codigo",
+          "bytes": 24346,
+          "sha256": "defdea7507f0c67489ddf21d8a9a0b42f17a535bcf1cb5151005c24c5b09e309"
+        },
+        {
+          "name": "Código e soluções do professor",
+          "label": "Código e soluções do professor",
+          "mime": "application/zip",
+          "role": "teacher",
+          "path": "aula-25/codigo-teacher.zip",
+          "derived_from": "aulas/aula-25/codigo",
+          "bytes": 38559,
+          "sha256": "6ca483be19b3caae50fef6cf025ace983ba5a9909986461714b00102908f609e"
+        }
+      ],
+      "source": "v2/aulas/aula-25",
+      "step_count": 15
+    },
+    {
+      "id": 26,
+      "title": "Segurança e avaliação de agentes",
+      "module": "5 — RAG, Ferramentas e Agentes de IA",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Distinguir** injeção de prompt direta de indireta pelo caminho de entrada do payload, e **enumerar** três canais indiretos concretos: documento recuperado, página web e resultado de ferramenta.",
+        "**Explicar** por que um LLM não separa dado de instrução por natureza, e **avaliar** o que a delimitação do conteúdo recuperado resolve e o que ela não resolve.",
+        "**Classificar** um risco de agente em uma de três famílias — sequestro de comportamento, exfiltração de dados, ação irreversível — e **associar** a cada uma a mitigação de menor custo.",
+        "**Aplicar** as cinco mitigações (privilégio mínimo, sandboxing, human-in-the-loop para ação crítica, auditoria de trajetórias, separação entre dado e instrução) a um sistema dado, nomeando o que cada uma **deixa** aberto.",
+        "**Localizar** a falha de uma trajetória em uma de cinco etapas — percepção, seleção de ferramenta, argumentos, interpretação da observação, parada — e **justificar** por que registrar apenas a resposta final impede esse diagnóstico.",
+        "**Situar** SWE-bench (arXiv 2310.06770), tau-bench (arXiv 2406.12045) e Agent-SafetyBench (arXiv 2412.14470) pelo que cada um mede, e **dizer** o que nenhum deles mede sobre um sistema próprio."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-26/guia-estudo.md",
+          "role": "student",
+          "bytes": 39696,
+          "sha256": "30be055e921efb0ff51e241c3cf6cf68b561776b3451e25d70dd6dfd28d96c86"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-26/plano.md",
+          "role": "teacher",
+          "bytes": 33005,
+          "sha256": "f513471ac1edf16bb1f888fb56ccf43cce15dade68c629de223b32b689d97c2d"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-26/roteiro.md",
+          "role": "teacher",
+          "bytes": 49152,
+          "sha256": "8867e3cdfd6f954dc6552ee3b1be2528a99501aefeb6036abd446b8e124e4c9f"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-26/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 46108,
+          "sha256": "b9e7f24a9dcd547d5956a35822ed54d821731c5b430cb615481ea3cfefba1ff2"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-26/codigo-student.zip",
+          "derived_from": "aulas/aula-26/codigo",
+          "bytes": 7373,
+          "sha256": "0e95d3f9fc65d0e9f9b439b880b9b738b6d88f39a7965721acedf162ec728e62"
+        }
+      ],
+      "source": "v2/aulas/aula-26",
+      "step_count": 19
+    },
+    {
+      "id": 27,
+      "title": "Avaliação de LLMs e de sistemas com LLMs",
+      "module": "6 — Avaliação de LLMs",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Decompor** um sistema com LLM dentro em camadas avaliáveis (modelo, prompt, retriever, ferramenta, resposta final, trajetória, produto) e **atribuir** uma falha observada à menor camada que a explica.",
+        "**Escrever** uma rubrica de anotação humana com níveis discriminantes e **calcular** o kappa de Cohen entre dois anotadores, **justificando** por que o acordo bruto superestima a concordância.",
+        "**Explicar** por que BLEU e ROUGE deixam de medir qualidade em geração aberta e **identificar** os casos em que ainda são a métrica correta.",
+        "**Distinguir** LLM-as-judge pairwise de LLM-as-judge por rubrica e **nomear** os três vieses do juiz (posição, verbosidade, autopreferência) com o protocolo que mitiga cada um.",
+        "**Medir** a inconsistência posicional de um juiz rodando o mesmo par nas duas ordens e **interpretar** a taxa de inversão como limite superior de confiança naquele número.",
+        "**Avaliar** factualidade por decomposição em afirmações atômicas verificadas contra a fonte, em vez de por impressão global de qualidade.",
+        "**Argumentar** por que posição em leaderboard não substitui avaliação de produto, citando contaminação de dados e desalinhamento de distribuição."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-27/guia-estudo.md",
+          "role": "student",
+          "bytes": 48122,
+          "sha256": "2a47ad1fa26361229be3aa955f46c9b8d73f0924d20ad43b69731d0892735b6d"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-27/plano.md",
+          "role": "teacher",
+          "bytes": 37950,
+          "sha256": "04837c2f1ea60a9027484e844657e3b25216df15ce4f532829a44fcd6e93bbc7"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-27/roteiro.md",
+          "role": "teacher",
+          "bytes": 59922,
+          "sha256": "de7cf53856f36d81d86586df2b7af85491a5ff5cfb71ad2f0b5cf85b8b570ca7"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-27/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 77392,
+          "sha256": "a955debb5787eace7d8be4a593e379d763d7f0a205efdde54c03cc98d033bc1e"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-27/codigo-student.zip",
+          "derived_from": "aulas/aula-27/codigo",
+          "bytes": 8005,
+          "sha256": "53dc28229a4188e7f950886aa244593eba77e8086f69538c6e4e5a2bfd9cbfc8"
+        }
+      ],
+      "source": "v2/aulas/aula-27",
+      "step_count": 20
+    },
+    {
+      "id": 28,
+      "title": "Laboratório 8: Harness de avaliação do projeto",
+      "module": "6 — Avaliação de LLMs",
+      "kind": "laboratorio",
+      "duration": 120,
+      "objectives": [
+        "**Montar** um conjunto de teste de 20 ou mais casos para o próprio sistema, **justificando** a composição por poder discriminativo — pares de paráfrase, casos fora do escopo, casos adversariais e falhas já observadas — e não por facilidade de escrita.",
+        "**Implementar** as métricas de cada camada existente no próprio projeto: `recall@k`, `precision@k` e MRR na recuperação; acerto por termos exigidos, validade de citação e taxa de recusa correta na resposta; taxa de sucesso e distribuição de passos na trajetória.",
+        "**Escrever** uma rubrica de três critérios com níveis descritos por comportamento observável e **implementá-la** como juiz nas duas rotas — heurística determinística offline e LLM-as-judge por API.",
+        "**Calibrar** o juiz contra uma amostra anotada pela própria equipe, **calcular** o kappa de Cohen, **inspecionar** os desacordos um por um e **decidir** se o conserto é na rubrica, no juiz ou no sistema.",
+        "**Classificar** cada falha na menor camada que a explica e **priorizar** os consertos por impacto sobre custo declarado.",
+        "**Gerar** um relatório de avaliação em que toda camada declarada tem métrica, denominador e limitação escritos — e **reconhecer** por que \"o sistema respondeu bem\" não é resultado."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-28/guia-estudo.md",
+          "role": "student",
+          "bytes": 38710,
+          "sha256": "64628994da721dc81f013328361cde57788cd90e7a2f46c2c1f20d8f725832bb"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-28/plano.md",
+          "role": "teacher",
+          "bytes": 45091,
+          "sha256": "1b0763bf18df5df98676dc656037c63b71fc83fd24a07c920569bb2f92c7a47e"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-28/roteiro.md",
+          "role": "teacher",
+          "bytes": 53441,
+          "sha256": "54c38c7432ab8860c817c2515d2c5f071e0001dc95521914edd4c524bee1edfd"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-28/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 72328,
+          "sha256": "eedc33a9424e030ee9f42b548ed69b3998614d340591d2d99b7f07613a11e00b"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-28/codigo-student.zip",
+          "derived_from": "aulas/aula-28/codigo",
+          "bytes": 22053,
+          "sha256": "426e5e19519fe92a96a209f9fd99b2e084c9fb7e098b214bb06af4df6448a4aa"
+        },
+        {
+          "name": "Código e soluções do professor",
+          "label": "Código e soluções do professor",
+          "mime": "application/zip",
+          "role": "teacher",
+          "path": "aula-28/codigo-teacher.zip",
+          "derived_from": "aulas/aula-28/codigo",
+          "bytes": 38869,
+          "sha256": "2de266f8d302486786133e3a923edb4942307c3c2a475c6785e96fd5544b07ae"
+        }
+      ],
+      "source": "v2/aulas/aula-28",
+      "step_count": 15
+    },
+    {
+      "id": 29,
+      "title": "Recapitulação e fronteiras da área",
+      "module": "7 — Fronteiras e Encerramento",
+      "kind": "teorica",
+      "duration": 120,
+      "objectives": [
+        "**Reconstruir** o stack de um LLM em sete camadas e **localizar** em qual aula e em qual lab cada camada foi construída, apontando o artefato produzido.",
+        "**Enunciar** a dívida de avaliação anunciada na Aula 1 — o modelo foi unificado sob o próximo-token, as métricas não foram — e **demonstrar** com que instrumentos das Aulas 27 e 28 ela foi paga.",
+        "**Explicar** por que um patch de imagem 16×16 é tratável como token e **generalizar** a abstração \"sequência de vetores discretizados\" para além do texto.",
+        "**Distinguir** geração autorregressiva de geração por difusão mascarada (LLaDA) e **identificar** três decisões do curso — KV cache, decodificação, prompting — que deixam de valer quando o modelo não gera da esquerda para a direita.",
+        "**Calcular** a razão entre tokens de texto e tokens visuais de uma mesma página e **argumentar** por onde entra a compressão em DeepSeek-OCR — pelo encoder que reduz, não pela fatia em patches.",
+        "**Descrever** o mecanismo do colapso de modelo (perda das caudas da distribuição por realimentação recursiva) e **propor** duas práticas de curadoria que o mitigam.",
+        "**Justificar** a eficiência como métrica de primeira classe, usando o argumento de que a atenção na decodificação é limitada por banda de memória e não por FLOPs.",
+        "**Diferenciar** os caminhos de pesquisa e de engenharia de IA em termos de artefato produzido e de critério de sucesso."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-29/guia-estudo.md",
+          "role": "student",
+          "bytes": 24432,
+          "sha256": "4603a8ea6b029d3ba9e6dfdc32e3837794e4a3a990be993adc8fb51a7f17d80f"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-29/plano.md",
+          "role": "teacher",
+          "bytes": 30720,
+          "sha256": "76395c3510f9ef6c0587fc7d35f608c9ffdcc07f77c32d94b968cf81c45f22a7"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-29/roteiro.md",
+          "role": "teacher",
+          "bytes": 30547,
+          "sha256": "d98b81095dfd24c0c7aa26a0d899a6e5de6c2ad69bdbfd5a1cfdcca130be558a"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-29/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 46921,
+          "sha256": "de1a4d7d58721958da361915a644674f3ef6eb03628f947ef5e5b388ca6bdc9d"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-29/codigo-student.zip",
+          "derived_from": "aulas/aula-29/codigo",
+          "bytes": 4685,
+          "sha256": "3d8982d62ca7815c44d88e9105edd41c39ae041de09150190e112f8b43a0d51c"
+        }
+      ],
+      "source": "v2/aulas/aula-29",
+      "step_count": 19
+    },
+    {
+      "id": 30,
+      "title": "Apresentações finais — Entrega final do projeto",
+      "module": "7 — Fronteiras e Encerramento",
+      "kind": "apresentacao",
+      "duration": 120,
+      "objectives": [
+        "**Apresentar** um sistema com LLM em 12 minutos, cobrindo problema, arquitetura, demo ao vivo, números por camada e limitações, sem exceder o tempo.",
+        "**Demonstrar** o sistema ao vivo em pelo menos um caso difícil do próprio conjunto de teste — não apenas no caminho felizeado.",
+        "**Sustentar** cada número apresentado com a métrica, o denominador e a procedência do juiz que o produziu.",
+        "**Defender** oralmente qualquer camada do sistema, explicando por que ela existe e qual número prova que ela funciona.",
+        "**Reconhecer** as limitações da própria avaliação em termos específicos (cobertura do conjunto, viés da anotação, ausência de variância), não genéricos.",
+        "**Avaliar** criticamente o trabalho de outra equipe pelos mesmos critérios com que o próprio será avaliado."
+      ],
+      "materials": [
+        {
+          "name": "Guia de estudo da aula",
+          "label": "Guia de estudo da aula",
+          "mime": "text/markdown",
+          "path": "aula-30/guia-estudo.md",
+          "role": "student",
+          "bytes": 10111,
+          "sha256": "da4e78965a05b866e4e91f6d5ca204e88e134c9322ddcc37003f227c80430902"
+        },
+        {
+          "name": "Plano completo do professor",
+          "label": "Plano completo do professor",
+          "mime": "text/markdown",
+          "path": "aula-30/plano.md",
+          "role": "teacher",
+          "bytes": 21170,
+          "sha256": "e291b05b9648a6ef5c5a2e111b8b0d94475e9b7a86111edfd6d2e1329acccb4f"
+        },
+        {
+          "name": "Roteiro integral de fala",
+          "label": "Roteiro integral de fala",
+          "mime": "text/markdown",
+          "path": "aula-30/roteiro.md",
+          "role": "teacher",
+          "bytes": 15994,
+          "sha256": "91882ff6f22eeab9c3409dba51a27c95dfc47c48e6678218380b533687350927"
+        },
+        {
+          "name": "Especificação dos slides",
+          "label": "Especificação dos slides",
+          "mime": "text/markdown",
+          "path": "aula-30/instructions-slides.md",
+          "role": "teacher",
+          "bytes": 18140,
+          "sha256": "0f7a13ddae16e264a1cb01932bdc98c58628a7bfd2411c496ee2ec892bfbd356"
+        },
+        {
+          "name": "Notebooks e scripts do aluno",
+          "label": "Notebooks e scripts do aluno",
+          "mime": "application/zip",
+          "role": "student",
+          "path": "aula-30/codigo-student.zip",
+          "derived_from": "aulas/aula-30/codigo",
+          "bytes": 4321,
+          "sha256": "12b22ca947750c21472c82ecd7992e8e2e30e9726ca99f3e1b8723dd93267c8e"
+        }
+      ],
+      "source": "v2/aulas/aula-30",
+      "step_count": 10
+    }
+  ]
+}

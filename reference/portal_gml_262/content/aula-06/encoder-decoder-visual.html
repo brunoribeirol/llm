@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Encoder e decoder · Ler o contexto, construir a saída</title>
+<style>
+:root{color-scheme:light;--ink:#173347;--muted:#536976;--enc:#146952;--enc-bg:#eaf5ef;--dec:#204dc1;--dec-bg:#edf1ff;--line:#d7e1e6;--paper:#fffdf8}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}button,a,input,summary{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:pointer}button:disabled{opacity:.42;cursor:default}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #bc570a;outline-offset:4px}a{color:var(--dec)}main{max-width:1250px;margin:auto;padding:36px 36px 64px}.eyebrow{font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}h1{font-size:clamp(30px,4vw,50px);line-height:1.13;letter-spacing:-.035em;margin:12px 0 16px;max-width:920px}h2{font-size:25px;line-height:1.25;margin:0 0 10px}h3{font-size:18px;margin:0 0 10px}p{margin:8px 0 14px}.lead{font-size:20px;max-width:950px;color:var(--muted)}.actions{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:20px 0 25px}.actions a{font-size:14px}.button{border:1px solid var(--line);border-radius:9px;background:white;padding:10px 17px;color:var(--ink);font-weight:650}.primary{background:var(--ink);color:white;border-color:var(--ink)}.contrast{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:24px 0}.definition{border-left:5px solid var(--enc);padding:18px 23px;background:var(--enc-bg);border-radius:0 12px 12px 0}.definition.decoder{border-color:var(--dec);background:var(--dec-bg)}.definition p{margin:5px 0 0}.definition strong{color:var(--enc)}.definition.decoder strong{color:var(--dec)}.small{font-size:14px;color:var(--muted)}.demo{border:1px solid var(--line);border-radius:18px;background:white;overflow:hidden;margin-top:25px}.demo-head{padding:20px 24px;background:#f5f7f8;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}.demo-head p{margin:0}.badge{font-size:12px;font-weight:800;border-radius:20px;background:#e5ecef;padding:6px 12px;white-space:nowrap}.steps{display:flex;gap:8px;flex-wrap:wrap;padding:18px 24px 8px}.step{font:inherit;font-size:14px;border:1px solid var(--line);padding:7px 13px;border-radius:20px;background:white;color:var(--muted)}.step[aria-current="step"]{background:var(--ink);border-color:var(--ink);color:white}.stage{display:grid;grid-template-columns:minmax(0,1fr) 100px minmax(0,1fr);gap:0;padding:22px 24px 8px}.panel{min-width:0;border-radius:14px;padding:20px;border:1px solid var(--line)}.encoder-panel{background:var(--enc-bg);border-color:#bcdaca}.decoder-panel{background:var(--dec-bg);border-color:#c7d3f7}.panel h3{font-size:21px}.label{font-size:12px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;margin:18px 0 8px;color:var(--muted)}.tokens{display:flex;flex-wrap:wrap;gap:7px;min-height:39px}.token{background:white;border:1px solid #adc6bb;border-radius:7px;padding:6px 12px;font-weight:600}.decoder-panel .token{border-color:#b5c5f1}.token.special{font-weight:400;font-size:14px;border-style:dashed}.machine{border:2px solid var(--enc);border-radius:9px;text-align:center;padding:15px 9px;margin-top:18px;background:white}.machine.dec{border-color:var(--dec)}.machine span{display:block;font-size:13px;color:var(--muted);margin-top:4px}.down{text-align:center;line-height:1;font-size:26px;margin:10px 0;color:var(--muted)}.memory{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.vector{background:white;border:1px solid #accdbd;border-radius:7px;padding:9px 2px;text-align:center}.vector b{display:block;font-size:18px;color:var(--enc)}.vector span{font-size:12px}.waiting{color:var(--muted);font-size:15px;min-height:62px;padding:12px 0}.bridge{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;font-size:12px;padding:7px;color:var(--enc)}.bridge .arrow{font-size:38px;line-height:1}.bridge strong{font-size:12px;margin-bottom:4px}.bridge.inactive{opacity:.42}.source-note{font-size:13px;margin-top:12px;margin-bottom:0}.prediction{margin-top:14px;background:white;border:1px solid #c4d0f0;border-radius:9px;padding:13px;display:flex;justify-content:space-between;align-items:center;gap:10px}.prediction .word{font-size:25px;font-weight:800;color:var(--dec)}.outcome{margin:17px 24px;border-top:1px solid var(--line);padding-top:17px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}.outcome .label{margin:0}.output-word{display:inline-block;background:#204dc1;color:white;border-radius:6px;padding:5px 13px;margin:2px;font-weight:600}.empty{font-size:15px;color:var(--muted)}.caption{padding:16px 24px;background:#f6f8fa;border-top:1px solid var(--line)}.caption p{margin:4px 0}.caption strong{font-size:16px}.navigation{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:17px 24px;border-top:1px solid var(--line)}.counter{margin-right:auto;color:var(--muted);font-size:14px}.teacher{margin-top:22px;border:1px solid #d9d7ce;border-radius:12px;background:#fff8e5;padding:20px 24px}.teacher blockquote{font-size:19px;margin:8px 0 0;line-height:1.55}.below{margin-top:36px}.three{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.card{padding:20px;border:1px solid var(--line);border-radius:12px;background:white}.card p{font-size:15px;margin-bottom:0}.card code{display:block;font-size:14px;margin:12px 0;font-weight:700}.checkpoint{padding:22px 25px;border:1px solid var(--line);border-radius:12px;background:white;margin-top:25px}.checkpoint summary{cursor:pointer;font-weight:700}.checkpoint details{margin-top:12px}.source{margin-top:24px;font-size:13px;color:var(--muted)}.print-only{display:none}.walkthrough{display:grid;grid-template-columns:1fr 1fr;gap:12px}.walkthrough article{border:1px solid var(--line);border-radius:8px;padding:12px}.walkthrough h3{margin-bottom:4px}.walkthrough p{margin:0}.formula{font-family:Consolas,monospace;font-size:14px}
+@media(max-width:800px){main{padding:24px 18px}.stage{grid-template-columns:1fr;padding:18px}.bridge{padding:16px}.bridge .arrow{transform:rotate(90deg);height:38px}.contrast,.three{grid-template-columns:1fr}.demo-head{align-items:flex-start}.demo-head .badge{white-space:normal}.panel{padding:16px}.teacher blockquote{font-size:17px}.demo-head,.steps,.caption,.navigation{padding-left:18px;padding-right:18px}.actions{gap:12px}h2{font-size:23px}}
+@media print{@page{size:A4 landscape;margin:12mm}body{background:white;font-size:10pt;line-height:1.35}main{max-width:none;padding:0}.screen-only{display:none!important}.print-only{display:block}h1{font-size:27pt;margin:5pt 0 7pt}h2{font-size:17pt}h3{font-size:12pt}.eyebrow{font-size:8pt}.lead{font-size:12pt;max-width:none;margin-bottom:10pt}.contrast{margin:10pt 0;gap:12pt}.definition{padding:10pt 12pt}.definition p{font-size:11pt}.small{font-size:9pt}.print-page{break-before:page;padding-top:0}.print-flow{display:grid;grid-template-columns:1fr 60px 1fr;gap:12px;margin:16pt 0 9pt}.print-flow .panel{padding:12pt}.print-flow .machine{padding:10pt;margin-top:10pt}.print-flow .tokens{min-height:0}.print-flow .token{padding:5pt 9pt;font-size:11pt}.print-flow .label{margin:10pt 0 5pt;font-size:8pt}.print-flow .vector{padding:7pt 1pt}.print-flow .down{font-size:20pt;margin:7pt}.print-flow .bridge{padding:0}.print-flow .source-note{font-size:9pt}.print-flow .prediction{padding:8pt}.print-flow .prediction .word{font-size:17pt}.print-flow .machine span{font-size:9pt}.walkthrough{gap:10pt}.walkthrough article{padding:10pt}.walkthrough p{font-size:11pt}.print-quote{background:#fff8e5;padding:11pt 14pt;margin:10pt 0;font-size:12pt;border-left:4px solid #ac771c}.source{font-size:8pt;margin:10pt 0}.three{gap:10pt}.card{padding:10pt}.card p{font-size:10pt}.card code{font-size:10pt;margin:5pt 0}.checkpoint{padding:10pt 14pt;margin-top:12pt}.checkpoint p{margin:4pt 0}.below{margin-top:14pt}a{color:inherit;text-decoration:none}}
+@media print{.contrast{display:none}.print-flow{margin-top:10pt}.print-quote{font-size:11pt;padding:8pt 12pt}.print-flow .panel{padding:10pt}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">Aula 06 · Uma explicação em 5 minutos</div>
+<h1>Encoder lê o contexto.<br>Decoder constrói a saída.</h1>
+<p class="lead">Na tradução, o encoder transforma a frase de entrada em representações. O decoder usa essas representações e o que já escreveu para produzir a continuação.</p>
+<div class="actions screen-only"><button class="button primary" id="start">Começar a explicação</button><button class="button" onclick="window.print()">Imprimir</button></div>
+</header>
+<div class="contrast">
+<div class="definition"><h2>Encoder · representar a entrada</h2><p><strong>Recebe:</strong> a sequência fonte.<br><strong>Entrega:</strong> um vetor contextual por posição.</p></div>
+<div class="definition decoder"><h2>Decoder · construir a saída</h2><p><strong>Recebe:</strong> o prefixo do alvo e acesso à fonte codificada.<br><strong>Entrega:</strong> estados usados para prever o próximo token.</p></div>
+</div>
+<p class="small">Aqui mostramos o Transformer encoder–decoder em tradução com a fonte inteira disponível. Cada palavra vale um token apenas para simplificar a explicação.</p>
+
+<section class="demo screen-only" id="demo" aria-labelledby="demo-title">
+<div class="demo-head"><div><h2 id="demo-title">“Eu gosto de gatos” → tradução em inglês</h2><p class="small">Avance para revelar o que o modelo conhece em cada momento.</p></div><span class="badge">Exemplo ilustrativo</span></div>
+<div class="steps" aria-label="Etapas da explicação">
+<button class="step" data-step="0" aria-current="step">1 · Entrada</button>
+<button class="step" data-step="1">2 · Encoder</button>
+<button class="step" data-step="2">3 · I</button>
+<button class="step" data-step="3">4 · like</button>
+<button class="step" data-step="4">5 · cats</button>
+<button class="step" data-step="5">6 · Fim</button>
+</div>
+<div class="stage">
+<section class="panel encoder-panel" aria-labelledby="encoder-heading">
+<h3 id="encoder-heading">ENCODER</h3>
+<div class="label">A fonte já está toda disponível</div>
+<div class="tokens"><span class="token">Eu</span><span class="token">gosto</span><span class="token">de</span><span class="token">gatos</span></div>
+<div class="machine">Cada posição consulta a fonte<span>Self-attention bidirecional + outras subcamadas</span></div>
+<div class="down" aria-hidden="true">↓</div>
+<div id="memory"></div>
+<p class="source-note" id="memory-note"></p>
+</section>
+<div class="bridge inactive" id="bridge"><strong>Fonte codificada</strong><span class="arrow" aria-hidden="true">→</span><span>consulta via<br>cross-attention</span></div>
+<section class="panel decoder-panel" aria-labelledby="decoder-heading">
+<h3 id="decoder-heading">DECODER</h3>
+<div class="label">O que já foi escrito em inglês</div>
+<div class="tokens" id="prefix"></div>
+<div class="machine dec">Consulta o prefixo + a fonte<span>Self-attention causal → cross-attention</span></div>
+<div class="down" aria-hidden="true">↓</div>
+<div class="small">Estado → projeção para vocabulário → probabilidades</div>
+<div class="prediction"><span id="prediction-label">Próximo token</span><span class="word" id="prediction">?</span></div>
+<p class="source-note" id="decoder-note"></p>
+</section>
+</div>
+<div class="outcome"><div class="label">Tradução construída</div><div id="output"></div></div>
+<div class="caption" aria-live="polite" aria-atomic="true"><strong id="caption-title"></strong><p id="caption-body"></p></div>
+<div class="navigation"><span class="counter" id="counter"></span><button class="button" id="back">← Voltar</button><button class="button primary" id="next">Avançar →</button><button class="button" id="reset">Reiniciar</button></div>
+</section>
+
+<aside class="teacher screen-only" aria-labelledby="teacher-title"><div class="eyebrow" id="teacher-title">Fala sugerida para esta etapa</div><blockquote id="speech"></blockquote></aside>
+<p class="small screen-only">Use os botões ou as setas ← e → do teclado. A tradução está roteirizada para fins didáticos; este arquivo não executa um modelo treinado. A fonte codificada permanece disponível durante toda a geração.</p>
+
+<section class="print-only" aria-label="Diagrama para copiar no quadro">
+<div class="print-flow">
+<div class="panel encoder-panel"><h3>ENCODER · fonte completa</h3><div class="tokens"><span class="token">Eu</span><span class="token">gosto</span><span class="token">de</span><span class="token">gatos</span></div><div class="machine">Relaciona as posições da fonte<span>Atenção bidirecional</span></div><div class="down">↓</div><div class="memory"><div class="vector"><b>h₁</b><span>Eu</span></div><div class="vector"><b>h₂</b><span>gosto</span></div><div class="vector"><b>h₃</b><span>de</span></div><div class="vector"><b>h₄</b><span>gatos</span></div></div><p class="source-note">Cada hᵢ é um vetor que pode incorporar contexto de toda a fonte. A saída é uma sequência de vetores.</p></div>
+<div class="bridge"><strong>H_enc</strong><span class="arrow">→</span><span>cross-<br>attention</span></div>
+<div class="panel decoder-panel"><h3>DECODER · exemplo de um passo</h3><div class="tokens"><span class="token special">&lt;início&gt;</span><span class="token">I</span><span class="token">like</span></div><div class="machine dec">Consulta “I like” e a fonte codificada<span>Atenção causal no alvo + cross-attention à fonte</span></div><div class="down">↓</div><div class="small">Estado → projeção → distribuição no vocabulário</div><div class="prediction"><span>Token escolhido neste exemplo</span><span class="word">cats</span></div><p class="source-note">“cats” será acrescentado ao prefixo no passo seguinte.</p></div>
+</div>
+<div class="print-quote">“O encoder prepara uma representação da frase que já temos. O decoder consulta essa representação e o que já escreveu para continuar a frase de saída.”</div>
+<p class="small"><strong>No quadro:</strong> desenhe as duas caixas, quatro vetores entre elas e uma seta de retorno: <span class="formula">token escolhido → prefixo do próximo passo</span>. A fonte tem quatro tokens; a tradução tem três. Não há obrigação de traduzir um token por outro.</p>
+</section>
+
+<section class="print-only print-page">
+<div class="eyebrow">Roteiro do professor · 5 minutos</div>
+<h2 style="margin-top:8px">Explique uma etapa de cada vez</h2>
+<div class="walkthrough">
+<article><h3>1 · Mostre a entrada — 30 s</h3><p>“Recebemos a frase inteira: Eu gosto de gatos. A tradução ainda não foi escrita. Qual parte já está disponível para o modelo?”</p></article>
+<article><h3>2 · Construa os vetores — 60 s</h3><p>“O encoder produz h₁, h₂, h₃ e h₄. Cada um pode incorporar informação dos demais tokens da fonte. São vetores, não palavras traduzidas.”</p></article>
+<article><h3>3 · Produza I — 45 s</h3><p>“O decoder começa com &lt;início&gt; e consulta a fonte codificada. Sua saída passa pela cabeça de previsão; neste exemplo, escolhemos I.”</p></article>
+<article><h3>4 · Produza like — 45 s</h3><p>“Agora I faz parte do prefixo. O decoder consulta esse prefixo e os mesmos vetores da fonte. O próximo token escolhido é like.”</p></article>
+<article><h3>5 · Produza cats — 45 s</h3><p>“Agora o prefixo é I like. O decoder usa o que já escreveu e a fonte para prever cats. Ele ainda não pode usar cats como entrada deste passo.”</p></article>
+<article><h3>6 · Encerre — 30 s</h3><p>“Com I like cats no prefixo, o próximo token é &lt;fim&gt;. Esse marcador encerra a geração; não é uma palavra da tradução.”</p></article>
+</div>
+<div class="checkpoint"><h3>Checagem final — 45 s</h3><p><strong>Pergunte:</strong> “Para prever cats, o decoder pode consultar gatos na fonte? Pode consultar cats no alvo antes de produzi-lo?”</p><p><strong>Resposta:</strong> pode consultar gatos, porque a fonte é conhecida. Não pode consultar cats como token futuro do alvo. Essa diferença justifica a máscara causal no alvo.</p></div>
+<div class="three below"><div class="card"><h3>Encoder-only</h3><p>Produz representações da entrada para uma tarefa, como classificação com uma cabeça apropriada.</p></div><div class="card"><h3>Encoder–decoder</h3><p>Representa uma fonte e gera outra sequência, consultando a fonte por cross-attention.</p></div><div class="card"><h3>Decoder-only</h3><p>Usa o prefixo de uma única sequência para prever a continuação; dispensa um encoder separado.</p></div></div>
+<p class="source">Esquema didático do Transformer original: Vaswani et al., <em>Attention Is All You Need</em>, seções 3.1 e 3.2.3. Embeddings, posição, múltiplas cabeças, FFN, residuais e normas foram omitidos deste desenho para destacar o papel de cada pilha. Na geração padrão, a fonte é codificada uma vez; no treino, as posições do alvo podem ser processadas em paralelo com máscara causal.</p>
+</section>
+
+<section class="below screen-only" aria-labelledby="difference-title"><h2 id="difference-title">O que diferencia os dois?</h2><div class="three"><article class="card"><h3>1 · O que recebe</h3><p>O encoder recebe a fonte inteira. O decoder recebe o prefixo da saída; no encoder–decoder, também consulta a fonte codificada.</p></article><article class="card"><h3>2 · Para onde pode olhar</h3><p>O encoder pode relacionar posições válidas em toda a fonte. A atenção causal do decoder bloqueia tokens futuros do alvo. Sua cross-attention consulta a fonte conhecida.</p></article><article class="card"><h3>3 · O que entrega</h3><p>O encoder entrega representações contextuais. O decoder entrega estados; uma projeção e um softmax os convertem em probabilidades para escolher o próximo token.</p></article></div></section>
+
+<section class="checkpoint screen-only"><h2>Uma pergunta que revela se a turma entendeu</h2><p>Para prever <strong>cats</strong>, o decoder pode consultar <strong>gatos</strong> na fonte? Pode consultar <strong>cats</strong> no alvo antes de produzi-lo?</p><details><summary>Revelar resposta e justificativa</summary><p><strong>“gatos”: sim.</strong> A fonte inteira é conhecida e está representada nos vetores do encoder. <strong>“cats” no futuro do alvo: não.</strong> Seria usar como entrada o token que ainda precisa prever. A máscara causal impede essa consulta ao futuro do alvo durante o treinamento.</p></details></section>
+
+<section class="below screen-only"><h2>E quando só existe uma das pilhas?</h2><div class="three"><article class="card"><h3>Encoder-only</h3><code>entrada → representações → tarefa</code><p>Uma cabeça de classificação pode usar as representações para atribuir uma categoria ao texto. Um encoder também pode servir a outros objetivos.</p></article><article class="card"><h3>Encoder–decoder</h3><code>fonte → representações → saída</code><p>É o exemplo desta página. A cross-attention conecta a geração do alvo à fonte codificada.</p></article><article class="card"><h3>Decoder-only</h3><code>prefixo → próximo token → prefixo maior</code><p>O prompt e a continuação pertencem à mesma sequência causal. Não há encoder separado nem a cross-attention à fonte do exemplo.</p></article></div></section>
+
+<details class="below screen-only"><summary><strong>Notas para manter a explicação precisa</strong></summary><ul><li>“Decoder” não significa aplicar a função inversa do encoder ou desfazer uma compactação. A saída pode ter outro idioma e outro comprimento.</li><li>O encoder Transformer produz uma sequência de vetores, não obrigatoriamente um único vetor que resume toda a frase.</li><li>Na cross-attention, as consultas Q vêm do estado do decoder; as chaves K e os valores V vêm da saída do encoder, após projeções aprendidas.</li><li>O exemplo mostra geração autorregressiva. No treino, os alvos deslocados são conhecidos e suas posições podem ser processadas em paralelo, preservando a máscara causal.</li><li>Normalmente, codificamos a fonte uma vez por tradução e reutilizamos sua representação durante a geração. As consultas do decoder mudam a cada passo.</li><li>Omitimos embeddings, posição, FFN, residuais e normalização do desenho principal para destacar os papéis das pilhas. Essas peças estão no roteiro completo.</li></ul></details>
+<p class="source screen-only">Base técnica: <a href="https://arxiv.org/abs/1706.03762">Vaswani et al. — Attention Is All You Need</a>, seções 3.1 e 3.2.3. Exemplo, desenhos e roteiro autorais. Este HTML funciona sem internet.</p>
+</main>
+<script>
+const stages=[
+ {title:'1 · A frase de entrada já existe; a saída ainda não.',body:'O encoder recebe os quatro tokens da fonte. Vamos começar representando essa entrada antes de gerar a tradução.',speech:'“Quero traduzir Eu gosto de gatos. A frase em português já está toda disponível, mas ainda não escrevi nada em inglês. Vamos separar quem representa a entrada de quem constrói a saída.”'},
+ {title:'2 · O encoder entrega uma representação por posição.',body:'h₁, h₂, h₃ e h₄ são vetores contextuais: cada posição pode incorporar informação de outras posições da fonte. Não são palavras em inglês.',speech:'“O encoder faz cada posição considerar as demais posições da frase e entrega estes quatro vetores. O vetor ligado a gatos pode incorporar informação de gosto, por exemplo. Essa sequência de vetores ficará disponível para o decoder.”'},
+ {title:'3 · O decoder começa a tradução.',body:'Com <início> no prefixo, o decoder consulta a fonte codificada. A cabeça de previsão transforma seu estado em probabilidades; neste exemplo, o token escolhido é I.',speech:'“Agora entra o decoder. Ele recebe o marcador de início e consulta os vetores do encoder. A cabeça de previsão usa o estado produzido para escolher o primeiro token: I. O encoder não entregou essa palavra pronta.”'},
+ {title:'4 · O token escolhido passa a fazer parte do prefixo.',body:'O prefixo agora é <início> I. O decoder consulta esse prefixo e a mesma fonte codificada para prever like.',speech:'“I já foi escrito e passa a ser uma entrada do próximo passo. O decoder sabe o que já saiu e continua consultando a fonte. Agora escolhemos like. Reparem que não precisamos codificar a frase em português novamente.”'},
+ {title:'5 · A próxima escolha depende da fonte e do prefixo.',body:'Com <início> I like como entrada, o token escolhido é cats. O decoder pode consultar gatos na fonte, mas cats ainda não faz parte do prefixo deste passo.',speech:'“O decoder recebe I like e prevê cats. Ele pode consultar gatos na frase original, porque essa entrada já existe. Não pode ler cats como token futuro da tradução antes de prevê-lo. Essa é a diferença entre consultar a fonte e vazar o futuro do alvo.”'},
+ {title:'6 · O marcador de fim encerra a geração.',body:'O prefixo agora contém <início> I like cats. O próximo token escolhido é <fim>; a tradução concluída é I like cats.',speech:'“Agora o decoder recebe a tradução que já construiu e escolhe o marcador de fim. Temos quatro tokens na fonte e três palavras na tradução. Não foi uma substituição obrigatória de palavra por palavra: foi uma geração condicionada à entrada.”'}
+];
+let step=0;
+const $=id=>document.getElementById(id);
+const outputs=['I','like','cats'];
+function render(){
+ const s=stages[step];
+ document.querySelectorAll('[data-step]').forEach(el=>{if(Number(el.dataset.step)===step)el.setAttribute('aria-current','step');else el.removeAttribute('aria-current')});
+ $('memory').innerHTML=step===0?'<div class="waiting">A representação contextual será produzida no próximo passo.</div>':'<div class="memory">'+['Eu','gosto','de','gatos'].map((t,i)=>'<div class="vector"><b>h'+['₁','₂','₃','₄'][i]+'</b><span>'+t+'</span></div>').join('')+'</div>';
+ $('memory-note').textContent=step===0?'Os tokens passam por embeddings e informação de posição antes dos blocos.':'H_enc: quatro vetores contextuais, disponíveis para todos os passos da tradução.';
+ $('bridge').classList.toggle('inactive',step<2);
+ const known=outputs.slice(0,Math.max(0,step-2));
+ $('prefix').innerHTML=step<2?'<span class="empty">A geração ainda não começou.</span>':'<span class="token special">&lt;início&gt;</span>'+known.map(t=>'<span class="token">'+t+'</span>').join('');
+ $('prediction').textContent=step<2?'?':step===5?'<fim>':outputs[step-2];
+ $('prediction-label').textContent=step<2?'Próximo token':'Token escolhido neste passo';
+ $('decoder-note').textContent=step<2?'O decoder usará o prefixo do alvo e a fonte codificada.':step===5?'O marcador de fim encerra a sequência.':'O token escolhido entra no prefixo do passo seguinte.';
+ $('output').innerHTML=step<2?'<span class="empty">Nenhum token gerado ainda.</span>':outputs.slice(0,step-1).map(t=>'<span class="output-word">'+t+'</span>').join('')+(step===5?'<span class="small"> · concluída</span>':'');
+ $('caption-title').textContent=s.title;$('caption-body').textContent=s.body;$('speech').textContent=s.speech;
+ $('counter').textContent='Etapa '+(step+1)+' de 6';$('back').disabled=step===0;$('next').disabled=step===5;
+}
+function go(n){step=Math.max(0,Math.min(5,n));render()}
+document.querySelectorAll('[data-step]').forEach(el=>el.addEventListener('click',()=>go(Number(el.dataset.step))));
+$('next').addEventListener('click',()=>go(step+1));$('back').addEventListener('click',()=>go(step-1));$('reset').addEventListener('click',()=>go(0));
+$('start').addEventListener('click',()=>{go(0);$('demo').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});$('next').focus({preventScroll:true})});
+document.addEventListener('keydown',e=>{if(e.altKey||e.ctrlKey||e.metaKey||['INPUT','TEXTAREA','SELECT','SUMMARY'].includes(e.target.tagName))return;if(e.key==='ArrowRight'){e.preventDefault();go(step+1)}if(e.key==='ArrowLeft'){e.preventDefault();go(step-1)}});
+render();
+</script>
+</body>
+</html>

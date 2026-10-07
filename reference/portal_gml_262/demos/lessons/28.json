@@ -1,0 +1,201 @@
+{
+  "id": 28,
+  "title": "Lab 8: construir um harness de avaliação",
+  "subtitle": "Execute um corpus fictício, inspecione ranking, avalie por camada e produza prioridades. Métricas são calculadas de casos explícitos; a rubrica é determinística.",
+  "nodes": [
+    "Adaptador",
+    "Casos",
+    "Retrieval",
+    "Rubrica",
+    "Calibração",
+    "Relatório"
+  ],
+  "controls": [
+    {
+      "key": "k",
+      "label": "Documentos recuperados (k)",
+      "type": "range",
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "value": 1
+    },
+    {
+      "key": "retriever",
+      "label": "Recuperação",
+      "type": "select",
+      "value": "lexical",
+      "options": [
+        {
+          "value": "lexical",
+          "label": "Sobreposição lexical"
+        },
+        {
+          "value": "synonyms",
+          "label": "Léxico + equivalências explícitas"
+        }
+      ]
+    },
+    {
+      "key": "threshold",
+      "label": "Nota mínima de aprovação",
+      "type": "range",
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "judgeBias",
+      "label": "Casos extras aprovados pelo juiz",
+      "type": "range",
+      "min": 0,
+      "max": 3,
+      "step": 1,
+      "value": 1
+    },
+    {
+      "key": "fixCost",
+      "label": "Esforço estimado de corrigir paráfrases",
+      "type": "range",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "value": 2
+    }
+  ],
+  "steps": [
+    {
+      "title": "Um adaptador para o sistema inteiro",
+      "view": "adapter",
+      "explanation": "O harness chama uma função que recebe pergunta e devolve resposta, fontes e metadados. Isso permite substituir a implementação sem reescrever casos e métricas.",
+      "action": "Compare entrada e saída do adaptador para o primeiro caso.",
+      "board": "executar(pergunta) → resposta, fontes, latência, trajetória",
+      "speech": "A avaliação não precisa conhecer todos os detalhes internos. Ela precisa de um contrato estável. Se a implementação mudar, os casos ainda devem conseguir fazer a mesma pergunta.",
+      "question": "Por que uma string de resposta apenas limita o harness?",
+      "answer": "Porque esconde fontes, ações e medidas necessárias à avaliação por camada.",
+      "focus": 0
+    },
+    {
+      "title": "O corpus de referência",
+      "view": "corpus",
+      "explanation": "Três artigos fictícios tratam de trancamento, monitoria e recurso. As fontes são conhecidas, permitindo separar erro de recuperação e erro na avaliação da resposta.",
+      "action": "Leia os artigos e localize a informação que responde ao caso de prazo.",
+      "board": "fonte identificável + conteúdo verificável",
+      "speech": "Um corpus minúsculo permite conferir a conta à mão. A escala pequena é deliberada. Depois o mesmo contrato pode avaliar um sistema maior, desde que as referências continuem confiáveis.",
+      "question": "Por que usar um domínio fictício nesta simulação?",
+      "answer": "Para deixar todas as regras visíveis e evitar confundir o exemplo com orientação real.",
+      "focus": 0
+    },
+    {
+      "title": "Casos que discriminam",
+      "view": "cases",
+      "explanation": "O conjunto inclui fato simples, paráfrase e pergunta fora do escopo. Casos fáceis sozinhos podem esconder uma falha sistemática de vocabulário.",
+      "action": "Troque o retriever e identifique quais perguntas mudam de comportamento.",
+      "board": "id + categoria + pergunta + fontes relevantes",
+      "speech": "O caso de paráfrase usa palavras diferentes da fonte. Ele testa algo que o caminho feliz não testa. O caso fora do escopo testa se o sistema reconhece ausência de evidência.",
+      "question": "Por que registrar a categoria de cada caso?",
+      "answer": "Para verificar se uma média global está escondendo concentração de falhas numa habilidade.",
+      "focus": 1
+    },
+    {
+      "title": "Ranking com scores visíveis",
+      "view": "ranking",
+      "explanation": "O ranking conta interseção entre palavras da consulta e do artigo. A alternativa com equivalências mapeia um pequeno vocabulário explicitamente definido; não é um embedding nem um modelo semântico.",
+      "action": "Alterne as duas recuperações e inspecione a pontuação da pergunta com paráfrase.",
+      "board": "score(q,d) = tamanho da interseção lexical",
+      "speech": "Aqui podemos explicar cada ponto do score. Quando adicionamos equivalências, sabemos exatamente quais palavras foram tratadas como próximas. Isso permite avaliar o ganho sem fingir uma busca neural.",
+      "question": "Por que a variante não demonstra compreensão semântica geral?",
+      "answer": "Porque usa uma lista curta de equivalências programadas e só funciona nos casos cobertos por ela.",
+      "focus": 1
+    },
+    {
+      "title": "Recall e precisão com k",
+      "view": "retrieval",
+      "explanation": "Recall conta a fração das fontes relevantes recuperadas; precisão conta quantos itens do top-k são relevantes. Casos fora do escopo não entram no recall porque não possuem fonte relevante declarada.",
+      "action": "Aumente k e observe recall, precisão e os denominadores dos casos elegíveis.",
+      "board": "recall = recuperados relevantes / relevantes; precisão = relevantes no top-k / k",
+      "speech": "Uma fonte relevante em três resultados impõe precisão máxima de um terço. Isso é aritmética, não necessariamente um defeito grave. O recall responde outra pergunta: encontramos o que era necessário?",
+      "question": "Por que aumentar k pode elevar recall e reduzir precisão?",
+      "answer": "Porque pode incluir a fonte necessária junto com mais documentos não relevantes.",
+      "focus": 2
+    },
+    {
+      "title": "O teto imposto pelo conjunto",
+      "view": "ceiling",
+      "explanation": "Cada caso em escopo desta coleção possui exatamente uma fonte relevante. Quando o sistema sempre retorna k documentos, a precisão máxima por caso é um dividido por k.",
+      "action": "Defina k igual a três e compare a precisão com seu teto atingível.",
+      "board": "precisão máxima = min(relevantes,k)/k",
+      "speech": "Não comparem este valor com um número universal de precisão boa. Olhem primeiro a construção do conjunto. O teto ajuda a interpretar a distância entre resultado observado e resultado possível.",
+      "question": "Precisão de 0,33 com k=3 é necessariamente ruim?",
+      "answer": "Não. Com uma única fonte relevante, pode representar recuperação perfeita dentro desse protocolo.",
+      "focus": 2
+    },
+    {
+      "title": "Rubrica por critérios",
+      "view": "rubric",
+      "explanation": "A rubrica atribui pontos para evidência recuperada, resposta pertinente e tratamento do escopo. O limiar transforma notas em aprovações e precisa ser declarado.",
+      "action": "Mude a nota mínima e compare quais casos deixam de passar.",
+      "board": "nota por critério → soma → limiar declarado",
+      "speech": "Um limiar baixo aceita mais casos, inclusive respostas incompletas. Um limiar alto pode rejeitar respostas úteis. Precisamos inspecionar o que cada ponto significa antes de escolher um corte.",
+      "question": "Aumentar o limiar melhora necessariamente a resposta do sistema?",
+      "answer": "Não. Muda a classificação da avaliação, não a resposta produzida pelo sistema.",
+      "focus": 3
+    },
+    {
+      "title": "Juiz determinístico e calibração",
+      "view": "judge",
+      "explanation": "O juiz didático usa critérios fixos e um desvio controlado de aprovação. Comparar seus rótulos com referências humanas construídas permite estudar calibração sem uma API.",
+      "action": "Aumente casos extras aprovados e localize os desacordos que aparecem.",
+      "board": "juiz sintético ≠ avaliação de LLM",
+      "speech": "Eu consigo provocar um desacordo sem mudar o sistema. Isso mostra que o instrumento também tem comportamento. Precisamos avaliar o juiz antes de confiar no volume de notas que ele produz.",
+      "question": "Trocar o juiz altera automaticamente a qualidade do sistema avaliado?",
+      "answer": "Não. Altera a medida; qualquer melhoria real precisa ser verificada nos casos e respostas.",
+      "focus": 3
+    },
+    {
+      "title": "Matriz e kappa do harness",
+      "view": "calibration",
+      "explanation": "As aprovações do juiz e da referência formam uma matriz de confusão. O acordo bruto e o kappa usam as mesmas contagens e podem divergir por causa das marginais.",
+      "action": "Mude o desvio do juiz e confira a célula de aprovação indevida.",
+      "board": "κ = (pₒ−pₑ)/(1−pₑ)",
+      "speech": "O kappa não substitui a inspeção dos desacordos. Ele resume uma propriedade do conjunto de rótulos. Dois casos com o mesmo defeito de rubrica podem revelar uma correção mais útil que a estatística sozinha.",
+      "question": "O que fazer depois de encontrar desacordo?",
+      "answer": "Ler a pergunta, a resposta e a fonte para decidir se o erro está no sistema, na referência ou na rubrica.",
+      "focus": 4
+    },
+    {
+      "title": "A média esconde categorias",
+      "view": "categories",
+      "explanation": "A taxa por categoria mostra quais tipos de entrada concentram falhas. O gráfico usa contagens pequenas e não deve sustentar uma ordenação precisa de sistemas.",
+      "action": "Alterne o retriever e compare fatos simples, paráfrases e fora de escopo.",
+      "board": "global = média ponderada; categoria = diagnóstico",
+      "speech": "Uma média aceitável pode esconder uma categoria inteira reprovada. A divisão por tipo de pergunta localiza esse padrão. Com poucos casos, tratamos o padrão como hipótese para investigar.",
+      "question": "Por que uma categoria com um único caso exige cuidado?",
+      "answer": "Porque uma mudança em uma observação altera a taxa drasticamente e não estima bem a população.",
+      "focus": 4
+    },
+    {
+      "title": "Priorizar consertos",
+      "view": "priority",
+      "explanation": "A prioridade didática divide falhas associadas ao componente pelo esforço estimado. O esforço é uma hipótese configurável e a conta não demonstra causalidade nem retorno garantido.",
+      "action": "Aumente o esforço de corrigir paráfrases e observe a ordem das intervenções.",
+      "board": "prioridade inicial = falhas afetadas / esforço estimado",
+      "speech": "A tabela torna nossa hipótese de custo explícita. Isso é melhor que escolher o componente favorito. Mas uma melhoria só se confirma depois da alteração e de uma nova execução no mesmo conjunto.",
+      "question": "A maior razão impacto/esforço garante a melhor intervenção?",
+      "answer": "Não. O impacto é estimado, pode haver dependências e a amostra pode ser pequena.",
+      "focus": 5
+    },
+    {
+      "title": "Relatório que pode ser reexecutado",
+      "view": "report",
+      "explanation": "Um relatório útil guarda configuração, número de casos, métricas por camada e falhas concretas. Versões e sementes devem acompanhar uma avaliação real para permitir comparação futura.",
+      "action": "Troque k e o retriever e compare os dois resumos produzidos pela mesma coleção.",
+      "board": "casos + configuração + resultados + limites",
+      "speech": "O relatório é consequência da execução. Quando mudamos um componente, rodamos novamente e comparamos. Uma narrativa sem dados e configuração não permite saber se houve progresso.",
+      "question": "Qual é o artefato mais duradouro deste laboratório?",
+      "answer": "O conjunto de casos com referências e o contrato do harness, que continuam úteis mesmo quando o sistema muda.",
+      "focus": 5
+    }
+  ]
+}

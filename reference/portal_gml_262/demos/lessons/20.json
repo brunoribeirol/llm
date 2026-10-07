@@ -1,0 +1,225 @@
+{
+  "id": 20,
+  "title": "Laboratório RAG: pipeline completo e avaliação",
+  "subtitle": "Execute corpus, busca, fusão, reordenação e resposta extrativa em um acervo local pequeno.",
+  "controls": [
+    {
+      "key": "query",
+      "label": "Consulta de teste",
+      "type": "select",
+      "options": [
+        {
+          "value": "prazo",
+          "label": "prazo de matrícula"
+        },
+        {
+          "value": "codigo",
+          "label": "código ZX-42"
+        },
+        {
+          "value": "apoio",
+          "label": "auxílio financeiro"
+        }
+      ],
+      "value": "prazo"
+    },
+    {
+      "key": "chunk",
+      "label": "Palavras por chunk",
+      "type": "range",
+      "min": 4,
+      "max": 18,
+      "step": 1,
+      "value": 10
+    },
+    {
+      "key": "overlap",
+      "label": "Sobreposição",
+      "type": "range",
+      "min": 0,
+      "max": 6,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "candidates",
+      "label": "Candidatos recuperados",
+      "type": "range",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "k",
+      "label": "Fontes no contexto",
+      "type": "range",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "rrf",
+      "label": "Constante RRF",
+      "type": "range",
+      "min": 1,
+      "max": 60,
+      "step": 1,
+      "value": 20
+    }
+  ],
+  "nodes": [
+    "CP1: corpus",
+    "CP2: vetores",
+    "CP3: híbrido",
+    "CP4: ordem",
+    "CP5: resposta",
+    "CP6: avaliar"
+  ],
+  "steps": [
+    {
+      "title": "Definir o contrato de ponta a ponta",
+      "view": "contract",
+      "explanation": "O laboratório conecta componentes que podem falhar independentemente. O navegador usa um acervo fictício e resposta extrativa, sem serviços externos.",
+      "action": "Confira a configuração registrada e escolha uma consulta.",
+      "board": "Ingestão → índice → busca → contexto → saída → avaliação",
+      "speech": "O modo local é explícito. Nenhum número aqui vem de um serviço de geração. Vamos produzir evidência inspecionável em cada estágio.",
+      "question": "Qual é o entregável central do laboratório real?",
+      "answer": "Um pipeline reproduzível acompanhado de métricas e interpretação de seus limites.",
+      "focus": 0
+    },
+    {
+      "title": "CP1: fragmentar com metadados",
+      "view": "chunks",
+      "explanation": "Os chunks preservam documento de origem e posição. A fragmentação didática por palavras permite observar redundância e cortes problemáticos.",
+      "action": "Mude tamanho e sobreposição e examine os fragmentos.",
+      "board": "chunk = texto + fonte + intervalo",
+      "speech": "O texto de origem permanece acessível. Uma fronteira artificial pode separar uma condição. No projeto, regras estruturais por seção podem ser melhores que esta segmentação simples.",
+      "question": "Por que manter intervalo de origem?",
+      "answer": "Para auditar cortes, reconstruir contexto e relacionar o fragmento ao documento.",
+      "focus": 0
+    },
+    {
+      "title": "CP1: verificar integridade",
+      "view": "integrity",
+      "explanation": "Um pipeline deve conferir campos obrigatórios e avanço do segmentador. A sobreposição é limitada para evitar passo nulo.",
+      "action": "Aproxime overlap do tamanho e confira a regra de limitação.",
+      "board": "0 ≤ overlap < tamanho; início seguinte > início atual",
+      "speech": "Este é um contrato que pode virar teste automatizado. Não basta o programa terminar sem exceção. Precisamos saber se preservou o significado e os metadados.",
+      "question": "O que acontece se overlap igualar tamanho sem proteção?",
+      "answer": "O segmentador pode deixar de avançar e entrar em repetição infinita.",
+      "focus": 0
+    },
+    {
+      "title": "CP2: normalizar e comparar",
+      "view": "vectors",
+      "explanation": "O índice de demonstração mantém cinco vetores documentais manuais. Ele não substitui os chunks por embeddings reais; separa a prática de segmentação da geometria de busca.",
+      "action": "Troque a consulta e compare vetores e normas.",
+      "board": "‖v̂‖=1 ⇒ v̂q·v̂d = cosseno",
+      "speech": "Esta separação é uma limitação intencional do simulador. No notebook real cada chunk recebe seu embedding. Aqui conseguimos conferir cada conta sem carregar um modelo.",
+      "question": "Os vetores mostrados foram produzidos pelos chunks?",
+      "answer": "Não; são vetores manuais de documentos, explicitamente usados para a demonstração geométrica.",
+      "focus": 1
+    },
+    {
+      "title": "CP2: inspecionar o ranking denso",
+      "view": "dense",
+      "explanation": "O produto escalar dos vetores normalizados ordena candidatos. O texto recuperado deve ser lido para verificar relevância de fato.",
+      "action": "Selecione código e compare ranking com o documento correto.",
+      "board": "Ranking não substitui inspeção da evidência",
+      "speech": "Um resultado geometricamente próximo pode não conter o identificador. Este é o motivo de trazer uma segunda família de busca. Vamos guardar a posição antes de mudar o pipeline.",
+      "question": "Por que manter uma consulta de controle?",
+      "answer": "Para detectar regressões conhecidas e verificar o funcionamento mínimo do índice.",
+      "focus": 1
+    },
+    {
+      "title": "CP3: acrescentar a busca lexical",
+      "view": "lexical",
+      "explanation": "BM25 usa ocorrências de termos nos documentos. Seus escores complementam os cossenos, mas não têm a mesma unidade.",
+      "action": "Troque a consulta e compare as duas listas.",
+      "board": "Lexical: ocorrência; denso: proximidade",
+      "speech": "Os escores lexicais são calculados com os textos visíveis. Os vetores densos são manuais. Estamos comparando mecanismos, não anunciando um benchmark de modelos.",
+      "question": "Um ranking lexical pode superar o denso?",
+      "answer": "Sim, especialmente em identificadores e correspondências exatas.",
+      "focus": 2
+    },
+    {
+      "title": "CP3: fundir pelas posições",
+      "view": "fusion",
+      "explanation": "A fusão RRF agrega posições das duas listas. Sua fórmula pode ser verificada à mão em qualquer linha.",
+      "action": "Mude a constante e confira o total de um documento.",
+      "board": "score = 1/(c+r_lex) + 1/(c+r_denso)",
+      "speech": "Não digitamos uma terceira lista manualmente. O ranking combinado sai da fórmula. Confiram a soma antes de confiar no resultado.",
+      "question": "A fusão consulta os rótulos de relevância?",
+      "answer": "Não; os rótulos só entram na avaliação.",
+      "focus": 2
+    },
+    {
+      "title": "CP4: reordenar um conjunto fechado",
+      "view": "rerank",
+      "explanation": "O reranker local usa regras declaradas sobre termos e frases. Uma reordenação não altera quais documentos pertencem ao conjunto candidato.",
+      "action": "Reduza candidatos e compare posições antes e depois.",
+      "board": "Conjunto antes = conjunto depois; ordem pode mudar",
+      "speech": "A regra é simples para poder ser auditada. Um cross-encoder real substituiria essa função no notebook. A limitação de cobertura continuaria igual.",
+      "question": "Qual propriedade deve continuar verdadeira após reordenar?",
+      "answer": "Os identificadores dos candidatos permanecem os mesmos, sem criação ou perda de itens.",
+      "focus": 3
+    },
+    {
+      "title": "CP4: contabilizar o trabalho",
+      "view": "cost",
+      "explanation": "Avaliar consulta e documento em conjunto exige um trabalho por candidato. Um modelo de custo linear deixa explícito o efeito do tamanho do conjunto.",
+      "action": "Aumente candidatos mantendo o número final de fontes.",
+      "board": "Pares avaliados = K_candidatos",
+      "speech": "A latência exibida usa uma hipótese didática por par. Não é medição de rede ou GPU. Mesmo assim a conta ajuda a escolher o orçamento de reranking.",
+      "question": "Reduzir fontes finais reduz automaticamente custo do reranker?",
+      "answer": "Não; se o conjunto candidato permanece igual, a quantidade de pares avaliados também.",
+      "focus": 3
+    },
+    {
+      "title": "CP5: responder e citar a evidência",
+      "view": "answer",
+      "explanation": "A demonstração monta uma resposta extrativa com os documentos selecionados. A origem de cada trecho aparece junto da afirmação.",
+      "action": "Troque consulta e k e leia as fontes usadas.",
+      "board": "Resposta = trechos selecionados + IDs de origem",
+      "speech": "Não há texto produzido por um LLM nesta etapa. A extração torna o vínculo com a fonte verificável. Um gerador real exigiria medir também fidelidade e abstenção.",
+      "question": "Uma citação existente basta para uma resposta correta?",
+      "answer": "Não; deve apoiar o conteúdo e responder à pergunta.",
+      "focus": 4
+    },
+    {
+      "title": "CP6: comparar sobre consultas fixas",
+      "view": "evaluation",
+      "explanation": "A tabela avalia as três consultas didáticas para denso, lexical, híbrido e reordenado. O conjunto pequeno serve para depuração, não para concluir superioridade geral.",
+      "action": "Varie k e candidatos e compare médias e resultados por consulta.",
+      "board": "Métrica média = soma por consulta / número de consultas",
+      "speech": "O denominador aqui é três, bem menor que o laboratório completo. Não escondemos essa limitação. A tabela é calculada a partir de rankings e rótulos explícitos.",
+      "question": "Podemos usar três consultas para declarar uma técnica superior?",
+      "answer": "Não de modo geral; faltam volume, diversidade e análise de incerteza.",
+      "focus": 4
+    },
+    {
+      "title": "Distinguir invariância de ganho observado",
+      "view": "invariant",
+      "explanation": "O recall do conjunto completo de candidatos é preservado por reordenação. Um ganho no topo depende da qualidade do reranker e deve ser medido.",
+      "action": "Compare recall dos candidatos antes/depois e recall no corte final.",
+      "board": "Garantido: mesma cobertura candidata; empírico: melhor topo",
+      "speech": "Este é o principal fechamento do laboratório. Uma propriedade estrutural não precisa de sorte para valer. Uma melhoria de qualidade exige dados e pode deixar de ocorrer.",
+      "question": "Qual afirmação pode ser garantida sem benchmark?",
+      "answer": "Que permutar o mesmo conjunto não muda a quantidade de documentos relevantes presentes nele.",
+      "focus": 5
+    },
+    {
+      "title": "Registrar limites para a próxima etapa",
+      "view": "report",
+      "explanation": "Um relatório deve identificar corpus, consultas, rótulos, parâmetros e modo de execução. Também precisa indicar onde o sistema falha ou não possui evidência.",
+      "action": "Confira o manifesto e formule uma melhoria testável.",
+      "board": "Resultado + proveniência + falhas + próximo teste",
+      "speech": "Uma captura de tela bonita não é o experimento inteiro. Guardem as listas recuperadas e as métricas. Isso permite investigar depois se a falha veio da busca ou da resposta.",
+      "question": "O que permitirá reproduzir esta demonstração?",
+      "answer": "Acervo e rótulos fixos, configuração dos controles, funções de ranking e registro do modo didático local.",
+      "focus": 5
+    }
+  ]
+}

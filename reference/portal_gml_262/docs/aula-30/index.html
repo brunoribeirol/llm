@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Apresentações finais — Entrega final do projeto · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="30">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 30 / 7 — Fronteiras e Encerramento</p><h1>Apresentações finais — Entrega final do projeto</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 30" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Apresentar</strong> um sistema com LLM em 12 minutos, cobrindo problema, arquitetura, demo ao vivo, números por camada e limitações, sem exceder o tempo.</p></li><li><p><strong>Demonstrar</strong> o sistema ao vivo em pelo menos um caso difícil do próprio conjunto de teste — não apenas no caminho felizeado.</p></li><li><p><strong>Sustentar</strong> cada número apresentado com a métrica, o denominador e a procedência do juiz que o produziu.</p></li><li><p><strong>Defender</strong> oralmente qualquer camada do sistema, explicando por que ela existe e qual número prova que ela funciona.</p></li><li><p><strong>Reconhecer</strong> as limitações da própria avaliação em termos específicos (cobertura do conjunto, viés da anotação, ausência de variância), não genéricos.</p></li><li><p><strong>Avaliar</strong> criticamente o trabalho de outra equipe pelos mesmos critérios com que o próprio será avaliado.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · Abertura: hoje quem fala são vocês · 00:00–00:05</summary><div class="prose"><p><strong>[Projeto as quatro regras e não avanço enquanto não terminar de ler]</strong></p>
+<p>Bom dia. Última aula, e hoje eu falo cinco minutos no começo e cinco no fim. O resto é de vocês.</p>
+<p>Quatro regras, e cada uma tem uma razão que eu vou dizer junto.</p>
+<p>Doze minutos de apresentação. Em dez, eu levanto dois dedos, sem interromper — é o sinal de que faltam dois. Em doze, encerra onde estiver. A razão: sem corte firme, a primeira equipe consome vinte minutos e a última apresenta em seis, e aí a nota passa a medir a ordem do sorteio em vez de medir o trabalho.</p>
+<p>Demo ao vivo, com pelo menos um caso difícil do conjunto de teste de vocês. Paráfrase, multi-fonte, fora do escopo, adversarial — vocês escolhem, mas tem que ser um que discrimine. A razão: demo no caminho felizeado é indistinguível de demo falsa.</p>
+<p>Números na tela, não na narração. A tabela do Lab 8 projetada, com o <code>n</code> de cada linha visível. Número que vocês falam de cabeça eu não consigo verificar, e ele não pontua.</p>
+<p>E perguntas: duas ou três por equipe, sobre o que vocês construíram. Não é prova, não é pegadinha de fronteira, e eu não vou perguntar sobre o que vocês não fizeram.</p>
+<p><strong>[Faço uma pausa antes da próxima frase e falo devagar]</strong></p>
+<p>E agora a coisa mais importante desta abertura. Se o caso difícil <strong>falhar</strong> ao vivo, isso não penaliza vocês.</p>
+<blockquote>
+<p>Ideia central: "Falha ao vivo com a camada nomeada vale mais que sucesso não explicado. Se quebrar, me digam em que camada quebrou e sigam."</p>
+</blockquote>
+<p>Isso está escrito no descritor de nível pleno da ficha. Eu digo isso agora porque quero que vocês escolham um caso difícil de verdade, e não o mais seguro.</p>
+<p>Última coisa: a entrega é o que está no repositório. A apresentação é a defesa dela.</p>
+<hr /></div></details><details><summary>Slide 2 · A ordem e o relógio · projetado nas trocas</summary><div class="prose"><p><strong>[Projeto a grade e deixo o marcador na equipe 1]</strong></p>
+<p>Esta é a grade. A ordem foi sorteada e publicada antes da aula. Slot de quinze minutos: doze de apresentação, três de perguntas e troca de máquina.</p>
+<blockquote>
+<p>Ideia central: "Slot é slot. Quem começa atrasado apresenta em menos tempo — não empurra o próximo."</p>
+</blockquote>
+<p>Equipe um, a máquina é sua.</p>
+<hr /></div></details><details><summary>Slide 3 · Os critérios, projetados · projetado na pausa técnica</summary><div class="prose"><p><strong>[Projeto durante a pausa, sem falar sobre]</strong></p>
+<hr /></div></details><details><summary>Slide 4 · O que eu vou perguntar · dito na abertura, projetado antes da primeira pergunta</summary><div class="prose"><p><strong>[Projeto a pergunta canônica antes de fazer a primeira pergunta do dia]</strong></p>
+<p>Antes de eu perguntar qualquer coisa, aqui está a forma da pergunta. Uma só.</p>
+<blockquote>
+<p>Ideia central: "Por que essa camada existe no sistema, e que número prova que ela funciona?"</p>
+</blockquote>
+<p>De onde ela vem: da camada órfã que vocês mesmos nomearam no inventário da semana passada — a que não foi construída em nenhum lab.</p>
+<p>E uma coisa que vale dizer, porque tira o mistério: <strong>isso é exatamente a forma das questões de justificativa da prova</strong>, as que valiam quarenta dos cem pontos. Não é uma pergunta nova, é a mesma competência aplicada ao sistema de vocês em vez de a um cenário hipotético.</p>
+<blockquote>
+<p>Ideia central: "Quem treinou para a prova treinou para isto. Não são duas preparações."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 5 · [Transição] Pausa técnica e o Bloco B · 01:05–01:10</summary><div class="prose"><p><strong>[Projeto o cronômetro de 5 minutos]</strong></p>
+<p>Cinco minutos. Troca de máquina, respiro, e é a única janela de hoje para logística individual — se alguém precisa falar comigo sobre alguma coisa, é agora.</p>
+<p>Bloco B: equipes cinco, seis e sete. A máquina de contingência está ligada, com Colab aberto, para quem precisar.</p>
+<hr /></div></details><details><summary>Slide 6 · Encerramento da disciplina · 01:55–02:00</summary><div class="prose"><p><strong>[Projeto o mapa do percurso da Aula 29, com as duas colunas acesas]</strong></p>
+<p>Cinco minutos, e eles são meus.</p>
+<p>Três observações da sessão de hoje. <strong>[digo as três, tiradas das fichas preenchidas ao vivo]</strong></p>
+<p>A devolução individual vem com a minha ficha e com as fichas de pares que vocês preencheram, no prazo que está no slide.</p>
+<p><strong>[Aponto o mapa]</strong></p>
+<p>E o fechamento. Na primeira aula deste semestre eu disse uma coisa que vocês não tinham como verificar: que os LLMs unificaram as tarefas de NLP sob "prever o próximo token", e que o custo dessa unificação tinha sido transferido para a avaliação. Que a gente tinha ganhado um modelo geral e perdido o instrumento de medida.</p>
+<p>Vocês pagaram essa conta. Cada equipe que apresentou hoje tem uma tabela com uma linha por camada, um <code>n</code> declarado e um juiz com kappa. Isso é a fatura quitada.</p>
+<blockquote>
+<p>Ideia central: "Vocês entraram sabendo usar um LLM. Saem sabendo provar que o sistema de vocês funciona — e essa é a parte que quase ninguém sabe fazer."</p>
+</blockquote>
+<p>E o último desafio do curso, o único sem prazo: consertar o primeiro item da fila de vocês, rodar o harness de novo, e comparar as duas tabelas. A medição já existia antes do conserto, então o ganho é demonstrável — e isso é a coisa mais parecida com trabalho real que vocês vão fazer com esse projeto. Depois, deixem o repositório público e legível. É portfólio, e a parte que mais chama atenção de quem contrata é a existência da avaliação, não o sistema.</p>
+<p>Obrigado pelo semestre.</p>
+<hr /></div></details><details><summary>Parte 2 — Protocolo de sessão</summary><div class="prose"><p>Não há demonstração do instrutor nesta aula. O que eu conduzo é o protocolo, e ele tem quatro peças que rodam sete vezes.</p>
+<p><strong>1.</strong> <strong>[Inicio o relógio visível no primeiro slide de cada equipe]</strong> O relógio é meu e é visível para a equipe. Em 10:00 eu levanto dois dedos sem interromper a fala. Em 12:00 eu digo "tempo" uma vez, e a equipe encerra onde estiver.</p>
+<p><strong>2.</strong> <strong>[Escolho as perguntas enquanto a equipe apresenta]</strong> Duas ou três, e a fonte preferencial é a camada órfã que a equipe nomeou na Aula 29 — eu tenho a lista anotada. Banco reutilizável, para quando a camada órfã não render:</p>
+<ul>
+<li>"Essa camada aqui — por que ela existe no sistema, e que número prova que ela funciona?"</li>
+<li>"Vocês escolheram [técnica]. Qual era a alternativa, e o que fez vocês descartarem ela?"</li>
+<li>"Esse número tem <code>n</code> de quanto? E o que ele <strong>não</strong> permite vocês concluírem?"</li>
+<li>"O juiz de vocês foi calibrado contra o quê? Qual foi o kappa, e vocês olharam os desacordos?"</li>
+<li>"Se vocês tivessem duas semanas a mais, qual item da fila vocês consertariam primeiro, e por que esse?"</li>
+</ul>
+<p><strong>3.</strong> <strong>[Preencho a ficha durante a apresentação, não depois]</strong> <code>codigo/ficha-avaliacao.md</code>, uma por equipe. Nível marcado por item, e uma linha de evidência escrita <strong>na hora</strong> — "o caso difícil foi paráfrase multi-fonte, rodou, recall@3 na tela com n=24". Ficha de memória no fim da sessão converge para "todos medianos", e aí a nota deixa de discriminar exatamente na entrega de maior peso do semestre.</p>
+<p><strong>4.</strong> <strong>[Devolvo duas linhas ainda dentro do slot]</strong> Uma coisa que funcionou, uma coisa a consertar. Ditas para a equipe na frente da turma, porque a plateia aprende com a devolução alheia mais do que com a própria.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>O hands-on desta aula é a aula. Cada equipe executa quatro checkpoints no próprio slot, e o que eu faço é registrar.</p>
+<p><strong>1.</strong> <strong>[Lanço o Checkpoint 1 — Apresentação em 12 minutos]</strong> Estrutura que funciona, e eu digo isso na abertura para quem quiser usar: problema e usuário em 1 min, arquitetura com as técnicas do curso identificadas em 2, demo em 4, números em 3, limitações em 2.</p>
+<p><strong>2.</strong> <strong>[Lanço o Checkpoint 2 — Demo com caso difícil]</strong> Um caso do próprio conjunto que discrimine, com a equipe declarando de qual categoria ele é.</p>
+<p><strong>3.</strong> <strong>[Lanço o Checkpoint 3 — Números na tela]</strong> A tabela por camada projetada, com <code>n</code>, juiz declarado e kappa.</p>
+<p><strong>4.</strong> <strong>[Lanço o Checkpoint 4 — Defesa]</strong> Duas ou três perguntas respondidas.</p>
+<p><strong>Atividade da plateia — avaliação por pares, sem nota.</strong> Cada aluno que não está apresentando registra, para duas equipes sorteadas, uma linha: o número mais convincente que a equipe mostrou, e a pergunta que ele faria. Recolhidas no fim e devolvidas às equipes junto do meu feedback.</p>
+<hr /></div></details><details><summary>Parte 4 — Se perguntarem</summary><div class="prose"><p>Esta aula não tem derivação para puxar. O que a turma puxa aqui é outra coisa, e vale ter resposta pronta.</p>
+<p><strong>"A nota sai hoje?"</strong> Não. A devolução individual vem com a ficha preenchida e as fichas de pares, no prazo que está no slide 6 — <code>[definir na oferta]</code>. O que sai hoje são as três observações transversais do encerramento.</p>
+<p><strong>"Se a demo falhou, perdemos quanto?"</strong> Nada, se a camada foi nomeada. Está no descritor de nível pleno do Item 1, e eu disse isso na abertura justamente para não haver essa dúvida agora. O que perde ponto é sucesso no caminho felizeado sem explicação — que é o oposto do que aconteceu.</p>
+<p><strong>"E agora, o que eu estudo?"</strong> A ordem está no slide 14 da aula passada: Jurafsky e Martin e Raschka para o lado do modelo, Huyen para o lado do sistema, e depois um paper por semana com reimplementação de um componente. E o degrau zero vocês já têm na mão: os apêndices dos trinta decks. Fundamento de atenção e de otimização não tem meia-vida curta — o que envelhece rápido é agente e fronteira, não aquilo. Se der para fazer uma coisa só nas próximas semanas, é reimplementar um componente do Lab 2 sem olhar o notebook.</p>
+<hr /></div></details><details><summary>Encerramento · 01:55–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 6 da Parte 1 — as três observações transversais tiradas das fichas, o prazo da devolução individual, e o fechamento do arco aberto na Aula 1 com a dívida de avaliação quitada.</p>
+<blockquote>
+<p>Ideia central: "Vocês entraram sabendo usar um LLM. Saem sabendo provar que o sistema de vocês funciona."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 30 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="codigo-student.zip">↓ Notebooks e scripts do aluno</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Apresentações finais — Entrega final do projeto</h1>
+<h2>Slide 1 · Abertura: hoje quem fala são vocês · 00:00–00:05</h2>
+<p><strong>[Projeto as quatro regras e não avanço enquanto não terminar de ler]</strong></p>
+<p>Bom dia. Última aula, e hoje eu falo cinco minutos no começo e cinco no fim. O resto é de vocês.</p>
+<p>Quatro regras, e cada uma tem uma razão que eu vou dizer junto.</p>
+<p>Doze minutos de apresentação. Em dez, eu levanto dois dedos, sem interromper — é o sinal de que faltam dois. Em doze, encerra onde estiver. A razão: sem corte firme, a primeira equipe consome vinte minutos e a última apresenta em seis, e aí a nota passa a medir a ordem do sorteio em vez de medir o trabalho.</p>
+<p>Demo ao vivo, com pelo menos um caso difícil do conjunto de teste de vocês. Paráfrase, multi-fonte, fora do escopo, adversarial — vocês escolhem, mas tem que ser um que discrimine. A razão: demo no caminho felizeado é indistinguível de demo falsa.</p>
+<p>Números na tela, não na narração. A tabela do Lab 8 projetada, com o <code>n</code> de cada linha visível. Número que vocês falam de cabeça eu não consigo verificar, e ele não pontua.</p>
+<p>E perguntas: duas ou três por equipe, sobre o que vocês construíram. Não é prova, não é pegadinha de fronteira, e eu não vou perguntar sobre o que vocês não fizeram.</p>
+<p><strong>[Faço uma pausa antes da próxima frase e falo devagar]</strong></p>
+<p>E agora a coisa mais importante desta abertura. Se o caso difícil <strong>falhar</strong> ao vivo, isso não penaliza vocês.</p>
+<blockquote>
+<p>Ideia central: "Falha ao vivo com a camada nomeada vale mais que sucesso não explicado. Se quebrar, me digam em que camada quebrou e sigam."</p>
+</blockquote>
+<p>Isso está escrito no descritor de nível pleno da ficha. Eu digo isso agora porque quero que vocês escolham um caso difícil de verdade, e não o mais seguro.</p>
+<p>Última coisa: a entrega é o que está no repositório. A apresentação é a defesa dela.</p>
+<hr />
+<h2>Slide 2 · A ordem e o relógio · projetado nas trocas</h2>
+<p><strong>[Projeto a grade e deixo o marcador na equipe 1]</strong></p>
+<p>Esta é a grade. A ordem foi sorteada e publicada antes da aula. Slot de quinze minutos: doze de apresentação, três de perguntas e troca de máquina.</p>
+<blockquote>
+<p>Ideia central: "Slot é slot. Quem começa atrasado apresenta em menos tempo — não empurra o próximo."</p>
+</blockquote>
+<p>Equipe um, a máquina é sua.</p>
+<hr />
+<h2>Slide 3 · Os critérios, projetados · projetado na pausa técnica</h2>
+<p><strong>[Projeto durante a pausa, sem falar sobre]</strong></p>
+<hr />
+<h2>Slide 4 · O que eu vou perguntar · dito na abertura, projetado antes da primeira pergunta</h2>
+<p><strong>[Projeto a pergunta canônica antes de fazer a primeira pergunta do dia]</strong></p>
+<p>Antes de eu perguntar qualquer coisa, aqui está a forma da pergunta. Uma só.</p>
+<blockquote>
+<p>Ideia central: "Por que essa camada existe no sistema, e que número prova que ela funciona?"</p>
+</blockquote>
+<p>De onde ela vem: da camada órfã que vocês mesmos nomearam no inventário da semana passada — a que não foi construída em nenhum lab.</p>
+<p>E uma coisa que vale dizer, porque tira o mistério: <strong>isso é exatamente a forma das questões de justificativa da prova</strong>, as que valiam quarenta dos cem pontos. Não é uma pergunta nova, é a mesma competência aplicada ao sistema de vocês em vez de a um cenário hipotético.</p>
+<blockquote>
+<p>Ideia central: "Quem treinou para a prova treinou para isto. Não são duas preparações."</p>
+</blockquote>
+<hr />
+<h2>Slide 5 · [Transição] Pausa técnica e o Bloco B · 01:05–01:10</h2>
+<p><strong>[Projeto o cronômetro de 5 minutos]</strong></p>
+<p>Cinco minutos. Troca de máquina, respiro, e é a única janela de hoje para logística individual — se alguém precisa falar comigo sobre alguma coisa, é agora.</p>
+<p>Bloco B: equipes cinco, seis e sete. A máquina de contingência está ligada, com Colab aberto, para quem precisar.</p>
+<hr />
+<h2>Slide 6 · Encerramento da disciplina · 01:55–02:00</h2>
+<p><strong>[Projeto o mapa do percurso da Aula 29, com as duas colunas acesas]</strong></p>
+<p>Cinco minutos, e eles são meus.</p>
+<p>Três observações da sessão de hoje. <strong>[digo as três, tiradas das fichas preenchidas ao vivo]</strong></p>
+<p>A devolução individual vem com a minha ficha e com as fichas de pares que vocês preencheram, no prazo que está no slide.</p>
+<p><strong>[Aponto o mapa]</strong></p>
+<p>E o fechamento. Na primeira aula deste semestre eu disse uma coisa que vocês não tinham como verificar: que os LLMs unificaram as tarefas de NLP sob "prever o próximo token", e que o custo dessa unificação tinha sido transferido para a avaliação. Que a gente tinha ganhado um modelo geral e perdido o instrumento de medida.</p>
+<p>Vocês pagaram essa conta. Cada equipe que apresentou hoje tem uma tabela com uma linha por camada, um <code>n</code> declarado e um juiz com kappa. Isso é a fatura quitada.</p>
+<blockquote>
+<p>Ideia central: "Vocês entraram sabendo usar um LLM. Saem sabendo provar que o sistema de vocês funciona — e essa é a parte que quase ninguém sabe fazer."</p>
+</blockquote>
+<p>E o último desafio do curso, o único sem prazo: consertar o primeiro item da fila de vocês, rodar o harness de novo, e comparar as duas tabelas. A medição já existia antes do conserto, então o ganho é demonstrável — e isso é a coisa mais parecida com trabalho real que vocês vão fazer com esse projeto. Depois, deixem o repositório público e legível. É portfólio, e a parte que mais chama atenção de quem contrata é a existência da avaliação, não o sistema.</p>
+<p>Obrigado pelo semestre.</p>
+<hr />
+<h2>Parte 2 — Protocolo de sessão</h2>
+<p>Não há demonstração do instrutor nesta aula. O que eu conduzo é o protocolo, e ele tem quatro peças que rodam sete vezes.</p>
+<p><strong>1.</strong> <strong>[Inicio o relógio visível no primeiro slide de cada equipe]</strong> O relógio é meu e é visível para a equipe. Em 10:00 eu levanto dois dedos sem interromper a fala. Em 12:00 eu digo "tempo" uma vez, e a equipe encerra onde estiver.</p>
+<p><strong>2.</strong> <strong>[Escolho as perguntas enquanto a equipe apresenta]</strong> Duas ou três, e a fonte preferencial é a camada órfã que a equipe nomeou na Aula 29 — eu tenho a lista anotada. Banco reutilizável, para quando a camada órfã não render:</p>
+<ul>
+<li>"Essa camada aqui — por que ela existe no sistema, e que número prova que ela funciona?"</li>
+<li>"Vocês escolheram [técnica]. Qual era a alternativa, e o que fez vocês descartarem ela?"</li>
+<li>"Esse número tem <code>n</code> de quanto? E o que ele <strong>não</strong> permite vocês concluírem?"</li>
+<li>"O juiz de vocês foi calibrado contra o quê? Qual foi o kappa, e vocês olharam os desacordos?"</li>
+<li>"Se vocês tivessem duas semanas a mais, qual item da fila vocês consertariam primeiro, e por que esse?"</li>
+</ul>
+<p><strong>3.</strong> <strong>[Preencho a ficha durante a apresentação, não depois]</strong> <code>codigo/ficha-avaliacao.md</code>, uma por equipe. Nível marcado por item, e uma linha de evidência escrita <strong>na hora</strong> — "o caso difícil foi paráfrase multi-fonte, rodou, recall@3 na tela com n=24". Ficha de memória no fim da sessão converge para "todos medianos", e aí a nota deixa de discriminar exatamente na entrega de maior peso do semestre.</p>
+<p><strong>4.</strong> <strong>[Devolvo duas linhas ainda dentro do slot]</strong> Uma coisa que funcionou, uma coisa a consertar. Ditas para a equipe na frente da turma, porque a plateia aprende com a devolução alheia mais do que com a própria.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>O hands-on desta aula é a aula. Cada equipe executa quatro checkpoints no próprio slot, e o que eu faço é registrar.</p>
+<p><strong>1.</strong> <strong>[Lanço o Checkpoint 1 — Apresentação em 12 minutos]</strong> Estrutura que funciona, e eu digo isso na abertura para quem quiser usar: problema e usuário em 1 min, arquitetura com as técnicas do curso identificadas em 2, demo em 4, números em 3, limitações em 2.</p>
+<p><strong>2.</strong> <strong>[Lanço o Checkpoint 2 — Demo com caso difícil]</strong> Um caso do próprio conjunto que discrimine, com a equipe declarando de qual categoria ele é.</p>
+<p><strong>3.</strong> <strong>[Lanço o Checkpoint 3 — Números na tela]</strong> A tabela por camada projetada, com <code>n</code>, juiz declarado e kappa.</p>
+<p><strong>4.</strong> <strong>[Lanço o Checkpoint 4 — Defesa]</strong> Duas ou três perguntas respondidas.</p>
+<p><strong>Atividade da plateia — avaliação por pares, sem nota.</strong> Cada aluno que não está apresentando registra, para duas equipes sorteadas, uma linha: o número mais convincente que a equipe mostrou, e a pergunta que ele faria. Recolhidas no fim e devolvidas às equipes junto do meu feedback.</p>
+<hr />
+<h2>Parte 4 — Se perguntarem</h2>
+<p>Esta aula não tem derivação para puxar. O que a turma puxa aqui é outra coisa, e vale ter resposta pronta.</p>
+<p><strong>"A nota sai hoje?"</strong> Não. A devolução individual vem com a ficha preenchida e as fichas de pares, no prazo que está no slide 6 — <code>[definir na oferta]</code>. O que sai hoje são as três observações transversais do encerramento.</p>
+<p><strong>"Se a demo falhou, perdemos quanto?"</strong> Nada, se a camada foi nomeada. Está no descritor de nível pleno do Item 1, e eu disse isso na abertura justamente para não haver essa dúvida agora. O que perde ponto é sucesso no caminho felizeado sem explicação — que é o oposto do que aconteceu.</p>
+<p><strong>"E agora, o que eu estudo?"</strong> A ordem está no slide 14 da aula passada: Jurafsky e Martin e Raschka para o lado do modelo, Huyen para o lado do sistema, e depois um paper por semana com reimplementação de um componente. E o degrau zero vocês já têm na mão: os apêndices dos trinta decks. Fundamento de atenção e de otimização não tem meia-vida curta — o que envelhece rápido é agente e fronteira, não aquilo. Se der para fazer uma coisa só nas próximas semanas, é reimplementar um componente do Lab 2 sem olhar o notebook.</p>
+<hr />
+<h2>Encerramento · 01:55–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 6 da Parte 1 — as três observações transversais tiradas das fichas, o prazo da devolução individual, e o fechamento do arco aberto na Aula 1 com a dívida de avaliação quitada.</p>
+<blockquote>
+<p>Ideia central: "Vocês entraram sabendo usar um LLM. Saem sabendo provar que o sistema de vocês funciona."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 30 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-29/index.html">← Aula anterior</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

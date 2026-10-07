@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Transformer I: self-attention e a arquitetura · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="6">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 06 / 1 — Fundamentos: do texto ao Transformer</p><h1>Transformer I: self-attention e a arquitetura</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 06" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Explicar</strong> os papéis de Q, K e V e por que as três projeções vêm da mesma entrada na self-attention.</p></li><li><p><strong>Enunciar</strong> <code>Attention(Q,K,V) = softmax(QKᵀ/√d_k)V</code> e <strong>descrever</strong> a função de cada termo.</p></li><li><p><strong>Investigar</strong> a saturação do softmax como possível causa de dificuldade no treinamento e <strong>justificar</strong> o fator de escala com o argumento desenvolvido em A.2.</p></li><li><p><strong>Reconhecer</strong> sinais de possível vazamento de futuro e <strong>verificar</strong> a ordem entre máscara e softmax, com apoio da análise em A.3.</p></li><li><p><strong>Descrever</strong> o que as várias cabeças de atenção acrescentam e <strong>explicar</strong> por que um mapa de pesos, sozinho, não determina a função de uma cabeça no modelo.</p></li><li><p><strong>Estimar</strong> a memória ocupada pela matriz de atenção e <strong>relacionar</strong> essa estimativa ao comprimento de contexto que cabe no hardware disponível.</p></li><li><p><strong>Localizar</strong> encoder, decoder, self-attention causal e cross-attention no diagrama e <strong>explicar</strong> a geração de texto token a token.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · A mesma palavra em dois contextos · 00:00–00:05</summary><div class="prose"><p>Boa noite, pessoal. Vou retomar o exemplo de “banco” que apareceu quando estudamos
+embeddings. Em “o banco do rio estava cheio”, estamos usando banco no sentido de uma
+formação de areia no rio. Em “o banco do centro estava fechado”, estamos falando de uma
+instituição financeira. As palavras ao redor ajudam a entender de qual banco estamos falando.</p>
+<p>O embedding estático é um vetor associado à palavra. Quando buscamos “banco” na mesma
+tabela de embeddings, recebemos os mesmos números nas duas frases. As outras palavras
+ainda não participaram desse cálculo.</p>
+<p>Se eu entregar só esse vetor a um classificador, ele não terá informação para distinguir
+os dois usos. Um classificador é um modelo que escolhe uma categoria; neste exemplo,
+queremos que ele identifique o sentido da palavra. Precisamos, portanto, de uma
+representação que também leve em conta o restante da frase.</p>
+<blockquote>
+<p>Ideia central: “O vetor inicial de banco é o mesmo; o contexto precisa entrar no cálculo da nova representação.”</p>
+</blockquote></div></details><details><summary>Slide 2 · Como a RNN leva o contexto adiante · 00:05–00:10</summary><div class="prose"><p>Na Aula 5, “Modelos sequenciais e o nascimento da atenção”, vimos uma forma de incluir
+contexto: a RNN. Ela mantém um estado oculto, um vetor que é atualizado a cada token e
+carrega informação dos passos anteriores.</p>
+<p>Isso permite representar a mesma palavra de maneiras diferentes conforme a sequência.
+Mas existe uma dificuldade: para uma informação da posição 1 chegar à posição 50, ela
+passa por 49 atualizações. A rede precisa aprender a preservá-la ao longo desse caminho.
+As LSTMs ajudam nisso, embora o processamento continue sendo sequencial.</p>
+<p>Além disso, dentro de uma mesma sequência, cada passo espera o anterior. Isso limita
+quanto do trabalho pode ser feito ao mesmo tempo na GPU. A atenção permite outra forma
+de relacionar as posições: uma posição pode consultar diretamente outra, mesmo distante.</p>
+<blockquote>
+<p>Ideia central: “A RNN inclui contexto passo a passo; a atenção permite uma ligação direta entre posições.”</p>
+</blockquote></div></details><details><summary>Slide 3 · Como a self-attention combina informações · 00:10–00:16</summary><div class="prose"><p>Vou começar pela ideia, antes da fórmula. Na self-attention, cada token recebe uma nova
+representação que combina informações dos tokens da própria sequência. Por enquanto,
+vou considerar que todas as posições podem participar. Depois veremos como restringir isso.</p>
+<p>Essa combinação usa pesos. Por exemplo, um peso de 0,6 faz uma informação contribuir mais
+que um peso de 0,1. Os pesos são calculados a partir dos vetores da entrada, então podem
+mudar de uma frase para outra.</p>
+<p>No exemplo de “banco”, a presença de “rio” pode mudar tanto os pesos quanto o conteúdo
+disponível para combinar. Com “centro”, o conjunto de informações é outro. É assim que
+o mesmo vetor inicial pode dar origem a representações diferentes.</p>
+<p>Estamos usando palavras inteiras para facilitar a leitura. Em um modelo de linguagem,
+um token também pode ser uma parte de palavra ou um sinal de pontuação.</p>
+<blockquote>
+<p>Ideia central: “A self-attention calcula quanto cada token contribui para a representação dos outros.”</p>
+</blockquote></div></details><details><summary>Slide 4 · Q, K, V: três papéis, uma entrada · 00:16–00:23</summary><div class="prose"><p>Para fazer essa combinação, transformamos o vetor de cada token em três vetores.
+Vou usar os nomes em inglês porque são os que aparecem no artigo e no código.</p>
+<p>A <strong>query</strong>, ou consulta, é o vetor que será comparado com os demais. A <strong>key</strong>, ou chave,
+é o vetor usado nessa comparação do outro lado. O <strong>value</strong>, ou valor, contém a informação
+que será combinada na saída.</p>
+<p>Uma busca em uma biblioteca ajuda a imaginar esses papéis: tenho uma consulta, comparo
+essa consulta com informações do catálogo e uso o conteúdo dos materiais encontrados.
+Aqui, porém, tudo é representado por números, e a saída pode combinar vários conteúdos.</p>
+<p>Chamamos essas transformações de projeções lineares: multiplicamos a entrada por três
+matrizes, cujos valores são aprendidos durante o treinamento. Ao reunir os vetores de
+todos os tokens, obtemos as matrizes Q, K e V. Na self-attention, as três vêm da mesma
+entrada X.</p>
+<blockquote>
+<p>Ideia central: “Q e K calculam os pesos; V fornece o conteúdo que será combinado.”</p>
+</blockquote></div></details><details><summary>Slide 5 · Lendo a fórmula de atenção · 00:23–00:33</summary><div class="prose"><p>Agora vou mostrar a fórmula que reúne essas operações.</p>
+<p><strong>[Projeto a fórmula e acompanho os termos com o cursor.]</strong></p>
+<p><code>Attention(Q, K, V) = softmax(QKᵀ / √d_k) V</code></p>
+<p>Eu leio assim: atenção de Q, K e V é o softmax de Q vezes K transposto, dividido pela raiz
+de d_k, e o resultado é multiplicado por V.</p>
+<p>O produto <code>QKᵀ</code> calcula um escore para cada par de posições. Escore é apenas um número que
+expressa o resultado da comparação entre uma query e uma key. A transposição, indicada
+pelo T, organiza K para que essa multiplicação compare cada consulta com cada chave.</p>
+<p>O <code>d_k</code> é o número de componentes de cada query e key. A divisão por sua raiz ajusta a
+escala dos escores. Vou explicar o motivo no próximo slide.</p>
+<p>O <strong>softmax</strong> transforma os escores de cada linha em pesos não negativos que somam 1.
+Por fim, multiplicar por V combina os vetores de conteúdo usando esses pesos. Se os pesos
+forem 0,6, 0,3 e 0,1, usamos 60% do primeiro vetor, 30% do segundo e 10% do terceiro.</p>
+<p>Essa média ponderada também recebe o nome de <strong>combinação convexa</strong>. O termo parece novo,
+mas descreve justamente essas duas condições: pesos não negativos e soma igual a 1.</p>
+<p>Outra observação: a comparação de uma posição com outra não precisa dar o mesmo resultado
+no sentido inverso. Q e K usam transformações diferentes. Por isso, a matriz de escores
+não precisa ser simétrica.</p>
+<blockquote>
+<p>Ideia central: “A fórmula compara os tokens, calcula os pesos e combina os conteúdos.”</p>
+</blockquote></div></details><details><summary>Slide 6 · Por que dividir por `√d_k` · 00:33–00:43</summary><div class="prose"><p>Vou voltar à divisão por raiz de d_k. Quando aumentamos a dimensão de Q e K, o produto
+escalar passa a somar mais termos. Sob as hipóteses do exemplo que veremos, isso aumenta
+a dispersão dos escores.</p>
+<p>O softmax usa exponenciais. Assim, diferenças grandes entre escores podem gerar pesos
+muito concentrados: um fica perto de 1 e os outros, perto de 0. Chamamos esse comportamento
+de <strong>saturação</strong>. Nessa situação, pequenas mudanças nos escores quase não alteram os pesos.</p>
+<p>Isso pode dificultar o treinamento. O gradiente indica como uma pequena mudança nos
+parâmetros afeta a perda, que mede o erro do modelo. Quando o gradiente que passa pelo
+softmax fica muito pequeno, os ajustes em Q e K por esse caminho também podem ficar pequenos.</p>
+<p>Para vetores com componentes independentes, média zero e variância um, o desvio-padrão
+dos escores é raiz de d_k. Com 64 componentes, dá 8; com 512, aproximadamente 22,6. Esses
+números descrevem a dispersão, não os limites mínimo e máximo dos escores.</p>
+<p>A divisão por raiz de d_k compensa esse crescimento no exemplo. Ela ajusta os escores;
+não transforma Q e K em vetores de comprimento um. Na atenção que estamos estudando,
+esse fator é calculado a partir da dimensão.</p>
+<p>Se um modelo maior estiver aprendendo pior, vale verificar essa parte da implementação.
+Mas esse resultado, sozinho, não identifica a causa: precisamos olhar os escores, os
+pesos e também outras condições do treinamento.</p>
+<blockquote>
+<p>Ideia central: “A divisão por raiz de d_k ajuda a evitar que os pesos fiquem concentrados demais por causa da escala.”</p>
+</blockquote></div></details><details><summary>Slide 7 · [Demo] Observando os pesos de atenção · 00:43–00:55</summary><div class="prose"><p>Vou abrir um exemplo pequeno em NumPy para vermos esses cálculos. Primeiro comparo as
+duas frases com “banco”. Depois observo o efeito da divisão, a máscara e a troca de ordem
+dos tokens. Os passos estão na Parte 2 deste roteiro.</p>
+<blockquote>
+<p>Ideia central: “Vou comparar as saídas para relacionar cada parte da fórmula com os números do exemplo.”</p>
+</blockquote></div></details><details><summary>Slide 8 · Máscara causal: usando apenas o contexto disponível · 01:05–01:14</summary><div class="prose"><p>Voltando ao modelo que gera texto: ele precisa prever um token usando o que veio antes.
+Se a entrada termina em “o banco estava”, o próximo token ainda não está disponível.</p>
+<p>No treinamento, temos a sequência completa e podemos calcular previsões para várias
+posições ao mesmo tempo. A saída da posição i é usada para prever o token i+1. Por isso,
+precisamos impedir que essa posição consulte o token que deveria prever.</p>
+<p>A <strong>máscara causal</strong> permite consultar a própria posição e as anteriores, bloqueando as
+seguintes. Causal, aqui, quer dizer que a previsão usa apenas o contexto já disponível.
+Sem esse bloqueio, o modelo pode usar a resposta durante o treino. Chamamos isso de
+<strong>vazamento de futuro</strong>. A perda pode ficar muito baixa, mas a geração não se beneficiar
+do mesmo modo, porque ali o próximo token ainda não existe.</p>
+<p>A máscara entra antes do softmax: colocamos menos infinito nos escores proibidos.
+O softmax atribui peso zero a eles e distribui os pesos entre as posições permitidas.</p>
+<p>Se eu calcular o softmax sobre todas as posições e apenas zerar os pesos do futuro depois,
+a linha deixa de somar 1. Além disso, os escores futuros já participaram do denominador
+e influenciaram os pesos que restaram.</p>
+<p>Vou conferir duas coisas na implementação: se as linhas somam aproximadamente 1 e se
+mudar o último token preserva as saídas anteriores. Nesse segundo teste, qualquer sorteio
+do modelo precisa estar desativado para a comparação fazer sentido.</p>
+<blockquote>
+<p>Ideia central: “A máscara causal bloqueia as posições futuras antes de calcular os pesos.”</p>
+</blockquote></div></details><details><summary>Slide 9 · Multi-head: várias combinações em paralelo · 01:14–01:22</summary><div class="prose"><p>Até aqui, usamos um conjunto de Q, K e V. Isso é uma cabeça de atenção. Na <strong>multi-head
+attention</strong>, usamos vários conjuntos de projeções e calculamos suas saídas em paralelo.
+Depois juntamos essas saídas e fazemos mais uma transformação linear.</p>
+<p>Cada cabeça pode dar pesos diferentes às posições. Isso permite combinar informações
+de várias maneiras na mesma camada. Não significa que cada cabeça receba uma tarefa
+definida, como “encontrar o sujeito”. Essa divisão não vem pronta.</p>
+<p>Como exemplo, podemos usar dimensão total 512 e oito cabeças com dimensão 64 cada.
+Mantendo a dimensão total, o custo das principais multiplicações fica semelhante ao de
+uma cabeça larga. Ainda existem custos de memória e de implementação a considerar.</p>
+<p>Os mapas de atenção mostram os pesos calculados. Se uma cabeça costuma ligar um verbo
+a um substantivo, isso pode sugerir um padrão. Para concluir qual papel ela tem na resposta
+do modelo, precisamos de outros testes. Vamos retomar essa discussão na Aula 27.</p>
+<blockquote>
+<p>Ideia central: “Várias cabeças permitem calcular combinações diferentes de informação na mesma camada.”</p>
+</blockquote></div></details><details><summary>Slide 10 · Como o tamanho do contexto afeta a memória · 01:22–01:29</summary><div class="prose"><p>Vou olhar agora para o tamanho da matriz de atenção. Se a sequência tem n tokens, temos
+n linhas e n colunas: uma entrada para cada par de posições.</p>
+<p>Com 2.000 tokens, são 4 milhões de entradas por cabeça. Com 4.000 tokens, são 16 milhões.
+Ao dobrar o contexto, esse número aumenta quatro vezes. Se cada entrada ocupa dois bytes,
+a matriz passa de cerca de 8 MB para 32 MB, considerando apenas uma cabeça e uma sequência.</p>
+<p>Na implementação que guarda essa matriz inteira, esse crescimento pesa na memória.
+Ainda temos outras cabeças, exemplos do lote, camadas e dados do treinamento. Então essa
+conta estima uma parte do uso de memória, não o total da GPU.</p>
+<p>O custo de cálculo da atenção também cresce de forma quadrática com o comprimento,
+mantendo a dimensão fixa. Isso não significa que o tempo medido do programa sempre
+quadruplicará, porque ele depende do hardware e das outras operações.</p>
+<p>A atenção permite processar posições em paralelo no treino, enquanto a RNN tem uma
+dependência sequencial entre elas. Esse paralelismo é uma vantagem, mas não torna gratuito
+o uso de sequências longas. Veremos formas mais eficientes de calcular a atenção adiante.</p>
+<blockquote>
+<p>Ideia central: “Dobrar o contexto quadruplica o número de entradas da matriz de atenção.”</p>
+</blockquote></div></details><details><summary>Slide 11 · Encoder, decoder e cross-attention · 01:29–01:35</summary><div class="prose"><p>Vou reunir as peças no Transformer com encoder e decoder, a arquitetura apresentada
+no artigo que vamos ler. Um exemplo de uso é traduzir uma frase de uma língua para outra.</p>
+<p>O <strong>encoder</strong> processa a frase de entrada. Sua self-attention é bidirecional: cada token
+pode consultar os tokens dos dois lados, sem a restrição causal.</p>
+<p>O <strong>decoder</strong> produz a sequência de saída e tem duas atenções por bloco. Na self-attention
+causal, ele usa o trecho de saída já disponível. Na <strong>cross-attention</strong>, consulta as
+representações produzidas pelo encoder: Q vem do decoder, e K e V vêm do encoder.</p>
+<p>É a mesma ideia de consultar a entrada durante a geração que vimos com Bahdanau.
+O cálculo de compatibilidade é diferente: aqui usamos o produto escalar com escala.</p>
+<p><strong>[Aponto o caminho da entrada pelo encoder e a ligação até a cross-attention.]</strong></p>
+<p>As caixas de rede feed-forward, normalização e conexões residuais também fazem parte do
+bloco. Hoje vou apenas localizá-las; vamos estudar sua função na próxima aula.</p>
+<blockquote>
+<p>Ideia central: “Na cross-attention, o decoder faz a consulta e o encoder fornece as chaves e os valores.”</p>
+</blockquote></div></details><details><summary>Slide 12 · Geração token a token e KV cache · 01:35–01:39</summary><div class="prose"><p>Como o modelo continua um texto? Ele calcula probabilidades para o próximo token,
+escolhe um token, acrescenta esse token à sequência e repete o processo. Chamamos isso
+de <strong>geração autorregressiva</strong>, porque cada nova previsão usa os tokens anteriores.</p>
+<p>Uma implementação simples executa o modelo de novo sobre toda a sequência a cada passo.
+Com isso, recalcula chaves e valores das posições anteriores. Na atenção causal, em modo
+de inferência, acrescentar um token ao final não altera essas posições.</p>
+<p>O <strong>KV cache</strong> guarda as chaves e os valores já calculados em cada camada para reutilizá-los.
+Isso reduz o trabalho repetido, mas ocupa memória. Vamos detalhar essa troca adiante.</p>
+<p>Também existe a arquitetura <strong>decoder-only</strong>, como a família GPT. Ela usa uma sequência
+com o prompt e sua continuação, sob máscara causal, sem a pilha separada de encoder
+e sem a cross-attention que acabamos de ver no modelo de tradução.</p>
+<blockquote>
+<p>Ideia central: “O KV cache guarda chaves e valores anteriores para reutilizá-los durante a geração.”</p>
+</blockquote></div></details><details><summary>Slide 13 · [Exercício] Como investigar três problemas · 01:39–01:50</summary><div class="prose"><p>Agora vou propor três situações para discutirmos em dupla. Para cada uma, a resposta
+precisa ter uma causa possível e uma forma de verificar se essa causa faz sentido.
+Temos oito minutos para discutir e três para comparar as respostas.</p>
+<p><strong>[Projeto o enunciado da Parte 3.]</strong></p>
+<blockquote>
+<p>Ideia central: “Para cada problema, vamos propor uma hipótese e dizer como testá-la.”</p>
+</blockquote></div></details><details><summary>Slide 14 · Por que ainda precisamos representar a posição · 01:50–02:00</summary><div class="prose"><p>Hoje vimos como a self-attention combina informações da sequência. Q e K calculam os
+pesos, V fornece os conteúdos, a divisão ajusta a escala e a máscara restringe o contexto.
+Também vimos por que sequências longas aumentam o custo dessa operação.</p>
+<p>Falta retomar um resultado da demonstração. No exemplo sem informação de posição e
+sem máscara causal, embaralhar os tokens apenas embaralha as linhas da saída. Quando
+acompanho o mesmo token, encontro o mesmo vetor de antes.</p>
+<p>Isso importa porque “o cachorro morde o homem” e “o homem morde o cachorro” têm as mesmas
+palavras, mas sentidos diferentes. Precisamos representar a posição para que o mecanismo
+use essa diferença. O nome matemático da propriedade que vimos é <strong>equivariância a
+permutação</strong>: trocar a ordem da entrada troca a ordem da saída da mesma maneira.
+A máscara causal restringe quais posições podem ser consultadas; a demonstração sem
+máscara não pode ser aplicada diretamente a esse caso.</p>
+<p>Na Aula 7, “Transformer II: posição, normalização e o bloco moderno”, vamos estudar
+informação posicional, conexões residuais, normalização e a rede feed-forward.</p>
+<p>Para a leitura, ficam as seções 3.1 a 3.3 de Vaswani e colaboradores. Minha sugestão é
+começar pela figura da arquitetura e localizar a fórmula de hoje. O item A.2 do apêndice
+ajuda a acompanhar a justificativa da raiz de d_k. A pergunta para o estudo é como a conta
+da variância se relaciona com os números observados na demonstração.</p>
+<blockquote>
+<p>Ideia central: “Além do conteúdo de cada token, o modelo precisa de informação sobre sua posição.”</p>
+</blockquote>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p><strong>1. [Mostro o vocabulário e os vetores do exemplo — 2 min.]</strong>
+Aqui cada palavra tem quatro componentes, que escolhi chamar de água, dinheiro, lugar e
+ação. Os números e as matrizes foram definidos à mão para facilitar a leitura. Não houve
+treinamento. Em embeddings aprendidos, não devemos esperar que cada componente tenha
+um significado tão simples.</p>
+<p><strong>2. [Comparo as saídas das duas frases — 3 min.]</strong>
+O vetor de entrada de “banco” é igual nos dois casos. Depois da atenção, as saídas são
+diferentes. Vou comparar os componentes ligados a água e dinheiro e os pesos usados
+para produzir essas saídas.</p>
+<p>Neste exemplo, os pesos de “banco” coincidem nas duas frases, mas os valores combinados
+mudam. O componente água da saída passa de aproximadamente 0,509 para 0,126; o de dinheiro
+faz o caminho inverso. A mudança de contexto pode alterar os valores, os pesos ou ambos.</p>
+<p><strong>3. [Mostro a tabela de escala — 4 min.]</strong>
+Agora o script usa vetores aleatórios com dimensões 4, 64 e 512. A coluna “desvio bruto”
+mostra a dispersão dos escores. As duas últimas colunas mostram a média do maior peso
+de cada linha, sem e com a divisão por raiz de d_k. Vou comparar como esses valores mudam.
+É um experimento sobre os escores e os pesos; ele não está treinando um modelo.</p>
+<p><strong>4. [Mostro a matriz com máscara causal — 1 min.]</strong>
+Acima da diagonal, os pesos são zero. Cada linha soma aproximadamente 1, dentro da
+precisão numérica. Vamos retomar o motivo dessa máscara no slide 8, depois do intervalo.</p>
+<p><strong>5. [Mostro a permutação dos tokens — 2 min.]</strong>
+Este exemplo usa atenção sem máscara e sem informação posicional. Depois de embaralhar
+os tokens, comparo cada token com sua posição original. Os vetores correspondentes
+continuam iguais, dentro da precisão numérica. Vamos voltar a isso no fechamento.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p><strong>[Projeto as situações e organizo as duplas.]</strong></p>
+<p>Vou deixar estas três situações na tela. Para cada uma, a dupla registra uma hipótese,
+uma verificação e o resultado esperado se a hipótese estiver correta. Pode haver mais
+de uma explicação; vamos usar os conceitos de hoje para começar a investigação.</p>
+<ol>
+<li>Um modelo com <code>d_model = 1024</code> tem perda de validação maior que uma versão com
+   <code>d_model = 256</code>, usando os mesmos dados e o mesmo número de passos. A perda de validação
+   mede o erro em dados separados do treinamento. Não aparecem valores numéricos inválidos.</li>
+<li>Um modelo de linguagem tem perda quase zero no treino e gera texto incoerente.
+   O programa termina sem apresentar erro.</li>
+<li>Uma equipe aumenta o contexto de 2.000 para 4.000 tokens. O modelo e o tamanho do lote
+   permanecem iguais, mas o treinamento passa a exceder a memória da GPU.</li>
+</ol>
+<p><strong>Respostas para orientar a correção — 3 min:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Situação</th>
+<th>Hipótese a investigar</th>
+<th>Verificação e resultado esperado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Escores muito dispersos e saturação do softmax, caso a dimensão por cabeça tenha aumentado</td>
+<td>Conferir <code>d_k</code> e a divisão por <code>√d_k</code>; comparar a dispersão dos escores e a concentração dos pesos. Se a escala estiver incorreta, corrigi-la deve reduzir a concentração causada por esse erro. Comparar também as curvas de treino e validação.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Vazamento de futuro por máscara ausente ou incorreta</td>
+<td>Desativar o dropout, que introduz sorteio no treino, e alterar o último token. As saídas anteriores devem permanecer iguais. Verificar também os pesos futuros e a soma das linhas.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Crescimento da matriz de atenção armazenada</td>
+<td>Conferir o formato da matriz e a memória que ela ocupa. Ao dobrar n, seu número de elementos quadruplica. O consumo total da GPU inclui outras parcelas e pode crescer em outra proporção.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>[Convido uma dupla a comentar cada situação.]</strong></p>
+<p>Vou começar pela hipótese que vocês levantaram e depois pela verificação. Que resultado
+nos faria manter essa hipótese? E que resultado indicaria que precisamos procurar outra causa?</p>
+<p><strong>Extensão opcional:</strong> cálculo de atenção com três tokens, seguindo o item A.1.</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Estas respostas dão apoio às perguntas que surgirem. Uma dúvida curta deve ser acolhida
+no momento; uma derivação completa pode usar o tempo disponível ou ficar para o estudo
+orientado pelo apêndice.</p></div></details><details><summary>1. “De onde vem a fórmula?” → A.1 · 8 min</summary><div class="prose"><p>Vou escrever as projeções e identificar as dimensões. Para seis tokens, a matriz de
+escores tem seis linhas e seis colunas. Depois acompanho uma linha: comparações com as
+chaves, ajuste de escala, pesos do softmax e média dos valores. O item A.1 detalha cada conta.</p>
+<p><strong>Versão de 30 segundos:</strong> “Q e K produzem as comparações entre posições. Ajustamos a
+escala, transformamos os resultados em pesos que somam 1 e usamos esses pesos para
+combinar V. A.1 mostra como as dimensões se encaixam.”</p></div></details><details><summary>2. “Por que raiz de d_k, e não d_k?” → A.2 · 6 min</summary><div class="prose"><p>Vou explicitar as hipóteses: componentes independentes, média zero e variância um.
+Cada produto tem variância um; somar d_k desses produtos dá variância d_k. O desvio-padrão
+é a raiz da variância. Dividir por esse desvio faz a variância do escore escalado voltar a um.</p>
+<p><strong>Versão de 30 segundos:</strong> “Nessas hipóteses, a dispersão típica cresce com a raiz da
+dimensão. Dividimos por essa raiz para compensar o crescimento. A conta está em A.2.”</p></div></details><details><summary>3. “Por que não zerar os pesos depois?” → A.3 · 5 min</summary><div class="prose"><p>Vou comparar a soma de uma linha nos dois casos. Se eu normalizar usando também o futuro
+e depois apenas zerá-lo, os pesos restantes somam menos que um. O denominador ainda
+depende dos escores futuros. Com a máscara antes, só as posições permitidas participam
+da normalização.</p>
+<p><strong>Versão de 30 segundos:</strong> “Ao zerar depois, os tokens futuros já influenciaram o cálculo
+dos outros pesos. Aplicar a máscara antes evita essa influência e mantém a soma igual a um.”</p></div></details><details><summary>4. “Várias cabeças não custam mais?” → A.4 · 4 min</summary><div class="prose"><p>Vou manter d_model fixo e dividir essa dimensão entre h cabeças. As projeções de cada
+cabeça ficam menores; ao somá-las, o número de parâmetros dessas projeções se mantém.
+O custo das multiplicações de atenção também fica na mesma ordem. Isso não garante
+igualdade de tempo ou de memória na implementação.</p>
+<p><strong>Versão de 30 segundos:</strong> “Dividimos uma dimensão total fixa entre cabeças menores.
+As principais multiplicações têm custo semelhante, mas guardar mais matrizes de pesos
+pode consumir mais memória. A.4 separa essas contas.”</p></div></details><details><summary>5. “De onde vem o n ao quadrado?” → A.5 · 3 min</summary><div class="prose"><p>Vou desenhar uma tabela com uma linha e uma coluna para cada token. Com quatro tokens,
+são dezesseis pares; com oito, sessenta e quatro. Depois associo cada célula ao espaço
+ocupado por um número na memória.</p>
+<p><strong>Versão de 30 segundos:</strong> “Cada uma das n posições é comparada com n posições. São n²
+pares. Se dobrarmos os dois lados da matriz, o número de entradas aumenta quatro vezes.”</p></div></details><details><summary>6. “Como sabemos que trocar a ordem só troca a saída de lugar?” → A.6 · 5 min</summary><div class="prose"><p>Vou considerar atenção sem informação posicional e sem máscara. Uso P para representar
+a troca de linhas e acompanho essa troca nas projeções, nos escores e na saída. No fim,
+a saída aparece multiplicada pela mesma P. A.6 traz as etapas e suas justificativas.</p>
+<p><strong>Versão de 30 segundos:</strong> “Nesse caso, os cálculos dependem dos vetores dos tokens, sem
+usar seus índices na sequência. Ao mudar os tokens de lugar, suas saídas mudam junto.
+A demonstração geral está em A.6; o exemplo do script mostra um caso.”</p></div></details><details><summary>Ajustes de tempo</summary><div class="prose"><hr /></div></details><details><summary>Encerramento · 01:50–02:00</summary><div class="prose"><p>A fala de encerramento está no slide 14: retomar as funções dos termos da fórmula,
+discutir a posição dos tokens e indicar a leitura com o apoio de A.2.</p>
+<p><em>Roteiro do Instrutor · Aula 6 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="transformer-arquitetura-estudante.html">↓ Transformer completo — versão de estudo</a><a class="button secondary" download href="codigo-student.zip">↓ Notebooks e scripts do aluno</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Transformer I: self-attention e a arquitetura</h1>
+<h2>Slide 1 · A mesma palavra em dois contextos · 00:00–00:05</h2>
+<p>Boa noite, pessoal. Vou retomar o exemplo de “banco” que apareceu quando estudamos
+embeddings. Em “o banco do rio estava cheio”, estamos usando banco no sentido de uma
+formação de areia no rio. Em “o banco do centro estava fechado”, estamos falando de uma
+instituição financeira. As palavras ao redor ajudam a entender de qual banco estamos falando.</p>
+<p>O embedding estático é um vetor associado à palavra. Quando buscamos “banco” na mesma
+tabela de embeddings, recebemos os mesmos números nas duas frases. As outras palavras
+ainda não participaram desse cálculo.</p>
+<p>Se eu entregar só esse vetor a um classificador, ele não terá informação para distinguir
+os dois usos. Um classificador é um modelo que escolhe uma categoria; neste exemplo,
+queremos que ele identifique o sentido da palavra. Precisamos, portanto, de uma
+representação que também leve em conta o restante da frase.</p>
+<blockquote>
+<p>Ideia central: “O vetor inicial de banco é o mesmo; o contexto precisa entrar no cálculo da nova representação.”</p>
+</blockquote>
+<h2>Slide 2 · Como a RNN leva o contexto adiante · 00:05–00:10</h2>
+<p>Na Aula 5, “Modelos sequenciais e o nascimento da atenção”, vimos uma forma de incluir
+contexto: a RNN. Ela mantém um estado oculto, um vetor que é atualizado a cada token e
+carrega informação dos passos anteriores.</p>
+<p>Isso permite representar a mesma palavra de maneiras diferentes conforme a sequência.
+Mas existe uma dificuldade: para uma informação da posição 1 chegar à posição 50, ela
+passa por 49 atualizações. A rede precisa aprender a preservá-la ao longo desse caminho.
+As LSTMs ajudam nisso, embora o processamento continue sendo sequencial.</p>
+<p>Além disso, dentro de uma mesma sequência, cada passo espera o anterior. Isso limita
+quanto do trabalho pode ser feito ao mesmo tempo na GPU. A atenção permite outra forma
+de relacionar as posições: uma posição pode consultar diretamente outra, mesmo distante.</p>
+<blockquote>
+<p>Ideia central: “A RNN inclui contexto passo a passo; a atenção permite uma ligação direta entre posições.”</p>
+</blockquote>
+<h2>Slide 3 · Como a self-attention combina informações · 00:10–00:16</h2>
+<p>Vou começar pela ideia, antes da fórmula. Na self-attention, cada token recebe uma nova
+representação que combina informações dos tokens da própria sequência. Por enquanto,
+vou considerar que todas as posições podem participar. Depois veremos como restringir isso.</p>
+<p>Essa combinação usa pesos. Por exemplo, um peso de 0,6 faz uma informação contribuir mais
+que um peso de 0,1. Os pesos são calculados a partir dos vetores da entrada, então podem
+mudar de uma frase para outra.</p>
+<p>No exemplo de “banco”, a presença de “rio” pode mudar tanto os pesos quanto o conteúdo
+disponível para combinar. Com “centro”, o conjunto de informações é outro. É assim que
+o mesmo vetor inicial pode dar origem a representações diferentes.</p>
+<p>Estamos usando palavras inteiras para facilitar a leitura. Em um modelo de linguagem,
+um token também pode ser uma parte de palavra ou um sinal de pontuação.</p>
+<blockquote>
+<p>Ideia central: “A self-attention calcula quanto cada token contribui para a representação dos outros.”</p>
+</blockquote>
+<h2>Slide 4 · Q, K, V: três papéis, uma entrada · 00:16–00:23</h2>
+<p>Para fazer essa combinação, transformamos o vetor de cada token em três vetores.
+Vou usar os nomes em inglês porque são os que aparecem no artigo e no código.</p>
+<p>A <strong>query</strong>, ou consulta, é o vetor que será comparado com os demais. A <strong>key</strong>, ou chave,
+é o vetor usado nessa comparação do outro lado. O <strong>value</strong>, ou valor, contém a informação
+que será combinada na saída.</p>
+<p>Uma busca em uma biblioteca ajuda a imaginar esses papéis: tenho uma consulta, comparo
+essa consulta com informações do catálogo e uso o conteúdo dos materiais encontrados.
+Aqui, porém, tudo é representado por números, e a saída pode combinar vários conteúdos.</p>
+<p>Chamamos essas transformações de projeções lineares: multiplicamos a entrada por três
+matrizes, cujos valores são aprendidos durante o treinamento. Ao reunir os vetores de
+todos os tokens, obtemos as matrizes Q, K e V. Na self-attention, as três vêm da mesma
+entrada X.</p>
+<blockquote>
+<p>Ideia central: “Q e K calculam os pesos; V fornece o conteúdo que será combinado.”</p>
+</blockquote>
+<h2>Slide 5 · Lendo a fórmula de atenção · 00:23–00:33</h2>
+<p>Agora vou mostrar a fórmula que reúne essas operações.</p>
+<p><strong>[Projeto a fórmula e acompanho os termos com o cursor.]</strong></p>
+<p><code>Attention(Q, K, V) = softmax(QKᵀ / √d_k) V</code></p>
+<p>Eu leio assim: atenção de Q, K e V é o softmax de Q vezes K transposto, dividido pela raiz
+de d_k, e o resultado é multiplicado por V.</p>
+<p>O produto <code>QKᵀ</code> calcula um escore para cada par de posições. Escore é apenas um número que
+expressa o resultado da comparação entre uma query e uma key. A transposição, indicada
+pelo T, organiza K para que essa multiplicação compare cada consulta com cada chave.</p>
+<p>O <code>d_k</code> é o número de componentes de cada query e key. A divisão por sua raiz ajusta a
+escala dos escores. Vou explicar o motivo no próximo slide.</p>
+<p>O <strong>softmax</strong> transforma os escores de cada linha em pesos não negativos que somam 1.
+Por fim, multiplicar por V combina os vetores de conteúdo usando esses pesos. Se os pesos
+forem 0,6, 0,3 e 0,1, usamos 60% do primeiro vetor, 30% do segundo e 10% do terceiro.</p>
+<p>Essa média ponderada também recebe o nome de <strong>combinação convexa</strong>. O termo parece novo,
+mas descreve justamente essas duas condições: pesos não negativos e soma igual a 1.</p>
+<p>Outra observação: a comparação de uma posição com outra não precisa dar o mesmo resultado
+no sentido inverso. Q e K usam transformações diferentes. Por isso, a matriz de escores
+não precisa ser simétrica.</p>
+<blockquote>
+<p>Ideia central: “A fórmula compara os tokens, calcula os pesos e combina os conteúdos.”</p>
+</blockquote>
+<h2>Slide 6 · Por que dividir por <code>√d_k</code> · 00:33–00:43</h2>
+<p>Vou voltar à divisão por raiz de d_k. Quando aumentamos a dimensão de Q e K, o produto
+escalar passa a somar mais termos. Sob as hipóteses do exemplo que veremos, isso aumenta
+a dispersão dos escores.</p>
+<p>O softmax usa exponenciais. Assim, diferenças grandes entre escores podem gerar pesos
+muito concentrados: um fica perto de 1 e os outros, perto de 0. Chamamos esse comportamento
+de <strong>saturação</strong>. Nessa situação, pequenas mudanças nos escores quase não alteram os pesos.</p>
+<p>Isso pode dificultar o treinamento. O gradiente indica como uma pequena mudança nos
+parâmetros afeta a perda, que mede o erro do modelo. Quando o gradiente que passa pelo
+softmax fica muito pequeno, os ajustes em Q e K por esse caminho também podem ficar pequenos.</p>
+<p>Para vetores com componentes independentes, média zero e variância um, o desvio-padrão
+dos escores é raiz de d_k. Com 64 componentes, dá 8; com 512, aproximadamente 22,6. Esses
+números descrevem a dispersão, não os limites mínimo e máximo dos escores.</p>
+<p>A divisão por raiz de d_k compensa esse crescimento no exemplo. Ela ajusta os escores;
+não transforma Q e K em vetores de comprimento um. Na atenção que estamos estudando,
+esse fator é calculado a partir da dimensão.</p>
+<p>Se um modelo maior estiver aprendendo pior, vale verificar essa parte da implementação.
+Mas esse resultado, sozinho, não identifica a causa: precisamos olhar os escores, os
+pesos e também outras condições do treinamento.</p>
+<blockquote>
+<p>Ideia central: “A divisão por raiz de d_k ajuda a evitar que os pesos fiquem concentrados demais por causa da escala.”</p>
+</blockquote>
+<h2>Slide 7 · [Demo] Observando os pesos de atenção · 00:43–00:55</h2>
+<p>Vou abrir um exemplo pequeno em NumPy para vermos esses cálculos. Primeiro comparo as
+duas frases com “banco”. Depois observo o efeito da divisão, a máscara e a troca de ordem
+dos tokens. Os passos estão na Parte 2 deste roteiro.</p>
+<blockquote>
+<p>Ideia central: “Vou comparar as saídas para relacionar cada parte da fórmula com os números do exemplo.”</p>
+</blockquote>
+<h2>Slide 8 · Máscara causal: usando apenas o contexto disponível · 01:05–01:14</h2>
+<p>Voltando ao modelo que gera texto: ele precisa prever um token usando o que veio antes.
+Se a entrada termina em “o banco estava”, o próximo token ainda não está disponível.</p>
+<p>No treinamento, temos a sequência completa e podemos calcular previsões para várias
+posições ao mesmo tempo. A saída da posição i é usada para prever o token i+1. Por isso,
+precisamos impedir que essa posição consulte o token que deveria prever.</p>
+<p>A <strong>máscara causal</strong> permite consultar a própria posição e as anteriores, bloqueando as
+seguintes. Causal, aqui, quer dizer que a previsão usa apenas o contexto já disponível.
+Sem esse bloqueio, o modelo pode usar a resposta durante o treino. Chamamos isso de
+<strong>vazamento de futuro</strong>. A perda pode ficar muito baixa, mas a geração não se beneficiar
+do mesmo modo, porque ali o próximo token ainda não existe.</p>
+<p>A máscara entra antes do softmax: colocamos menos infinito nos escores proibidos.
+O softmax atribui peso zero a eles e distribui os pesos entre as posições permitidas.</p>
+<p>Se eu calcular o softmax sobre todas as posições e apenas zerar os pesos do futuro depois,
+a linha deixa de somar 1. Além disso, os escores futuros já participaram do denominador
+e influenciaram os pesos que restaram.</p>
+<p>Vou conferir duas coisas na implementação: se as linhas somam aproximadamente 1 e se
+mudar o último token preserva as saídas anteriores. Nesse segundo teste, qualquer sorteio
+do modelo precisa estar desativado para a comparação fazer sentido.</p>
+<blockquote>
+<p>Ideia central: “A máscara causal bloqueia as posições futuras antes de calcular os pesos.”</p>
+</blockquote>
+<h2>Slide 9 · Multi-head: várias combinações em paralelo · 01:14–01:22</h2>
+<p>Até aqui, usamos um conjunto de Q, K e V. Isso é uma cabeça de atenção. Na <strong>multi-head
+attention</strong>, usamos vários conjuntos de projeções e calculamos suas saídas em paralelo.
+Depois juntamos essas saídas e fazemos mais uma transformação linear.</p>
+<p>Cada cabeça pode dar pesos diferentes às posições. Isso permite combinar informações
+de várias maneiras na mesma camada. Não significa que cada cabeça receba uma tarefa
+definida, como “encontrar o sujeito”. Essa divisão não vem pronta.</p>
+<p>Como exemplo, podemos usar dimensão total 512 e oito cabeças com dimensão 64 cada.
+Mantendo a dimensão total, o custo das principais multiplicações fica semelhante ao de
+uma cabeça larga. Ainda existem custos de memória e de implementação a considerar.</p>
+<p>Os mapas de atenção mostram os pesos calculados. Se uma cabeça costuma ligar um verbo
+a um substantivo, isso pode sugerir um padrão. Para concluir qual papel ela tem na resposta
+do modelo, precisamos de outros testes. Vamos retomar essa discussão na Aula 27.</p>
+<blockquote>
+<p>Ideia central: “Várias cabeças permitem calcular combinações diferentes de informação na mesma camada.”</p>
+</blockquote>
+<h2>Slide 10 · Como o tamanho do contexto afeta a memória · 01:22–01:29</h2>
+<p>Vou olhar agora para o tamanho da matriz de atenção. Se a sequência tem n tokens, temos
+n linhas e n colunas: uma entrada para cada par de posições.</p>
+<p>Com 2.000 tokens, são 4 milhões de entradas por cabeça. Com 4.000 tokens, são 16 milhões.
+Ao dobrar o contexto, esse número aumenta quatro vezes. Se cada entrada ocupa dois bytes,
+a matriz passa de cerca de 8 MB para 32 MB, considerando apenas uma cabeça e uma sequência.</p>
+<p>Na implementação que guarda essa matriz inteira, esse crescimento pesa na memória.
+Ainda temos outras cabeças, exemplos do lote, camadas e dados do treinamento. Então essa
+conta estima uma parte do uso de memória, não o total da GPU.</p>
+<p>O custo de cálculo da atenção também cresce de forma quadrática com o comprimento,
+mantendo a dimensão fixa. Isso não significa que o tempo medido do programa sempre
+quadruplicará, porque ele depende do hardware e das outras operações.</p>
+<p>A atenção permite processar posições em paralelo no treino, enquanto a RNN tem uma
+dependência sequencial entre elas. Esse paralelismo é uma vantagem, mas não torna gratuito
+o uso de sequências longas. Veremos formas mais eficientes de calcular a atenção adiante.</p>
+<blockquote>
+<p>Ideia central: “Dobrar o contexto quadruplica o número de entradas da matriz de atenção.”</p>
+</blockquote>
+<h2>Slide 11 · Encoder, decoder e cross-attention · 01:29–01:35</h2>
+<p>Vou reunir as peças no Transformer com encoder e decoder, a arquitetura apresentada
+no artigo que vamos ler. Um exemplo de uso é traduzir uma frase de uma língua para outra.</p>
+<p>O <strong>encoder</strong> processa a frase de entrada. Sua self-attention é bidirecional: cada token
+pode consultar os tokens dos dois lados, sem a restrição causal.</p>
+<p>O <strong>decoder</strong> produz a sequência de saída e tem duas atenções por bloco. Na self-attention
+causal, ele usa o trecho de saída já disponível. Na <strong>cross-attention</strong>, consulta as
+representações produzidas pelo encoder: Q vem do decoder, e K e V vêm do encoder.</p>
+<p>É a mesma ideia de consultar a entrada durante a geração que vimos com Bahdanau.
+O cálculo de compatibilidade é diferente: aqui usamos o produto escalar com escala.</p>
+<p><strong>[Aponto o caminho da entrada pelo encoder e a ligação até a cross-attention.]</strong></p>
+<p>As caixas de rede feed-forward, normalização e conexões residuais também fazem parte do
+bloco. Hoje vou apenas localizá-las; vamos estudar sua função na próxima aula.</p>
+<blockquote>
+<p>Ideia central: “Na cross-attention, o decoder faz a consulta e o encoder fornece as chaves e os valores.”</p>
+</blockquote>
+<h2>Slide 12 · Geração token a token e KV cache · 01:35–01:39</h2>
+<p>Como o modelo continua um texto? Ele calcula probabilidades para o próximo token,
+escolhe um token, acrescenta esse token à sequência e repete o processo. Chamamos isso
+de <strong>geração autorregressiva</strong>, porque cada nova previsão usa os tokens anteriores.</p>
+<p>Uma implementação simples executa o modelo de novo sobre toda a sequência a cada passo.
+Com isso, recalcula chaves e valores das posições anteriores. Na atenção causal, em modo
+de inferência, acrescentar um token ao final não altera essas posições.</p>
+<p>O <strong>KV cache</strong> guarda as chaves e os valores já calculados em cada camada para reutilizá-los.
+Isso reduz o trabalho repetido, mas ocupa memória. Vamos detalhar essa troca adiante.</p>
+<p>Também existe a arquitetura <strong>decoder-only</strong>, como a família GPT. Ela usa uma sequência
+com o prompt e sua continuação, sob máscara causal, sem a pilha separada de encoder
+e sem a cross-attention que acabamos de ver no modelo de tradução.</p>
+<blockquote>
+<p>Ideia central: “O KV cache guarda chaves e valores anteriores para reutilizá-los durante a geração.”</p>
+</blockquote>
+<h2>Slide 13 · [Exercício] Como investigar três problemas · 01:39–01:50</h2>
+<p>Agora vou propor três situações para discutirmos em dupla. Para cada uma, a resposta
+precisa ter uma causa possível e uma forma de verificar se essa causa faz sentido.
+Temos oito minutos para discutir e três para comparar as respostas.</p>
+<p><strong>[Projeto o enunciado da Parte 3.]</strong></p>
+<blockquote>
+<p>Ideia central: “Para cada problema, vamos propor uma hipótese e dizer como testá-la.”</p>
+</blockquote>
+<h2>Slide 14 · Por que ainda precisamos representar a posição · 01:50–02:00</h2>
+<p>Hoje vimos como a self-attention combina informações da sequência. Q e K calculam os
+pesos, V fornece os conteúdos, a divisão ajusta a escala e a máscara restringe o contexto.
+Também vimos por que sequências longas aumentam o custo dessa operação.</p>
+<p>Falta retomar um resultado da demonstração. No exemplo sem informação de posição e
+sem máscara causal, embaralhar os tokens apenas embaralha as linhas da saída. Quando
+acompanho o mesmo token, encontro o mesmo vetor de antes.</p>
+<p>Isso importa porque “o cachorro morde o homem” e “o homem morde o cachorro” têm as mesmas
+palavras, mas sentidos diferentes. Precisamos representar a posição para que o mecanismo
+use essa diferença. O nome matemático da propriedade que vimos é <strong>equivariância a
+permutação</strong>: trocar a ordem da entrada troca a ordem da saída da mesma maneira.
+A máscara causal restringe quais posições podem ser consultadas; a demonstração sem
+máscara não pode ser aplicada diretamente a esse caso.</p>
+<p>Na Aula 7, “Transformer II: posição, normalização e o bloco moderno”, vamos estudar
+informação posicional, conexões residuais, normalização e a rede feed-forward.</p>
+<p>Para a leitura, ficam as seções 3.1 a 3.3 de Vaswani e colaboradores. Minha sugestão é
+começar pela figura da arquitetura e localizar a fórmula de hoje. O item A.2 do apêndice
+ajuda a acompanhar a justificativa da raiz de d_k. A pergunta para o estudo é como a conta
+da variância se relaciona com os números observados na demonstração.</p>
+<blockquote>
+<p>Ideia central: “Além do conteúdo de cada token, o modelo precisa de informação sobre sua posição.”</p>
+</blockquote>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p><strong>1. [Mostro o vocabulário e os vetores do exemplo — 2 min.]</strong>
+Aqui cada palavra tem quatro componentes, que escolhi chamar de água, dinheiro, lugar e
+ação. Os números e as matrizes foram definidos à mão para facilitar a leitura. Não houve
+treinamento. Em embeddings aprendidos, não devemos esperar que cada componente tenha
+um significado tão simples.</p>
+<p><strong>2. [Comparo as saídas das duas frases — 3 min.]</strong>
+O vetor de entrada de “banco” é igual nos dois casos. Depois da atenção, as saídas são
+diferentes. Vou comparar os componentes ligados a água e dinheiro e os pesos usados
+para produzir essas saídas.</p>
+<p>Neste exemplo, os pesos de “banco” coincidem nas duas frases, mas os valores combinados
+mudam. O componente água da saída passa de aproximadamente 0,509 para 0,126; o de dinheiro
+faz o caminho inverso. A mudança de contexto pode alterar os valores, os pesos ou ambos.</p>
+<p><strong>3. [Mostro a tabela de escala — 4 min.]</strong>
+Agora o script usa vetores aleatórios com dimensões 4, 64 e 512. A coluna “desvio bruto”
+mostra a dispersão dos escores. As duas últimas colunas mostram a média do maior peso
+de cada linha, sem e com a divisão por raiz de d_k. Vou comparar como esses valores mudam.
+É um experimento sobre os escores e os pesos; ele não está treinando um modelo.</p>
+<p><strong>4. [Mostro a matriz com máscara causal — 1 min.]</strong>
+Acima da diagonal, os pesos são zero. Cada linha soma aproximadamente 1, dentro da
+precisão numérica. Vamos retomar o motivo dessa máscara no slide 8, depois do intervalo.</p>
+<p><strong>5. [Mostro a permutação dos tokens — 2 min.]</strong>
+Este exemplo usa atenção sem máscara e sem informação posicional. Depois de embaralhar
+os tokens, comparo cada token com sua posição original. Os vetores correspondentes
+continuam iguais, dentro da precisão numérica. Vamos voltar a isso no fechamento.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p><strong>[Projeto as situações e organizo as duplas.]</strong></p>
+<p>Vou deixar estas três situações na tela. Para cada uma, a dupla registra uma hipótese,
+uma verificação e o resultado esperado se a hipótese estiver correta. Pode haver mais
+de uma explicação; vamos usar os conceitos de hoje para começar a investigação.</p>
+<ol>
+<li>Um modelo com <code>d_model = 1024</code> tem perda de validação maior que uma versão com
+   <code>d_model = 256</code>, usando os mesmos dados e o mesmo número de passos. A perda de validação
+   mede o erro em dados separados do treinamento. Não aparecem valores numéricos inválidos.</li>
+<li>Um modelo de linguagem tem perda quase zero no treino e gera texto incoerente.
+   O programa termina sem apresentar erro.</li>
+<li>Uma equipe aumenta o contexto de 2.000 para 4.000 tokens. O modelo e o tamanho do lote
+   permanecem iguais, mas o treinamento passa a exceder a memória da GPU.</li>
+</ol>
+<p><strong>Respostas para orientar a correção — 3 min:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Situação</th>
+<th>Hipótese a investigar</th>
+<th>Verificação e resultado esperado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Escores muito dispersos e saturação do softmax, caso a dimensão por cabeça tenha aumentado</td>
+<td>Conferir <code>d_k</code> e a divisão por <code>√d_k</code>; comparar a dispersão dos escores e a concentração dos pesos. Se a escala estiver incorreta, corrigi-la deve reduzir a concentração causada por esse erro. Comparar também as curvas de treino e validação.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Vazamento de futuro por máscara ausente ou incorreta</td>
+<td>Desativar o dropout, que introduz sorteio no treino, e alterar o último token. As saídas anteriores devem permanecer iguais. Verificar também os pesos futuros e a soma das linhas.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Crescimento da matriz de atenção armazenada</td>
+<td>Conferir o formato da matriz e a memória que ela ocupa. Ao dobrar n, seu número de elementos quadruplica. O consumo total da GPU inclui outras parcelas e pode crescer em outra proporção.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>[Convido uma dupla a comentar cada situação.]</strong></p>
+<p>Vou começar pela hipótese que vocês levantaram e depois pela verificação. Que resultado
+nos faria manter essa hipótese? E que resultado indicaria que precisamos procurar outra causa?</p>
+<p><strong>Extensão opcional:</strong> cálculo de atenção com três tokens, seguindo o item A.1.</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Estas respostas dão apoio às perguntas que surgirem. Uma dúvida curta deve ser acolhida
+no momento; uma derivação completa pode usar o tempo disponível ou ficar para o estudo
+orientado pelo apêndice.</p>
+<h2>1. “De onde vem a fórmula?” → A.1 · 8 min</h2>
+<p>Vou escrever as projeções e identificar as dimensões. Para seis tokens, a matriz de
+escores tem seis linhas e seis colunas. Depois acompanho uma linha: comparações com as
+chaves, ajuste de escala, pesos do softmax e média dos valores. O item A.1 detalha cada conta.</p>
+<p><strong>Versão de 30 segundos:</strong> “Q e K produzem as comparações entre posições. Ajustamos a
+escala, transformamos os resultados em pesos que somam 1 e usamos esses pesos para
+combinar V. A.1 mostra como as dimensões se encaixam.”</p>
+<h2>2. “Por que raiz de d_k, e não d_k?” → A.2 · 6 min</h2>
+<p>Vou explicitar as hipóteses: componentes independentes, média zero e variância um.
+Cada produto tem variância um; somar d_k desses produtos dá variância d_k. O desvio-padrão
+é a raiz da variância. Dividir por esse desvio faz a variância do escore escalado voltar a um.</p>
+<p><strong>Versão de 30 segundos:</strong> “Nessas hipóteses, a dispersão típica cresce com a raiz da
+dimensão. Dividimos por essa raiz para compensar o crescimento. A conta está em A.2.”</p>
+<h2>3. “Por que não zerar os pesos depois?” → A.3 · 5 min</h2>
+<p>Vou comparar a soma de uma linha nos dois casos. Se eu normalizar usando também o futuro
+e depois apenas zerá-lo, os pesos restantes somam menos que um. O denominador ainda
+depende dos escores futuros. Com a máscara antes, só as posições permitidas participam
+da normalização.</p>
+<p><strong>Versão de 30 segundos:</strong> “Ao zerar depois, os tokens futuros já influenciaram o cálculo
+dos outros pesos. Aplicar a máscara antes evita essa influência e mantém a soma igual a um.”</p>
+<h2>4. “Várias cabeças não custam mais?” → A.4 · 4 min</h2>
+<p>Vou manter d_model fixo e dividir essa dimensão entre h cabeças. As projeções de cada
+cabeça ficam menores; ao somá-las, o número de parâmetros dessas projeções se mantém.
+O custo das multiplicações de atenção também fica na mesma ordem. Isso não garante
+igualdade de tempo ou de memória na implementação.</p>
+<p><strong>Versão de 30 segundos:</strong> “Dividimos uma dimensão total fixa entre cabeças menores.
+As principais multiplicações têm custo semelhante, mas guardar mais matrizes de pesos
+pode consumir mais memória. A.4 separa essas contas.”</p>
+<h2>5. “De onde vem o n ao quadrado?” → A.5 · 3 min</h2>
+<p>Vou desenhar uma tabela com uma linha e uma coluna para cada token. Com quatro tokens,
+são dezesseis pares; com oito, sessenta e quatro. Depois associo cada célula ao espaço
+ocupado por um número na memória.</p>
+<p><strong>Versão de 30 segundos:</strong> “Cada uma das n posições é comparada com n posições. São n²
+pares. Se dobrarmos os dois lados da matriz, o número de entradas aumenta quatro vezes.”</p>
+<h2>6. “Como sabemos que trocar a ordem só troca a saída de lugar?” → A.6 · 5 min</h2>
+<p>Vou considerar atenção sem informação posicional e sem máscara. Uso P para representar
+a troca de linhas e acompanho essa troca nas projeções, nos escores e na saída. No fim,
+a saída aparece multiplicada pela mesma P. A.6 traz as etapas e suas justificativas.</p>
+<p><strong>Versão de 30 segundos:</strong> “Nesse caso, os cálculos dependem dos vetores dos tokens, sem
+usar seus índices na sequência. Ao mudar os tokens de lugar, suas saídas mudam junto.
+A demonstração geral está em A.6; o exemplo do script mostra um caso.”</p>
+<h2>Ajustes de tempo</h2>
+<hr />
+<h2>Encerramento · 01:50–02:00</h2>
+<p>A fala de encerramento está no slide 14: retomar as funções dos termos da fórmula,
+discutir a posição dos tokens e indicar a leitura com o apoio de A.2.</p>
+<p><em>Roteiro do Instrutor · Aula 6 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-05/index.html">← Aula anterior</a><a class="button" href="../aula-07/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

@@ -1,0 +1,15 @@
+.streamlit/secrets.toml
+.env
+.env.*
+!.env.example
+.vercel/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.log
+.data/
+*.db
+*.db-wal
+*.db-shm
+verification/

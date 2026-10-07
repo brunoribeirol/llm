@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Tool calling e Model Context Protocol (MCP) · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="21">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 21 / 5 — RAG, Ferramentas e Agentes de IA</p><h1>Tool calling e Model Context Protocol (MCP)</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 21" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Descrever</strong> os cinco passos do ciclo de tool calling e <strong>apontar</strong>, em cada um, quem executa: o modelo, o host ou a ferramenta.</p></li><li><p><strong>Ler</strong> e <strong>escrever</strong> uma chamada de ferramenta em JSON — nome, argumentos, identificador de correlação — e <strong>explicar</strong> por que o resultado volta como mensagem de papel <code>tool</code>.</p></li><li><p><strong>Justificar</strong> por que nome, descrição e nomes de parâmetro de uma ferramenta são <strong>parte do prompt</strong>, e <strong>prever</strong> o efeito de degradá-los sobre a taxa de acerto.</p></li><li><p><strong>Distinguir</strong> as três formas pelas quais um modelo passa a usar ferramentas — exemplos no prompt, SFT de formato e auto-supervisão à la Toolformer.</p></li><li><p><strong>Avaliar</strong> um schema de ferramenta contra seis propriedades (estreita, bem nomeada, validável, permissionada, observável, com efeito colateral determinístico) e <strong>reescrever</strong> um schema ruim.</p></li><li><p><strong>Explicar</strong> a arquitetura host/cliente/servidor do MCP, <strong>distinguir</strong> recurso de ferramenta pelo que decide o uso, e <strong>argumentar</strong> por que padronizar vence N integrações um-a-um.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · Abertura: o modelo passa a pedir · 00:00–00:04</summary><div class="prose"><p>Boa noite, pessoal. Ontem vocês entregaram — ou estão terminando de entregar — um sistema de recuperação medido. Chunking com metadados, índice, BM25, fusão por posição, reranking, e duas tabelas com <code>recall@k</code>. Deixa eu dar uma devolutiva de uma linha antes de começar: o que eu vi de melhor foram as tabelas quebradas por tipo de consulta, e o que eu vi de pior foram relatórios sem dizer quantas consultas tinham. Declarar o <code>|Q|</code> é de graça e é o que separa medição de impressão.</p>
+<p>Agora, uma pergunta sobre o que vocês construíram: quem decidiu buscar? Foi vocês. Vocês escreveram a linha que chama a busca. O sistema de ontem é um cano — entra pergunta, ele busca, ele responde, sempre, mesmo quando a pergunta é "bom dia".</p>
+<p>Hoje a gente entrega essa decisão para o modelo. E a coisa mais importante desta aula é entender exatamente o que isso significa e o que isso não significa.</p>
+<blockquote>
+<p>Ideia central: "Hoje o modelo ganha mãos. E eu vou passar a primeira metade da aula provando para vocês que ele continua sem poder executar nada."</p>
+</blockquote></div></details><details><summary>Slide 2 · O que muda quando o modelo pode agir · 00:04–00:10</summary><div class="prose"><p>Deixa eu situar isso no arco do curso, porque hoje é uma fronteira.</p>
+<p>Até a Aula 16 a gente mexeu no modelo: arquitetura, escala, ajuste fino, alinhamento, raciocínio. Nas Aulas 18 a 20 a gente parou de mexer no modelo e passou a mexer no que entra nele — recuperação é isso, é dar contexto. O modelo continuava fazendo uma coisa só: ler texto e escrever texto.</p>
+<p>A partir de hoje ele começa a <strong>afetar o mundo</strong>. Não porque ele executa algo, mas porque o texto que ele escreve passa a ser lido por um programa que executa. E essa diferença é fina e é tudo.</p>
+<p>E as três aulas seguintes são consequências disso. Na Aula 23 a gente põe esse pedido dentro de um loop com objetivo e critério de parada, e o nome disso é agente. Na 24, vários deles. Na 26, o que dá errado quando um texto não confiável entra num sistema que age.</p>
+<blockquote>
+<p>Ideia central: "A partir de hoje o texto que o modelo escreve deixa de ser resposta e passa a ser pedido. Um programa lê esse pedido e obedece — e é aí que a área fica séria."</p>
+</blockquote></div></details><details><summary>Slide 3 · O ciclo de cinco passos — e quem executa o quê · 00:10–00:18</summary><div class="prose"><p>Vamos ao mecanismo. Cinco passos, e eu quero que a turma saia daqui sabendo de cor quem faz cada um.</p>
+<p>Passo um: o <strong>host</strong> — que é o programa de vocês, o notebook, o aplicativo — monta o prompt e serializa <strong>dentro dele</strong> o catálogo de ferramentas disponíveis. Isso é texto. Está no prompt.</p>
+<p>Passo dois: o <strong>modelo</strong> devolve, em vez de prosa, um objeto que descreve uma chamada — nome da ferramenta e argumentos, em JSON. Só isso. É a única coisa que o modelo faz neste ciclo.</p>
+<p>Passo três: o <strong>host</strong> recebe esse JSON, valida os argumentos, decide se tem permissão para executar, e executa. Repararam? Validar, decidir e executar são três verbos, e nenhum deles é do modelo.</p>
+<p>Passo quatro: o resultado volta para a conversa como uma mensagem de papel <code>tool</code>, amarrada à chamada por um identificador.</p>
+<p>Passo cinco: o modelo lê o resultado e escreve a resposta final — agora sim, em prosa.</p>
+<p>A analogia que eu uso é receita médica. O médico escreve o pedido. Ele não manipula o remédio, não abre a farmácia e não decide se o convênio cobre. O sistema em volta obedece — ou recusa.</p>
+<p>E é por isso que a pergunta "e se o modelo apagar meu banco de dados?" está mal formulada. O modelo nunca apagou nada na vida. Se o banco foi apagado, foi porque alguém escreveu uma ferramenta chamada <code>apagar</code> e ligou ela no despacho, sem confirmação. A responsabilidade tem um autor, e não é o modelo.</p>
+<blockquote>
+<p>Ideia central: "Cinco passos, e o modelo é dono de um. Todo poder que a ferramenta tem foi dado por quem escreveu o host."</p>
+</blockquote></div></details><details><summary>Slide 4 · Anatomia da chamada: o JSON na tela · 00:18–00:25</summary><div class="prose"><p>Deixa eu mostrar a coisa concreta, porque "chamada estruturada" é abstrato e o objeto é simples.</p>
+<p>A chamada tem três campos que importam. O <code>name</code>, que é o nome da ferramenta. O <code>arguments</code>, que é uma string com um JSON dentro — e sim, é string, é JSON dentro de JSON, e todo mundo estranha isso na primeira vez. E o <code>id</code>.</p>
+<p>O <code>id</code> é o campo que a turma sempre pergunta para que serve. Ele existe porque um único turno do modelo pode pedir <strong>várias</strong> chamadas de uma vez — três buscas em paralelo, por exemplo. Quando os três resultados voltarem, o modelo precisa saber qual resultado responde a qual pedido. Sem correlação explícita, não dá.</p>
+<p>E a volta: o resultado entra na conversa como uma mensagem com papel <code>tool</code>, com o mesmo <code>tool_call_id</code>. Não é mensagem de usuário. E aqui tem uma coisa que parece burocracia e não é: se eu devolver o resultado como se fosse o usuário falando "o resultado foi sessenta", às vezes funciona. Funciona por acidente. O modelo foi treinado com aquele papel específico naquela posição, e trocar o papel é sair da distribuição de treino — o comportamento fica pior de um jeito que ninguém consegue depurar.</p>
+<blockquote>
+<p>Ideia central: "O resultado da ferramenta não é o usuário falando. Existe um papel próprio para isso, e usar o papel errado é sair da distribuição de treino do modelo."</p>
+</blockquote></div></details><details><summary>Slide 5 · O schema é parte do prompt · 00:25–00:33</summary><div class="prose"><p>Agora a parte desta aula que costuma surpreender a turma, e eu vou ser bem explícito porque é a coisa mais aplicável do dia.</p>
+<p>Como o catálogo de ferramentas é serializado dentro do prompt, <strong>cada palavra dele é engenharia de prompt</strong>. O nome da função. A descrição. O nome de cada parâmetro. O <code>enum</code> de valores aceitos. O exemplo que você escreve dentro da descrição do parâmetro. Tudo isso é lido pelo modelo no momento em que ele decide o que chamar e o que passar.</p>
+<p>Então: renomear um parâmetro de <code>expressao</code> para <code>q</code> não é refatoração. Cortar a descrição de três frases para uma palavra não é limpeza de código. As duas coisas são <strong>reescrever o prompt do modelo</strong>, e o efeito aparece na taxa de acerto.</p>
+<p>A minha analogia é caixa de ferramentas. Uma caixa etiquetada e uma gaveta com tudo jogado dentro têm o mesmo conteúdo. O que muda é o tempo até achar a chave certa — e, no caso do modelo, se ele acha.</p>
+<p>E tem um corolário desconfortável: a descrição da ferramenta não é documentação para a sua equipe. O leitor dela é o modelo. Documentação para gente vai no código; para o modelo, vai no schema. Quando as duas coisas competem, o modelo ganha, porque é ele que está decidindo.</p>
+<p>Deixa eu provar isso com número, em vez de afirmar.</p>
+<blockquote>
+<p>Ideia central: "Trocar <code>expressao</code> por <code>q</code> e apagar a descrição não é refatoração. É reescrever o prompt — e a taxa de acerto sente."</p>
+</blockquote></div></details><details><summary>Slide 6 · [Demo] Três catálogos, uma função · 00:33–00:45</summary><div class="prose"><p>Doze minutos comigo na tela. Duas partes: uma chamada passo a passo, e depois a mesma função com três catálogos diferentes.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "A função executada é idêntica nos três. Muda só o que o modelo lê — e é isso que a tabela vai medir."</p>
+</blockquote></div></details><details><summary>Slide 7 · Como o modelo aprendeu a fazer isso · 00:45–00:55</summary><div class="prose"><p>Antes do intervalo, a pergunta que fecha o Bloco 1: de onde vem essa habilidade? Ninguém programou "quando a pergunta tiver conta, chame a calculadora".</p>
+<p>Três caminhos, em ordem de custo.</p>
+<p>O mais barato é <strong>exemplo no prompt</strong>: mostrar duas ou três chamadas bem feitas e deixar o aprendizado em contexto da Aula 10 fazer o resto. Funciona. Gasta contexto em toda requisição, e é frágil no formato.</p>
+<p>O segundo é <strong>ajuste supervisionado de formato</strong>: pegar dezenas de milhares de exemplos de chamada bem formada e ajustar o modelo neles. É por isso que os modelos de hoje já vêm "com tool calling" — alguém pagou esse SFT antes de vocês. É o Módulo 3 da disciplina aplicado a um formato de saída.</p>
+<p>E o terceiro é o mais bonito conceitualmente, e é a leitura de hoje: <strong>Toolformer</strong>, do Schick e colegas, 2023. A ideia é auto-supervisão. O modelo insere candidatos de chamada de API no meio de textos comuns, o sistema executa esses candidatos, e aí vem o critério: mantém-se apenas as chamadas que <strong>reduzem a perda de previsão dos tokens seguintes</strong>. Ou seja, a chamada é considerada boa se ela ajudou o modelo a prever melhor o que vinha depois. Não tem rótulo humano nenhum nesse laço.</p>
+<p>Repararam no que isso resolve? O problema de "quem diz se essa chamada foi útil" some. A utilidade passa a ser medida na própria função de perda. Guardem esse truque, porque ele reaparece em raciocínio e em agentes: sempre que alguém consegue transformar "foi útil?" numa quantidade mensurável, a área anda.</p>
+<blockquote>
+<p>Ideia central: "Toolformer decide se uma chamada presta perguntando se ela ajudou o modelo a prever o resto do texto. Utilidade virou perda — e é por isso que escala sem humano no laço."</p>
+</blockquote></div></details><details><summary>Slide 8 · Seis propriedades de uma boa ferramenta · 01:05–01:15</summary><div class="prose"><p>Voltando. A segunda metade da aula é design, e ela é o que vocês vão levar para o projeto.</p>
+<p>Seis propriedades. Uma boa ferramenta é: <strong>estreita</strong> — faz uma coisa, e o nome diz qual; <strong>bem nomeada</strong> — porque o nome e a descrição são lidos na hora da escolha, e isso é o slide cinco de novo; <strong>validável por schema</strong> — tipo, obrigatoriedade, <code>enum</code>, e o host rejeitando antes de executar em vez de confiar no modelo; <strong>permissionada</strong> — rodando com o mínimo de privilégio, e com ação sensível exigindo confirmação humana; <strong>observável</strong> — cada chamada deixando registro de argumento, resultado, latência e erro; e <strong>com efeito colateral determinístico</strong> — mesma entrada, mesmo efeito, e de preferência idempotente.</p>
+<p>Deixa eu insistir nas duas últimas, que são as mais negligenciadas.</p>
+<p>Observabilidade: sem registro de trajetória, depurar um agente é impossível. Vocês vão sentir isso no Lab 7. Quando o agente erra na quarta chamada, a resposta final é só o sintoma — o que interessa é o que ele pediu, com que argumento, e o que a ferramenta devolveu. Isso a Aula 26 formaliza.</p>
+<p>Determinismo e idempotência: o loop vai repetir a chamada. Não é hipótese, é comportamento. O modelo não entendeu a resposta, ele tenta de novo. Se a sua ferramenta incrementa um contador ou avança um cursor a cada chamada, o retry corrompe o estado e a trajetória fica irreproduzível.</p>
+<p>A analogia é: é o mesmo checklist de uma boa API interna, só que o cliente é novo e estranho. É um cliente que lê a documentação rápido, não pede esclarecimento, e às vezes chuta.</p>
+<blockquote>
+<p>Ideia central: "Projetem ferramenta como quem projeta API para um cliente que lê rápido, nunca pergunta e às vezes chuta. Porque é exatamente esse o cliente."</p>
+</blockquote></div></details><details><summary>Slide 9 · O catálogo das más ferramentas · 01:15–01:23</summary><div class="prose"><p>O espelho, que é mais divertido e mais útil.</p>
+<p><strong>Vaga.</strong> <code>dados(query)</code>, descrição "pega dados". O modelo não tem como decidir quando usar isso, e a taxa de acerto cai — vocês acabaram de ver na tabela da demo.</p>
+<p><strong>Ampla demais.</strong> <code>executar_sql(comando)</code>. <code>rodar_shell(cmd)</code>. O schema aqui é decorativo: a linguagem inteira cabe no parâmetro, então não existe validação possível. Isso não é um argumento contra ferramentas poderosas; é um argumento a favor de estreitá-las até o que a tarefa exige.</p>
+<p><strong>Silenciosamente com estado.</strong> <code>proximo_registro()</code>. Cada chamada depende de um cursor invisível. O modelo repete a chamada, o cursor anda, e ninguém reproduz aquela execução nunca mais.</p>
+<p><strong>Irreversível sem confirmação.</strong> <code>enviar_email</code>. <code>apagar_registro</code>. <code>pagar</code>. E eu quero ser preciso aqui, porque isso vai voltar no exercício: o problema não é ser irreversível. Sistema real precisa fazer coisa irreversível. O problema é ser irreversível <strong>sem um passo de confirmação</strong> — porque aí o custo de um erro deixa de ser um retry e passa a ser um incidente.</p>
+<p>E o antipadrão que eu mais vejo, inclusive em código de gente experiente: a pessoa tem vinte ferramentas, acha que é demais, e cria uma ferramenta genérica com um parâmetro <code>acao</code>. Isso não reduziu complexidade nenhuma. Isso escondeu a complexidade <strong>do schema</strong> — e o schema era justamente o único lugar onde ela era verificável.</p>
+<blockquote>
+<p>Ideia central: "Juntar vinte ferramentas numa só com um parâmetro <code>acao</code> não simplifica nada. Só tira do schema a única coisa que o schema sabia checar."</p>
+</blockquote></div></details><details><summary>Slide 10 · O problema N×M · 01:23–01:29</summary><div class="prose"><p>Agora eu mudo de assunto, e a ponte é uma pergunta prática.</p>
+<p>Vocês vão sair daqui com uma base RAG do Lab 5, que é uma ferramenta útil. Suponham que vocês queiram usar essa base em quatro lugares: no notebook do projeto, no editor de código de vocês, num assistente de terminal, e num chat interno. Quatro hosts.</p>
+<p>E suponham cinco sistemas para integrar: a base RAG, o repositório, o banco, o gerenciador de tickets, o calendário.</p>
+<p>Quatro vezes cinco, vinte adaptadores. Cada um com sua autenticação, seu formato de erro, seu ciclo de vida. E cada host novo multiplica.</p>
+<p>Com um protocolo comum, cada host implementa <strong>um</strong> cliente e cada sistema expõe <strong>um</strong> servidor. Quatro mais cinco, nove peças. É exatamente a economia que o Protocolo de Servidor de Linguagem trouxe para editores: antes disso, cada editor implementava autocompletar para cada linguagem; depois, cada linguagem expõe um servidor e cada editor fala o protocolo. O MCP é declaradamente inspirado nisso.</p>
+<p>E eu quero marcar uma coisa, porque é onde a turma se confunde: dar ferramenta ao modelo <strong>não precisa</strong> de protocolo. Vocês vão fazer isso amanhã na mão, sem protocolo nenhum, e vai funcionar. O que o protocolo resolve é reuso e distribuição.</p>
+<blockquote>
+<p>Ideia central: "N vezes M adaptadores contra N mais M peças. Protocolo não é sobre dar ferramenta ao modelo — é sobre não reescrever a ferramenta em cada host."</p>
+</blockquote></div></details><details><summary>Slide 11 · MCP: host, cliente, servidor · 01:29–01:38</summary><div class="prose"><p>Agora a arquitetura, e ela tem três papéis. Eu vou usar o quadro do slide três de novo, porque a separação é a mesma.</p>
+<p>O <strong>host</strong> é a aplicação onde a conversa acontece e onde o modelo é chamado. É ele que decide o que expor ao modelo e é ele que executa as decisões — igualzinho ao passo três de hoje.</p>
+<p>O <strong>cliente</strong> é o componente dentro do host que mantém a conexão com um servidor. Um cliente por servidor, e é o cliente que fala o protocolo.</p>
+<p>O <strong>servidor</strong> é um processo separado que expõe capacidades. E aqui está a parte que a turma sempre erra na primeira vez: <strong>o servidor nunca vê o modelo</strong>. Ele não conversa com o modelo, não sabe qual modelo é, não sabe se existe um modelo. Ele responde a um cliente. Quem monta o prompt e chama o modelo é o host.</p>
+<p>O transporte é <code>stdio</code> — servidor local rodando como subprocesso, conversando por entrada e saída padrão, que é o que vocês vão fazer amanhã — ou HTTP, para servidor remoto. Em cima disso vai JSON-RPC, e o diálogo mínimo tem três verbos: <code>initialize</code>, que negocia capacidades; <code>tools/list</code>, que descobre o que existe; <code>tools/call</code>, que executa.</p>
+<p>A analogia que fecha: o servidor é um driver de dispositivo. Ele não sabe qual aplicação vai usá-lo, e é exatamente por isso que ele serve para todas.</p>
+<p>E amanhã vocês fazem os dois lados: escrevem um cliente que se conecta a um servidor que já existe, e escrevem um servidor próprio, expondo a base do Lab 5.</p>
+<blockquote>
+<p>Ideia central: "O servidor MCP nunca vê o modelo. Ele responde a um cliente — a mesma separação do passo três, agora entre processos."</p>
+</blockquote></div></details><details><summary>Slide 12 · Recurso, ferramenta e prompt: quem decide · 01:38–01:43</summary><div class="prose"><p>Última peça conceitual, e ela é curta e vale prova.</p>
+<p>Um servidor MCP expõe três tipos de coisa, e o que distingue as três não é o formato — é <strong>quem escolhe usar</strong>.</p>
+<p><strong>Ferramenta</strong> é ação, e quem escolhe é o <strong>modelo</strong>. É o <code>tools/call</code>.</p>
+<p><strong>Recurso</strong> é dado endereçável por identificador — um arquivo, uma linha de banco, um documento do acervo. E quem escolhe anexar aquilo ao contexto é a <strong>aplicação</strong>, ou o usuário clicando. Não o modelo.</p>
+<p><strong>Prompt</strong> é um template parametrizado que o <strong>usuário</strong> invoca explicitamente.</p>
+<p>Modelo, aplicação, usuário. Três donos de decisão diferentes, e o erro clássico é confundir os dois primeiros: expor o acervo inteiro como uma ferramenta <code>ler_arquivo(caminho)</code> quando o que se queria era um recurso. A diferença prática é enorme — na primeira versão, o caminho está no alcance do modelo; na segunda, não está.</p>
+<p>E do lado do cliente existem capacidades simétricas, que eu menciono para vocês reconhecerem quando virem: o servidor pode pedir uma geração ao modelo do host, pode receber quais raízes do sistema de arquivos ele tem direito de ver, e pode pedir ao usuário um dado que falta.</p>
+<p>Agora, três coisas que o MCP <strong>não</strong> resolve, e eu prefiro dizer isso do que deixar vocês descobrirem no projeto. Schema ruim continua ruim depois de padronizado — protocolo não conserta nome vago. Permissão continua sendo decisão do host. E servidor de terceiro amplia a superfície de injeção indireta: o texto que volta de uma ferramenta entra no mesmo campo da instrução do sistema, exatamente como o documento recuperado da Aula 19.</p>
+<blockquote>
+<p>Ideia central: "Ferramenta o modelo escolhe, recurso a aplicação escolhe, prompt o usuário escolhe. Quem confunde os dois primeiros entrega o caminho de arquivo para o modelo sem querer."</p>
+</blockquote></div></details><details><summary>Slide 13 · [Exercício] Reescrever o schema ruim · 01:43–01:50</summary><div class="prose"><p>Sete minutos, em dupla, com um schema de verdade na tela — e é um schema ruim de verdade, do tipo que eu já vi em produção.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Uma ferramenta chamada <code>dados</code> que faz três coisas. Sete minutos para transformar isso em duas ou três ferramentas que um modelo consegue escolher."</p>
+</blockquote></div></details><details><summary>Slide 14 · Fechamento: amanhã vocês fazem na mão · 01:50–02:00</summary><div class="prose"><p>Deixa eu juntar as quatro frases da aula e mandar vocês para casa.</p>
+<p>Primeira: o modelo pede, o host executa. Cinco passos, e o modelo é dono de um.</p>
+<p>Segunda: o schema é parte do prompt. Nome, descrição, nome de parâmetro — e vocês viram a taxa de acerto mudar sem uma linha de código mudar.</p>
+<p>Terceira: boa ferramenta é estreita, bem nomeada, validável, permissionada, observável e determinística. Má ferramenta é vaga, ampla, com estado escondido, ou irreversível sem confirmação.</p>
+<p>Quarta: protocolo não é sobre dar ferramenta ao modelo. É sobre <code>N</code> mais <code>M</code> em vez de <code>N</code> vezes <code>M</code>.</p>
+<p>Amanhã é o Lab 6, e ele tem três partes. Primeiro vocês implementam o loop <strong>na mão</strong>, sem framework nenhum: definir o schema, detectar a chamada na resposta, fazer o parsing, despachar, executar, devolver como mensagem <code>tool</code>, sintetizar. Com três ferramentas — calculadora, busca na base do Lab 5, e uma consulta a uma API pública sem chave. Depois vocês conectam um cliente a um servidor MCP que já existe. E por último escrevem um servidor MCP próprio com uma ferramenta.</p>
+<p>E a ordem é de propósito, então deixa eu justificar: fazer na mão antes do framework existe para vocês verem o protocolo antes da abstração. Depois de escrever o parsing e o despacho com as próprias mãos, nenhuma biblioteca de agente vai parecer mágica para vocês — vai parecer o que ela é, um laço com um parser.</p>
+<p>Ah, e duas coisas operacionais. Amanhã eu recolho a <strong>Entrega 1 do projeto</strong>: a proposta. Cinco itens, e eu vou dizer agora para ninguém ser pego de surpresa — problema claro e verificável, duas técnicas do curso, plano de avaliação com métrica por camada, divisão de trabalho, e viabilidade em free tier. Vale cinco por cento da nota final e eu dou devolutiva na hora. E a leitura de hoje é o Toolformer, com a pergunta dirigida do slide.</p>
+<blockquote>
+<p>Ideia central: "Amanhã vocês escrevem o parsing e o despacho na mão. Depois disso, nenhum framework de agente vai parecer mágica — vai parecer um laço com um parser."</p>
+</blockquote>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p>Doze minutos, <code>codigo/demo-tool-calling.py</code>, só biblioteca padrão. A demo tem duas metades com objetivos diferentes: a primeira torna visível <em>quem executa o quê</em>; a segunda transforma "o schema é parte do prompt" em número na tela.</p>
+<p>Insumos da véspera: o script rodado em modo <code>api</code> com <code>--salvar-saida</code>, o arquivo de saída no pendrive, e a data e o identificador do modelo anotados. Confirmar na véspera que o modelo do provedor ainda está na lista dele.</p>
+<p><strong>1.</strong> <strong>[Abro o script e mostro o catálogo de uma ferramenta só]</strong> Este é o catálogo. Uma ferramenta, <code>calcular_expressao</code>, com descrição de três frases e um parâmetro chamado <code>expressao</code>, com exemplo dentro da descrição. E eu quero que a turma repare numa coisa antes de qualquer execução: isso aqui vai ser <strong>serializado dentro do prompt</strong>. Não existe canal separado, não existe registro mágico. É texto que o modelo vai ler.</p>
+<p><strong>2.</strong> <strong>[Rodo <code>--parte 1</code> e mostro o JSON cru que o modelo devolveu]</strong> A pergunta é "quanto é doze e meio por cento de quatrocentos e oitenta?". Olha o que voltou: nenhuma prosa. Um objeto com <code>tool_calls</code> dentro, e dentro dele <code>id</code>, <code>name</code> e <code>arguments</code>. E olha o <code>arguments</code> com atenção — ele é uma <strong>string</strong> com um JSON dentro, com as barras de escape à mostra. JSON dentro de JSON. Todo mundo estranha isso na primeira vez, e é assim que a interface é.</p>
+<p><strong>3.</strong> <strong>[Aponto a validação no código antes do despacho]</strong> Antes de executar, olha o que o host faz. Tem um regex aqui que só aceita dígitos e os operadores aritméticos. Se o modelo tivesse mandado <code>import os</code> dentro da expressão, esta linha recusaria. Essa linha é a propriedade "validável" e a propriedade "permissionada" no mesmo lugar — e ela existe porque eu não confio no argumento que veio, mesmo quando ele veio bem formado.</p>
+<p><strong>4.</strong> <strong>[Executo e mostro o retorno e a mensagem de papel <code>tool</code>]</strong> O host executou. Resultado sessenta. E agora o resultado volta para a conversa como uma mensagem de papel <code>tool</code>, com o mesmo identificador da chamada. Olha a lista de mensagens crescendo na tela: sistema, usuário, assistente com a chamada, <code>tool</code> com o resultado. Essa é a conversa que o modelo vê no próximo turno.</p>
+<p><strong>5.</strong> <strong>[Mostro a resposta final sintetizada]</strong> E aí o modelo lê o resultado e escreve a resposta em prosa. Fim do ciclo. Cinco passos, e eu quero cravar o que aconteceu: o modelo emitiu <strong>texto</strong>. Este script obedeceu. Em nenhum momento houve código rodando dentro do modelo.</p>
+<p><strong>6.</strong> <strong>[Mudo para <code>--parte 2</code> e explico o desenho do experimento]</strong> Segunda metade. Seis perguntas com gabarito aritmético, porque eu quero um critério de acerto que não dependa de julgamento — ou o número saiu certo, ou não saiu. E três catálogos: o bom, que vocês já viram; um magro, com a função renomeada para <code>calc</code>, descrição de uma palavra e parâmetro <code>q</code>; e um vago, chamado <code>ferramenta</code>, descrição "uso geral", parâmetro <code>entrada</code>. E a coisa mais importante do experimento: <strong>a função executada é a mesma nas três</strong>. O código não muda. Muda o que o modelo lê.</p>
+<p><strong>7.</strong> <strong>[Rodo e leio a tabela, com atenção às duas colunas]</strong> Olha a tabela. E eu quero que a leitura seja feita nas duas colunas juntas, não só na última. A coluna "chamou" mostra que o modelo quase sempre <strong>chama</strong> a ferramenta, nos três catálogos — o formato está garantido pela decodificação restrita do serving. A coluna "acertou" é a que despenca. Ou seja: bem formado não é correto. O JSON é impecável e o argumento é lixo. Guardem essa distinção, porque ela é a diferença entre um lab que funciona e um sistema que funciona.</p>
+<p><strong>8.</strong> <strong>[Fecho na seção "o que esta demo não mostrou"]</strong> E o script termina listando o que ficou de fora, que é o Bloco 2 de hoje. Nada aqui pediu confirmação para agir. O único registro de trajetória é este <code>print</code>, que não serve para nada em produção. E as ferramentas estão <strong>cravadas</strong> neste arquivo: se eu quiser usar esta calculadora em outro programa, eu reescrevo tudo. Esse terceiro item é o problema que o MCP resolve.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>Sete minutos, em dupla, com o schema ruim projetado. O objetivo não é a sintaxe do JSON — é forçar a turma a escrever uma descrição <strong>para o modelo ler</strong>, que é uma habilidade nova e desconfortável.</p>
+<p><strong>1.</strong> <strong>[Projeto o schema <code>dados</code> e formo as duplas]</strong> Sete minutos, em dupla. Este schema está na tela e ele é real — do tipo que eu já vi em produção mais de uma vez:</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;dados&quot;,
+  &quot;description&quot;: &quot;pega dados do sistema&quot;,
+  &quot;parameters&quot;: {
+    &quot;type&quot;: &quot;object&quot;,
+    &quot;properties&quot;: {
+      &quot;acao&quot;: {&quot;type&quot;: &quot;string&quot;},
+      &quot;params&quot;: {&quot;type&quot;: &quot;object&quot;}
+    }
+  }
+}
+</code></pre>
+<p>E o contexto: esse <code>dados</code> hoje faz três coisas. Ele consulta o regulamento por texto, ele lê a matrícula de um aluno por código, e ele envia um e-mail de confirmação.</p>
+<p>Três coisas na folha. Primeira: duas ou três ferramentas estreitas no lugar do <code>dados</code>, com nome, descrição de uma ou duas frases escrita para o modelo, e parâmetros com tipo e nome explícito — com <code>enum</code> onde couber. Segunda: qual delas exige confirmação humana antes de executar, e por quê em uma frase. Terceira: qual das seis propriedades do slide oito o schema original violava mais, com uma frase de justificativa.</p>
+<p><em>Como recolher:</em> aos 01:48 eu paro a sala. Peço para duas duplas lerem em voz alta só a <strong>descrição</strong> que elas escreveram para a ferramenta de e-mail, e comparo as duas em voz alta: qual das duas eu escolheria se eu fosse o modelo, e por quê. Aí eu faço a pergunta que fecha o Bloco 2: onde mora a confirmação — no schema ou no host? A resposta que eu quero ouvir é "no host", e quando alguém diz isso, a aula fechou: o schema descreve, o host decide. Se sobrar trinta segundos, eu comento o antipadrão <code>acao</code>: a dupla que manteve um parâmetro de ação está reinventando o <code>dados</code> com nome melhor.</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Esta parte <strong>não é fala planejada</strong>. É contingência. E nesta aula ela tem uma particularidade que
+vale dizer em voz alta se a pergunta vier: <strong>esta aula não tem apêndice matemático próprio</strong>, porque
+não há derivação nenhuma no fluxo dela. O que existe é ponteiro para o fundamento formal que a aula
+mobiliza e que mora em outra aula. Os três casos abaixo são os que aparecem de verdade.</p>
+<p><strong>Item 1 — "essa diferença de taxa entre os catálogos é significativa?" (~4 min).</strong>
+A melhor pergunta que a demo pode gerar, e eu quero que ela venha. A resposta honesta é: com seis
+perguntas e três catálogos, <strong>não sei</strong> — e é por isso que o desafio pós-aula pede para rodar o
+catálogo bom duas vezes. Se sobrar tempo, eu faço a conta grosseira no quadro: seis perguntas, uma
+diferença de uma acerto é 17 pontos percentuais, e o intervalo de confiança de uma proporção com
+<code>n = 6</code> é largo o suficiente para engolir isso. O tratamento formal — intervalo e teste pareado —
+está no <strong>Apêndice A.5 da Aula 28</strong>, e a versão "uma semente não é resultado" está no <strong>Apêndice A.5
+da Aula 9</strong>, que a turma já leu. Se não houver tempo, a frase é: "a tabela mostra a direção do
+efeito, não o tamanho dele; medir o tamanho é a Aula 28".</p>
+<p><strong>Item 2 — "quanto custa o loop repetir a chamada?" (~3 min).</strong>
+Costuma vir junto da propriedade 6 do slide 8, quando eu digo que o retry é comportamento e não
+hipótese. Eu não abro a conta aqui, porque ela é o slide 11 da Aula 23 com fórmula e tudo. O que eu
+digo é a forma do resultado: o custo não é o número de passos vezes o custo de um passo — cada volta
+reenvia a trajetória acumulada, então o total cresce com o <strong>quadrado</strong> dos passos. A soma está no
+<strong>Apêndice A.1 da Aula 23</strong>. Isso planta a aula seguinte em quinze segundos.</p>
+<p><strong>Item 3 — "o <code>N × M</code> não é só uma conta?" (~2 min).</strong>
+É, e é de propósito. Se alguém apontar que o slide 10 é aritmética de escola, eu concordo e uso a
+deixa: o valor do slide é o desenho, não a conta. Vinte flechas emaranhadas contra nove, no quadro,
+em dez segundos. E aproveito para plantar que a <strong>mesma</strong> multiplicação reaparece na Aula 24 com
+consequência bem menos inocente — orçamento de cinco passos vezes cinco trabalhadores dá vinte e
+cinco chamadas antes de qualquer proteção global (<strong>Apêndice A.2 da Aula 24</strong>).</p>
+<hr /></div></details><details><summary>Encerramento · 01:50–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 14 da Parte 1 — as quatro frases de síntese, o desenho das três partes do Lab 6 com a justificativa de fazer na mão antes do framework, o aviso dos cinco itens da Entrega 1 recolhida amanhã, e a leitura do Toolformer com a pergunta dirigida.</p>
+<blockquote>
+<p>Ideia central: "Hoje o modelo ganhou mãos e continuou sem poder executar nada. Amanhã vocês escrevem o programa que obedece — e na Aula 23 a gente põe isso num loop com um objetivo."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 21 de 30 · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="codigo-student.zip">↓ Notebooks e scripts do aluno</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Tool calling e Model Context Protocol (MCP)</h1>
+<h2>Slide 1 · Abertura: o modelo passa a pedir · 00:00–00:04</h2>
+<p>Boa noite, pessoal. Ontem vocês entregaram — ou estão terminando de entregar — um sistema de recuperação medido. Chunking com metadados, índice, BM25, fusão por posição, reranking, e duas tabelas com <code>recall@k</code>. Deixa eu dar uma devolutiva de uma linha antes de começar: o que eu vi de melhor foram as tabelas quebradas por tipo de consulta, e o que eu vi de pior foram relatórios sem dizer quantas consultas tinham. Declarar o <code>|Q|</code> é de graça e é o que separa medição de impressão.</p>
+<p>Agora, uma pergunta sobre o que vocês construíram: quem decidiu buscar? Foi vocês. Vocês escreveram a linha que chama a busca. O sistema de ontem é um cano — entra pergunta, ele busca, ele responde, sempre, mesmo quando a pergunta é "bom dia".</p>
+<p>Hoje a gente entrega essa decisão para o modelo. E a coisa mais importante desta aula é entender exatamente o que isso significa e o que isso não significa.</p>
+<blockquote>
+<p>Ideia central: "Hoje o modelo ganha mãos. E eu vou passar a primeira metade da aula provando para vocês que ele continua sem poder executar nada."</p>
+</blockquote>
+<h2>Slide 2 · O que muda quando o modelo pode agir · 00:04–00:10</h2>
+<p>Deixa eu situar isso no arco do curso, porque hoje é uma fronteira.</p>
+<p>Até a Aula 16 a gente mexeu no modelo: arquitetura, escala, ajuste fino, alinhamento, raciocínio. Nas Aulas 18 a 20 a gente parou de mexer no modelo e passou a mexer no que entra nele — recuperação é isso, é dar contexto. O modelo continuava fazendo uma coisa só: ler texto e escrever texto.</p>
+<p>A partir de hoje ele começa a <strong>afetar o mundo</strong>. Não porque ele executa algo, mas porque o texto que ele escreve passa a ser lido por um programa que executa. E essa diferença é fina e é tudo.</p>
+<p>E as três aulas seguintes são consequências disso. Na Aula 23 a gente põe esse pedido dentro de um loop com objetivo e critério de parada, e o nome disso é agente. Na 24, vários deles. Na 26, o que dá errado quando um texto não confiável entra num sistema que age.</p>
+<blockquote>
+<p>Ideia central: "A partir de hoje o texto que o modelo escreve deixa de ser resposta e passa a ser pedido. Um programa lê esse pedido e obedece — e é aí que a área fica séria."</p>
+</blockquote>
+<h2>Slide 3 · O ciclo de cinco passos — e quem executa o quê · 00:10–00:18</h2>
+<p>Vamos ao mecanismo. Cinco passos, e eu quero que a turma saia daqui sabendo de cor quem faz cada um.</p>
+<p>Passo um: o <strong>host</strong> — que é o programa de vocês, o notebook, o aplicativo — monta o prompt e serializa <strong>dentro dele</strong> o catálogo de ferramentas disponíveis. Isso é texto. Está no prompt.</p>
+<p>Passo dois: o <strong>modelo</strong> devolve, em vez de prosa, um objeto que descreve uma chamada — nome da ferramenta e argumentos, em JSON. Só isso. É a única coisa que o modelo faz neste ciclo.</p>
+<p>Passo três: o <strong>host</strong> recebe esse JSON, valida os argumentos, decide se tem permissão para executar, e executa. Repararam? Validar, decidir e executar são três verbos, e nenhum deles é do modelo.</p>
+<p>Passo quatro: o resultado volta para a conversa como uma mensagem de papel <code>tool</code>, amarrada à chamada por um identificador.</p>
+<p>Passo cinco: o modelo lê o resultado e escreve a resposta final — agora sim, em prosa.</p>
+<p>A analogia que eu uso é receita médica. O médico escreve o pedido. Ele não manipula o remédio, não abre a farmácia e não decide se o convênio cobre. O sistema em volta obedece — ou recusa.</p>
+<p>E é por isso que a pergunta "e se o modelo apagar meu banco de dados?" está mal formulada. O modelo nunca apagou nada na vida. Se o banco foi apagado, foi porque alguém escreveu uma ferramenta chamada <code>apagar</code> e ligou ela no despacho, sem confirmação. A responsabilidade tem um autor, e não é o modelo.</p>
+<blockquote>
+<p>Ideia central: "Cinco passos, e o modelo é dono de um. Todo poder que a ferramenta tem foi dado por quem escreveu o host."</p>
+</blockquote>
+<h2>Slide 4 · Anatomia da chamada: o JSON na tela · 00:18–00:25</h2>
+<p>Deixa eu mostrar a coisa concreta, porque "chamada estruturada" é abstrato e o objeto é simples.</p>
+<p>A chamada tem três campos que importam. O <code>name</code>, que é o nome da ferramenta. O <code>arguments</code>, que é uma string com um JSON dentro — e sim, é string, é JSON dentro de JSON, e todo mundo estranha isso na primeira vez. E o <code>id</code>.</p>
+<p>O <code>id</code> é o campo que a turma sempre pergunta para que serve. Ele existe porque um único turno do modelo pode pedir <strong>várias</strong> chamadas de uma vez — três buscas em paralelo, por exemplo. Quando os três resultados voltarem, o modelo precisa saber qual resultado responde a qual pedido. Sem correlação explícita, não dá.</p>
+<p>E a volta: o resultado entra na conversa como uma mensagem com papel <code>tool</code>, com o mesmo <code>tool_call_id</code>. Não é mensagem de usuário. E aqui tem uma coisa que parece burocracia e não é: se eu devolver o resultado como se fosse o usuário falando "o resultado foi sessenta", às vezes funciona. Funciona por acidente. O modelo foi treinado com aquele papel específico naquela posição, e trocar o papel é sair da distribuição de treino — o comportamento fica pior de um jeito que ninguém consegue depurar.</p>
+<blockquote>
+<p>Ideia central: "O resultado da ferramenta não é o usuário falando. Existe um papel próprio para isso, e usar o papel errado é sair da distribuição de treino do modelo."</p>
+</blockquote>
+<h2>Slide 5 · O schema é parte do prompt · 00:25–00:33</h2>
+<p>Agora a parte desta aula que costuma surpreender a turma, e eu vou ser bem explícito porque é a coisa mais aplicável do dia.</p>
+<p>Como o catálogo de ferramentas é serializado dentro do prompt, <strong>cada palavra dele é engenharia de prompt</strong>. O nome da função. A descrição. O nome de cada parâmetro. O <code>enum</code> de valores aceitos. O exemplo que você escreve dentro da descrição do parâmetro. Tudo isso é lido pelo modelo no momento em que ele decide o que chamar e o que passar.</p>
+<p>Então: renomear um parâmetro de <code>expressao</code> para <code>q</code> não é refatoração. Cortar a descrição de três frases para uma palavra não é limpeza de código. As duas coisas são <strong>reescrever o prompt do modelo</strong>, e o efeito aparece na taxa de acerto.</p>
+<p>A minha analogia é caixa de ferramentas. Uma caixa etiquetada e uma gaveta com tudo jogado dentro têm o mesmo conteúdo. O que muda é o tempo até achar a chave certa — e, no caso do modelo, se ele acha.</p>
+<p>E tem um corolário desconfortável: a descrição da ferramenta não é documentação para a sua equipe. O leitor dela é o modelo. Documentação para gente vai no código; para o modelo, vai no schema. Quando as duas coisas competem, o modelo ganha, porque é ele que está decidindo.</p>
+<p>Deixa eu provar isso com número, em vez de afirmar.</p>
+<blockquote>
+<p>Ideia central: "Trocar <code>expressao</code> por <code>q</code> e apagar a descrição não é refatoração. É reescrever o prompt — e a taxa de acerto sente."</p>
+</blockquote>
+<h2>Slide 6 · [Demo] Três catálogos, uma função · 00:33–00:45</h2>
+<p>Doze minutos comigo na tela. Duas partes: uma chamada passo a passo, e depois a mesma função com três catálogos diferentes.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "A função executada é idêntica nos três. Muda só o que o modelo lê — e é isso que a tabela vai medir."</p>
+</blockquote>
+<h2>Slide 7 · Como o modelo aprendeu a fazer isso · 00:45–00:55</h2>
+<p>Antes do intervalo, a pergunta que fecha o Bloco 1: de onde vem essa habilidade? Ninguém programou "quando a pergunta tiver conta, chame a calculadora".</p>
+<p>Três caminhos, em ordem de custo.</p>
+<p>O mais barato é <strong>exemplo no prompt</strong>: mostrar duas ou três chamadas bem feitas e deixar o aprendizado em contexto da Aula 10 fazer o resto. Funciona. Gasta contexto em toda requisição, e é frágil no formato.</p>
+<p>O segundo é <strong>ajuste supervisionado de formato</strong>: pegar dezenas de milhares de exemplos de chamada bem formada e ajustar o modelo neles. É por isso que os modelos de hoje já vêm "com tool calling" — alguém pagou esse SFT antes de vocês. É o Módulo 3 da disciplina aplicado a um formato de saída.</p>
+<p>E o terceiro é o mais bonito conceitualmente, e é a leitura de hoje: <strong>Toolformer</strong>, do Schick e colegas, 2023. A ideia é auto-supervisão. O modelo insere candidatos de chamada de API no meio de textos comuns, o sistema executa esses candidatos, e aí vem o critério: mantém-se apenas as chamadas que <strong>reduzem a perda de previsão dos tokens seguintes</strong>. Ou seja, a chamada é considerada boa se ela ajudou o modelo a prever melhor o que vinha depois. Não tem rótulo humano nenhum nesse laço.</p>
+<p>Repararam no que isso resolve? O problema de "quem diz se essa chamada foi útil" some. A utilidade passa a ser medida na própria função de perda. Guardem esse truque, porque ele reaparece em raciocínio e em agentes: sempre que alguém consegue transformar "foi útil?" numa quantidade mensurável, a área anda.</p>
+<blockquote>
+<p>Ideia central: "Toolformer decide se uma chamada presta perguntando se ela ajudou o modelo a prever o resto do texto. Utilidade virou perda — e é por isso que escala sem humano no laço."</p>
+</blockquote>
+<h2>Slide 8 · Seis propriedades de uma boa ferramenta · 01:05–01:15</h2>
+<p>Voltando. A segunda metade da aula é design, e ela é o que vocês vão levar para o projeto.</p>
+<p>Seis propriedades. Uma boa ferramenta é: <strong>estreita</strong> — faz uma coisa, e o nome diz qual; <strong>bem nomeada</strong> — porque o nome e a descrição são lidos na hora da escolha, e isso é o slide cinco de novo; <strong>validável por schema</strong> — tipo, obrigatoriedade, <code>enum</code>, e o host rejeitando antes de executar em vez de confiar no modelo; <strong>permissionada</strong> — rodando com o mínimo de privilégio, e com ação sensível exigindo confirmação humana; <strong>observável</strong> — cada chamada deixando registro de argumento, resultado, latência e erro; e <strong>com efeito colateral determinístico</strong> — mesma entrada, mesmo efeito, e de preferência idempotente.</p>
+<p>Deixa eu insistir nas duas últimas, que são as mais negligenciadas.</p>
+<p>Observabilidade: sem registro de trajetória, depurar um agente é impossível. Vocês vão sentir isso no Lab 7. Quando o agente erra na quarta chamada, a resposta final é só o sintoma — o que interessa é o que ele pediu, com que argumento, e o que a ferramenta devolveu. Isso a Aula 26 formaliza.</p>
+<p>Determinismo e idempotência: o loop vai repetir a chamada. Não é hipótese, é comportamento. O modelo não entendeu a resposta, ele tenta de novo. Se a sua ferramenta incrementa um contador ou avança um cursor a cada chamada, o retry corrompe o estado e a trajetória fica irreproduzível.</p>
+<p>A analogia é: é o mesmo checklist de uma boa API interna, só que o cliente é novo e estranho. É um cliente que lê a documentação rápido, não pede esclarecimento, e às vezes chuta.</p>
+<blockquote>
+<p>Ideia central: "Projetem ferramenta como quem projeta API para um cliente que lê rápido, nunca pergunta e às vezes chuta. Porque é exatamente esse o cliente."</p>
+</blockquote>
+<h2>Slide 9 · O catálogo das más ferramentas · 01:15–01:23</h2>
+<p>O espelho, que é mais divertido e mais útil.</p>
+<p><strong>Vaga.</strong> <code>dados(query)</code>, descrição "pega dados". O modelo não tem como decidir quando usar isso, e a taxa de acerto cai — vocês acabaram de ver na tabela da demo.</p>
+<p><strong>Ampla demais.</strong> <code>executar_sql(comando)</code>. <code>rodar_shell(cmd)</code>. O schema aqui é decorativo: a linguagem inteira cabe no parâmetro, então não existe validação possível. Isso não é um argumento contra ferramentas poderosas; é um argumento a favor de estreitá-las até o que a tarefa exige.</p>
+<p><strong>Silenciosamente com estado.</strong> <code>proximo_registro()</code>. Cada chamada depende de um cursor invisível. O modelo repete a chamada, o cursor anda, e ninguém reproduz aquela execução nunca mais.</p>
+<p><strong>Irreversível sem confirmação.</strong> <code>enviar_email</code>. <code>apagar_registro</code>. <code>pagar</code>. E eu quero ser preciso aqui, porque isso vai voltar no exercício: o problema não é ser irreversível. Sistema real precisa fazer coisa irreversível. O problema é ser irreversível <strong>sem um passo de confirmação</strong> — porque aí o custo de um erro deixa de ser um retry e passa a ser um incidente.</p>
+<p>E o antipadrão que eu mais vejo, inclusive em código de gente experiente: a pessoa tem vinte ferramentas, acha que é demais, e cria uma ferramenta genérica com um parâmetro <code>acao</code>. Isso não reduziu complexidade nenhuma. Isso escondeu a complexidade <strong>do schema</strong> — e o schema era justamente o único lugar onde ela era verificável.</p>
+<blockquote>
+<p>Ideia central: "Juntar vinte ferramentas numa só com um parâmetro <code>acao</code> não simplifica nada. Só tira do schema a única coisa que o schema sabia checar."</p>
+</blockquote>
+<h2>Slide 10 · O problema N×M · 01:23–01:29</h2>
+<p>Agora eu mudo de assunto, e a ponte é uma pergunta prática.</p>
+<p>Vocês vão sair daqui com uma base RAG do Lab 5, que é uma ferramenta útil. Suponham que vocês queiram usar essa base em quatro lugares: no notebook do projeto, no editor de código de vocês, num assistente de terminal, e num chat interno. Quatro hosts.</p>
+<p>E suponham cinco sistemas para integrar: a base RAG, o repositório, o banco, o gerenciador de tickets, o calendário.</p>
+<p>Quatro vezes cinco, vinte adaptadores. Cada um com sua autenticação, seu formato de erro, seu ciclo de vida. E cada host novo multiplica.</p>
+<p>Com um protocolo comum, cada host implementa <strong>um</strong> cliente e cada sistema expõe <strong>um</strong> servidor. Quatro mais cinco, nove peças. É exatamente a economia que o Protocolo de Servidor de Linguagem trouxe para editores: antes disso, cada editor implementava autocompletar para cada linguagem; depois, cada linguagem expõe um servidor e cada editor fala o protocolo. O MCP é declaradamente inspirado nisso.</p>
+<p>E eu quero marcar uma coisa, porque é onde a turma se confunde: dar ferramenta ao modelo <strong>não precisa</strong> de protocolo. Vocês vão fazer isso amanhã na mão, sem protocolo nenhum, e vai funcionar. O que o protocolo resolve é reuso e distribuição.</p>
+<blockquote>
+<p>Ideia central: "N vezes M adaptadores contra N mais M peças. Protocolo não é sobre dar ferramenta ao modelo — é sobre não reescrever a ferramenta em cada host."</p>
+</blockquote>
+<h2>Slide 11 · MCP: host, cliente, servidor · 01:29–01:38</h2>
+<p>Agora a arquitetura, e ela tem três papéis. Eu vou usar o quadro do slide três de novo, porque a separação é a mesma.</p>
+<p>O <strong>host</strong> é a aplicação onde a conversa acontece e onde o modelo é chamado. É ele que decide o que expor ao modelo e é ele que executa as decisões — igualzinho ao passo três de hoje.</p>
+<p>O <strong>cliente</strong> é o componente dentro do host que mantém a conexão com um servidor. Um cliente por servidor, e é o cliente que fala o protocolo.</p>
+<p>O <strong>servidor</strong> é um processo separado que expõe capacidades. E aqui está a parte que a turma sempre erra na primeira vez: <strong>o servidor nunca vê o modelo</strong>. Ele não conversa com o modelo, não sabe qual modelo é, não sabe se existe um modelo. Ele responde a um cliente. Quem monta o prompt e chama o modelo é o host.</p>
+<p>O transporte é <code>stdio</code> — servidor local rodando como subprocesso, conversando por entrada e saída padrão, que é o que vocês vão fazer amanhã — ou HTTP, para servidor remoto. Em cima disso vai JSON-RPC, e o diálogo mínimo tem três verbos: <code>initialize</code>, que negocia capacidades; <code>tools/list</code>, que descobre o que existe; <code>tools/call</code>, que executa.</p>
+<p>A analogia que fecha: o servidor é um driver de dispositivo. Ele não sabe qual aplicação vai usá-lo, e é exatamente por isso que ele serve para todas.</p>
+<p>E amanhã vocês fazem os dois lados: escrevem um cliente que se conecta a um servidor que já existe, e escrevem um servidor próprio, expondo a base do Lab 5.</p>
+<blockquote>
+<p>Ideia central: "O servidor MCP nunca vê o modelo. Ele responde a um cliente — a mesma separação do passo três, agora entre processos."</p>
+</blockquote>
+<h2>Slide 12 · Recurso, ferramenta e prompt: quem decide · 01:38–01:43</h2>
+<p>Última peça conceitual, e ela é curta e vale prova.</p>
+<p>Um servidor MCP expõe três tipos de coisa, e o que distingue as três não é o formato — é <strong>quem escolhe usar</strong>.</p>
+<p><strong>Ferramenta</strong> é ação, e quem escolhe é o <strong>modelo</strong>. É o <code>tools/call</code>.</p>
+<p><strong>Recurso</strong> é dado endereçável por identificador — um arquivo, uma linha de banco, um documento do acervo. E quem escolhe anexar aquilo ao contexto é a <strong>aplicação</strong>, ou o usuário clicando. Não o modelo.</p>
+<p><strong>Prompt</strong> é um template parametrizado que o <strong>usuário</strong> invoca explicitamente.</p>
+<p>Modelo, aplicação, usuário. Três donos de decisão diferentes, e o erro clássico é confundir os dois primeiros: expor o acervo inteiro como uma ferramenta <code>ler_arquivo(caminho)</code> quando o que se queria era um recurso. A diferença prática é enorme — na primeira versão, o caminho está no alcance do modelo; na segunda, não está.</p>
+<p>E do lado do cliente existem capacidades simétricas, que eu menciono para vocês reconhecerem quando virem: o servidor pode pedir uma geração ao modelo do host, pode receber quais raízes do sistema de arquivos ele tem direito de ver, e pode pedir ao usuário um dado que falta.</p>
+<p>Agora, três coisas que o MCP <strong>não</strong> resolve, e eu prefiro dizer isso do que deixar vocês descobrirem no projeto. Schema ruim continua ruim depois de padronizado — protocolo não conserta nome vago. Permissão continua sendo decisão do host. E servidor de terceiro amplia a superfície de injeção indireta: o texto que volta de uma ferramenta entra no mesmo campo da instrução do sistema, exatamente como o documento recuperado da Aula 19.</p>
+<blockquote>
+<p>Ideia central: "Ferramenta o modelo escolhe, recurso a aplicação escolhe, prompt o usuário escolhe. Quem confunde os dois primeiros entrega o caminho de arquivo para o modelo sem querer."</p>
+</blockquote>
+<h2>Slide 13 · [Exercício] Reescrever o schema ruim · 01:43–01:50</h2>
+<p>Sete minutos, em dupla, com um schema de verdade na tela — e é um schema ruim de verdade, do tipo que eu já vi em produção.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Uma ferramenta chamada <code>dados</code> que faz três coisas. Sete minutos para transformar isso em duas ou três ferramentas que um modelo consegue escolher."</p>
+</blockquote>
+<h2>Slide 14 · Fechamento: amanhã vocês fazem na mão · 01:50–02:00</h2>
+<p>Deixa eu juntar as quatro frases da aula e mandar vocês para casa.</p>
+<p>Primeira: o modelo pede, o host executa. Cinco passos, e o modelo é dono de um.</p>
+<p>Segunda: o schema é parte do prompt. Nome, descrição, nome de parâmetro — e vocês viram a taxa de acerto mudar sem uma linha de código mudar.</p>
+<p>Terceira: boa ferramenta é estreita, bem nomeada, validável, permissionada, observável e determinística. Má ferramenta é vaga, ampla, com estado escondido, ou irreversível sem confirmação.</p>
+<p>Quarta: protocolo não é sobre dar ferramenta ao modelo. É sobre <code>N</code> mais <code>M</code> em vez de <code>N</code> vezes <code>M</code>.</p>
+<p>Amanhã é o Lab 6, e ele tem três partes. Primeiro vocês implementam o loop <strong>na mão</strong>, sem framework nenhum: definir o schema, detectar a chamada na resposta, fazer o parsing, despachar, executar, devolver como mensagem <code>tool</code>, sintetizar. Com três ferramentas — calculadora, busca na base do Lab 5, e uma consulta a uma API pública sem chave. Depois vocês conectam um cliente a um servidor MCP que já existe. E por último escrevem um servidor MCP próprio com uma ferramenta.</p>
+<p>E a ordem é de propósito, então deixa eu justificar: fazer na mão antes do framework existe para vocês verem o protocolo antes da abstração. Depois de escrever o parsing e o despacho com as próprias mãos, nenhuma biblioteca de agente vai parecer mágica para vocês — vai parecer o que ela é, um laço com um parser.</p>
+<p>Ah, e duas coisas operacionais. Amanhã eu recolho a <strong>Entrega 1 do projeto</strong>: a proposta. Cinco itens, e eu vou dizer agora para ninguém ser pego de surpresa — problema claro e verificável, duas técnicas do curso, plano de avaliação com métrica por camada, divisão de trabalho, e viabilidade em free tier. Vale cinco por cento da nota final e eu dou devolutiva na hora. E a leitura de hoje é o Toolformer, com a pergunta dirigida do slide.</p>
+<blockquote>
+<p>Ideia central: "Amanhã vocês escrevem o parsing e o despacho na mão. Depois disso, nenhum framework de agente vai parecer mágica — vai parecer um laço com um parser."</p>
+</blockquote>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p>Doze minutos, <code>codigo/demo-tool-calling.py</code>, só biblioteca padrão. A demo tem duas metades com objetivos diferentes: a primeira torna visível <em>quem executa o quê</em>; a segunda transforma "o schema é parte do prompt" em número na tela.</p>
+<p>Insumos da véspera: o script rodado em modo <code>api</code> com <code>--salvar-saida</code>, o arquivo de saída no pendrive, e a data e o identificador do modelo anotados. Confirmar na véspera que o modelo do provedor ainda está na lista dele.</p>
+<p><strong>1.</strong> <strong>[Abro o script e mostro o catálogo de uma ferramenta só]</strong> Este é o catálogo. Uma ferramenta, <code>calcular_expressao</code>, com descrição de três frases e um parâmetro chamado <code>expressao</code>, com exemplo dentro da descrição. E eu quero que a turma repare numa coisa antes de qualquer execução: isso aqui vai ser <strong>serializado dentro do prompt</strong>. Não existe canal separado, não existe registro mágico. É texto que o modelo vai ler.</p>
+<p><strong>2.</strong> <strong>[Rodo <code>--parte 1</code> e mostro o JSON cru que o modelo devolveu]</strong> A pergunta é "quanto é doze e meio por cento de quatrocentos e oitenta?". Olha o que voltou: nenhuma prosa. Um objeto com <code>tool_calls</code> dentro, e dentro dele <code>id</code>, <code>name</code> e <code>arguments</code>. E olha o <code>arguments</code> com atenção — ele é uma <strong>string</strong> com um JSON dentro, com as barras de escape à mostra. JSON dentro de JSON. Todo mundo estranha isso na primeira vez, e é assim que a interface é.</p>
+<p><strong>3.</strong> <strong>[Aponto a validação no código antes do despacho]</strong> Antes de executar, olha o que o host faz. Tem um regex aqui que só aceita dígitos e os operadores aritméticos. Se o modelo tivesse mandado <code>import os</code> dentro da expressão, esta linha recusaria. Essa linha é a propriedade "validável" e a propriedade "permissionada" no mesmo lugar — e ela existe porque eu não confio no argumento que veio, mesmo quando ele veio bem formado.</p>
+<p><strong>4.</strong> <strong>[Executo e mostro o retorno e a mensagem de papel <code>tool</code>]</strong> O host executou. Resultado sessenta. E agora o resultado volta para a conversa como uma mensagem de papel <code>tool</code>, com o mesmo identificador da chamada. Olha a lista de mensagens crescendo na tela: sistema, usuário, assistente com a chamada, <code>tool</code> com o resultado. Essa é a conversa que o modelo vê no próximo turno.</p>
+<p><strong>5.</strong> <strong>[Mostro a resposta final sintetizada]</strong> E aí o modelo lê o resultado e escreve a resposta em prosa. Fim do ciclo. Cinco passos, e eu quero cravar o que aconteceu: o modelo emitiu <strong>texto</strong>. Este script obedeceu. Em nenhum momento houve código rodando dentro do modelo.</p>
+<p><strong>6.</strong> <strong>[Mudo para <code>--parte 2</code> e explico o desenho do experimento]</strong> Segunda metade. Seis perguntas com gabarito aritmético, porque eu quero um critério de acerto que não dependa de julgamento — ou o número saiu certo, ou não saiu. E três catálogos: o bom, que vocês já viram; um magro, com a função renomeada para <code>calc</code>, descrição de uma palavra e parâmetro <code>q</code>; e um vago, chamado <code>ferramenta</code>, descrição "uso geral", parâmetro <code>entrada</code>. E a coisa mais importante do experimento: <strong>a função executada é a mesma nas três</strong>. O código não muda. Muda o que o modelo lê.</p>
+<p><strong>7.</strong> <strong>[Rodo e leio a tabela, com atenção às duas colunas]</strong> Olha a tabela. E eu quero que a leitura seja feita nas duas colunas juntas, não só na última. A coluna "chamou" mostra que o modelo quase sempre <strong>chama</strong> a ferramenta, nos três catálogos — o formato está garantido pela decodificação restrita do serving. A coluna "acertou" é a que despenca. Ou seja: bem formado não é correto. O JSON é impecável e o argumento é lixo. Guardem essa distinção, porque ela é a diferença entre um lab que funciona e um sistema que funciona.</p>
+<p><strong>8.</strong> <strong>[Fecho na seção "o que esta demo não mostrou"]</strong> E o script termina listando o que ficou de fora, que é o Bloco 2 de hoje. Nada aqui pediu confirmação para agir. O único registro de trajetória é este <code>print</code>, que não serve para nada em produção. E as ferramentas estão <strong>cravadas</strong> neste arquivo: se eu quiser usar esta calculadora em outro programa, eu reescrevo tudo. Esse terceiro item é o problema que o MCP resolve.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>Sete minutos, em dupla, com o schema ruim projetado. O objetivo não é a sintaxe do JSON — é forçar a turma a escrever uma descrição <strong>para o modelo ler</strong>, que é uma habilidade nova e desconfortável.</p>
+<p><strong>1.</strong> <strong>[Projeto o schema <code>dados</code> e formo as duplas]</strong> Sete minutos, em dupla. Este schema está na tela e ele é real — do tipo que eu já vi em produção mais de uma vez:</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;dados&quot;,
+  &quot;description&quot;: &quot;pega dados do sistema&quot;,
+  &quot;parameters&quot;: {
+    &quot;type&quot;: &quot;object&quot;,
+    &quot;properties&quot;: {
+      &quot;acao&quot;: {&quot;type&quot;: &quot;string&quot;},
+      &quot;params&quot;: {&quot;type&quot;: &quot;object&quot;}
+    }
+  }
+}
+</code></pre>
+<p>E o contexto: esse <code>dados</code> hoje faz três coisas. Ele consulta o regulamento por texto, ele lê a matrícula de um aluno por código, e ele envia um e-mail de confirmação.</p>
+<p>Três coisas na folha. Primeira: duas ou três ferramentas estreitas no lugar do <code>dados</code>, com nome, descrição de uma ou duas frases escrita para o modelo, e parâmetros com tipo e nome explícito — com <code>enum</code> onde couber. Segunda: qual delas exige confirmação humana antes de executar, e por quê em uma frase. Terceira: qual das seis propriedades do slide oito o schema original violava mais, com uma frase de justificativa.</p>
+<p><em>Como recolher:</em> aos 01:48 eu paro a sala. Peço para duas duplas lerem em voz alta só a <strong>descrição</strong> que elas escreveram para a ferramenta de e-mail, e comparo as duas em voz alta: qual das duas eu escolheria se eu fosse o modelo, e por quê. Aí eu faço a pergunta que fecha o Bloco 2: onde mora a confirmação — no schema ou no host? A resposta que eu quero ouvir é "no host", e quando alguém diz isso, a aula fechou: o schema descreve, o host decide. Se sobrar trinta segundos, eu comento o antipadrão <code>acao</code>: a dupla que manteve um parâmetro de ação está reinventando o <code>dados</code> com nome melhor.</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Esta parte <strong>não é fala planejada</strong>. É contingência. E nesta aula ela tem uma particularidade que
+vale dizer em voz alta se a pergunta vier: <strong>esta aula não tem apêndice matemático próprio</strong>, porque
+não há derivação nenhuma no fluxo dela. O que existe é ponteiro para o fundamento formal que a aula
+mobiliza e que mora em outra aula. Os três casos abaixo são os que aparecem de verdade.</p>
+<p><strong>Item 1 — "essa diferença de taxa entre os catálogos é significativa?" (~4 min).</strong>
+A melhor pergunta que a demo pode gerar, e eu quero que ela venha. A resposta honesta é: com seis
+perguntas e três catálogos, <strong>não sei</strong> — e é por isso que o desafio pós-aula pede para rodar o
+catálogo bom duas vezes. Se sobrar tempo, eu faço a conta grosseira no quadro: seis perguntas, uma
+diferença de uma acerto é 17 pontos percentuais, e o intervalo de confiança de uma proporção com
+<code>n = 6</code> é largo o suficiente para engolir isso. O tratamento formal — intervalo e teste pareado —
+está no <strong>Apêndice A.5 da Aula 28</strong>, e a versão "uma semente não é resultado" está no <strong>Apêndice A.5
+da Aula 9</strong>, que a turma já leu. Se não houver tempo, a frase é: "a tabela mostra a direção do
+efeito, não o tamanho dele; medir o tamanho é a Aula 28".</p>
+<p><strong>Item 2 — "quanto custa o loop repetir a chamada?" (~3 min).</strong>
+Costuma vir junto da propriedade 6 do slide 8, quando eu digo que o retry é comportamento e não
+hipótese. Eu não abro a conta aqui, porque ela é o slide 11 da Aula 23 com fórmula e tudo. O que eu
+digo é a forma do resultado: o custo não é o número de passos vezes o custo de um passo — cada volta
+reenvia a trajetória acumulada, então o total cresce com o <strong>quadrado</strong> dos passos. A soma está no
+<strong>Apêndice A.1 da Aula 23</strong>. Isso planta a aula seguinte em quinze segundos.</p>
+<p><strong>Item 3 — "o <code>N × M</code> não é só uma conta?" (~2 min).</strong>
+É, e é de propósito. Se alguém apontar que o slide 10 é aritmética de escola, eu concordo e uso a
+deixa: o valor do slide é o desenho, não a conta. Vinte flechas emaranhadas contra nove, no quadro,
+em dez segundos. E aproveito para plantar que a <strong>mesma</strong> multiplicação reaparece na Aula 24 com
+consequência bem menos inocente — orçamento de cinco passos vezes cinco trabalhadores dá vinte e
+cinco chamadas antes de qualquer proteção global (<strong>Apêndice A.2 da Aula 24</strong>).</p>
+<hr />
+<h2>Encerramento · 01:50–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 14 da Parte 1 — as quatro frases de síntese, o desenho das três partes do Lab 6 com a justificativa de fazer na mão antes do framework, o aviso dos cinco itens da Entrega 1 recolhida amanhã, e a leitura do Toolformer com a pergunta dirigida.</p>
+<blockquote>
+<p>Ideia central: "Hoje o modelo ganhou mãos e continuou sem poder executar nada. Amanhã vocês escrevem o programa que obedece — e na Aula 23 a gente põe isso num loop com um objetivo."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 21 de 30 · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-20/index.html">← Aula anterior</a><a class="button" href="../aula-22/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

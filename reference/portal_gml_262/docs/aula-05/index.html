@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Modelos sequenciais e o nascimento da atenção · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="5">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 05 / 1 — Fundamentos: do texto ao Transformer</p><h1>Modelos sequenciais e o nascimento da atenção</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 05" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Ler</strong> a recorrência <code>h_t = f(h_(t-1), x_t)</code> e <strong>explicar</strong> por que a ordem dos tokens altera a saída e por que o número de parâmetros não depende do comprimento (fundamento em A.1).</p></li><li><p><strong>Diagnosticar</strong> um modelo que não aprende dependências longas a partir do produto de fatores no caminho de volta, e <strong>distinguir</strong> o problema de otimização do problema de capacidade (derivação em A.2).</p></li><li><p><strong>Identificar</strong> quais das três dívidas estruturais (dependência longa, gradiente, ausência de paralelismo) o LSTM ataca e quais ele deixa intactas, e <strong>justificar</strong> o veredito de cada uma (equações em A.3).</p></li><li><p><strong>Diagnosticar</strong> o gargalo do vetor de contexto fixo em uma arquitetura seq2seq a partir da curva de qualidade × comprimento, e <strong>prever</strong> em que tipo de entrada ele falha primeiro (argumento em A.4).</p></li><li><p><strong>Interpretar</strong> um vetor de contexto de Bahdanau a partir de scores de alinhamento dados — dizer para onde o modelo olhou, o que mudaria se os scores mudassem de escala — e <strong>calcular</strong> <code>α_(t,j)</code> e <code>c_t</code> quando pedido (derivação e exemplo numérico em A.5).</p></li><li><p><strong>Mapear</strong> os papéis Query, Key e Value sobre a atenção aditiva — consulta derivada do estado do decoder, chave derivada de cada estado do encoder e valor lido desse estado — e <strong>distinguir</strong> esse mapeamento conceitual das projeções matriciais da Aula 6 (A.6).</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · O sintoma: a tradução que piora com o comprimento · 00:00–00:05</summary><div class="prose"><p>Boa noite, pessoal. Vou começar por um defeito, e não por uma arquitetura.</p>
+<p>No Lab 1, vocês fecharam o caminho texto → token → vetor e viram o limite do embedding
+estático: <code>banco</code> recebia o mesmo vetor em frases diferentes. Hoje a frase entra de verdade
+na computação. A pergunta muda: como carregar contexto ao longo de uma sequência — e o que
+essa escolha cobra em memória, treinamento e hardware?</p>
+<p>Imaginem um tradutor automático de 2014, desses que já funcionavam bem o suficiente para ir
+para produção. Ele traduz "o gato dorme" impecavelmente. Aí eu dou uma frase de quarenta
+palavras, com o sujeito no começo e o verbo principal no fim, e ele desmonta: perde o final,
+ou perde o começo, ou troca quem concorda com quem.</p>
+<p>Isso sozinho seria anedota. O que transforma em diagnóstico é a curva que está no slide. No
+eixo horizontal, o comprimento da frase de origem. No vertical, a qualidade da tradução
+medida. E a forma é o que interessa: plana até uns trinta, e daí em diante caindo — e
+continuando a cair. O erro não é aleatório. Ele é <strong>função do comprimento da entrada</strong>.</p>
+<p>Quando o erro acompanha o comprimento, a arquitetura vira uma suspeita forte — mas ainda não
+é um diagnóstico fechado. Poucos exemplos longos no treino também produziriam uma curva
+parecida. O que convence no artigo é a comparação controlada: mesmo conjunto de dados e mesmo
+procedimento de treino, modelo básico contra modelo com atenção. A diferença acompanha a
+arquitetura.</p>
+<blockquote>
+<p>Ideia central: "Uma curva não fecha o diagnóstico. Ela aponta a suspeita — e o experimento comparativo decide."</p>
+</blockquote></div></details><details><summary>Slide 2 · Por que a intuição sozinha erra aqui · 00:05–00:10</summary><div class="prose"><p>Antes de eu contar a resposta, deixa eu gastar a resposta errada, porque ela é a primeira
+que vem à cabeça de todo mundo — inclusive à minha.</p>
+<p>O modelo comprime a frase inteira num resumo interno. Se ele erra em frases longas, a
+intuição diz: o resumo é pequeno demais, então é só aumentar. Faz sentido e pode ajudar. Mas
+isso compra <strong>espaço</strong>; não compra o direito de consultar novamente as posições da entrada,
+nem encurta o caminho que a informação percorre.</p>
+<p>O limite estrutural continua: existe <strong>um</strong> resumo, de tamanho fixo, para uma entrada de
+tamanho variável — e, depois de formado, ele é tudo o que sobra para o decoder. Aumentar o
+vetor desloca um limite de capacidade; não transforma memória em consulta.</p>
+<p>A segunda intuição errada é "treina mais". Essa eu vou desmontar no slide quatro, porque ela
+esbarra numa coisa mais interessante: existe um sinal de treino que simplesmente não chega
+aonde precisa chegar.</p>
+<p>A analogia que eu vou usar a aula inteira: é a diferença entre uma prova de memória e uma
+prova com consulta. O conteúdo é o mesmo. O que muda é o direito de olhar a fonte na hora de
+responder.</p>
+<blockquote>
+<p>Ideia central: "Falta acesso, não espaço. Comprar um caderno maior não resolve um problema de não poder olhar a fonte."</p>
+</blockquote></div></details><details><summary>Slide 3 · O conceito em uso: ler em ordem e carregar um resumo · 00:10–00:16</summary><div class="prose"><p>Então vamos olhar a arquitetura que produz essa curva. Ela dominou a área de 1990 a 2016 e é
+mais simples que a fama dela.</p>
+<p>A ideia é ler em ordem. Um token por vez, e carregando comigo um único vetor de estado que
+resume tudo o que já passou. A regra está no slide, e ela é uma linha:</p>
+<p><code>h_t = f(h_(t-1), x_t)</code>, que na forma clássica é <code>h_t = tanh(W_h h_(t-1) + W_x x_t + b)</code>.</p>
+<p>Três leituras dessa linha. Primeira: <code>h_t</code> é o resumo comprimido de tudo o que veio antes.
+Segunda, e é a economia da coisa: é a <strong>mesma</strong> matriz aplicada em todos os passos. Cinco
+tokens ou quinhentos, o número de parâmetros é igual; muda só quantas vezes eu aplico a
+função. Para quem programa, isso é um <code>reduce</code>: <code>h</code> é o acumulador, <code>x_t</code> é o elemento, e a
+função de combinação foi aprendida em vez de escrita por mim.</p>
+<p>Terceira leitura, e essa é a que a turma costuma entender errado, então eu cravo: a rede
+<strong>não guarda</strong> os tokens anteriores em lugar nenhum. Ela guarda um vetor de tamanho fixo que
+foi sobrescrito a cada passo. O token de dez posições atrás só existe na medida em que
+sobreviveu a dez sobrescritas.</p>
+<blockquote>
+<p>Ideia central: "É um <code>reduce</code> sobre a frase, com a função de combinação aprendida. Só isso. O resto da aula é consequência."</p>
+</blockquote></div></details><details><summary>Slide 4 · Sintoma 2: o modelo que esquece o sujeito · 00:16–00:23</summary><div class="prose"><p>Segundo sintoma, e ele é mais específico do que "o modelo esquece".</p>
+<p>O padrão que se observa é este: o modelo acerta a concordância entre palavras vizinhas, e
+<strong>nunca</strong> aprende a concordância entre palavras separadas por quarenta posições. Não é que
+erre de vez em quando — é que aquela dependência nunca entra. E enquanto isso a loss desce
+bonito, sem <code>NaN</code>, sem divergência, sem nada no log.</p>
+<p>Pausa de base, porque eu não vou assumir que todo mundo já fez Aprendizagem de Máquina. A
+<em>loss</em> é um número que mede o erro do modelo. O gradiente diz em que direção e com que força
+cada peso deve mudar para reduzir esse erro. Retropropagação é o procedimento que leva esse
+sinal do fim do cálculo para o começo usando a regra da cadeia.</p>
+<p>Numa RNN, esse caminho de volta atravessa um fator por passo. Em muitas direções, multiplicar
+muitos fatores atenua o sinal; em outras, pode amplificá-lo. O comportamento exato depende
+dos pesos e das ativações, mas a dependência exponencial do número de passos é o problema.</p>
+<p>Deixa eu fazer a conta aqui na calculadora, na frente de vocês, porque número na lousa vale
+mais que a palavra "exponencial". Zero vírgula nove elevado a dez: zero vírgula trinta e
+cinco, ainda dá para trabalhar. A cinquenta: cinco milésimos. A cem: três vezes dez elevado
+a menos cinco. E do outro lado, um vírgula um elevado a cinquenta já é cento e dezessete, e a
+cem passa de treze mil.</p>
+<p>Agora o ponto que muita gente mistura: capacidade e otimização são perguntas diferentes.
+Mantido o ganho por passo, aumentar só a dimensão não remove o expoente <code>T</code>. Um modelo maior
+pode ter mais capacidade e continuar sem receber sinal útil nos primeiros passos. A solução
+precisa mexer no <strong>caminho</strong> do gradiente.</p>
+<blockquote>
+<p>Ideia central: "A rede consegue representar a dependência longa. O que ela não consegue é aprendê-la — o sinal de treino morre no caminho de volta."</p>
+</blockquote></div></details><details><summary>Slide 5 · Sintoma 3: a GPU que fica ociosa · 00:23–00:28</summary><div class="prose"><p>Terceiro sintoma, e esse é econômico — é o que decidiu a história da área.</p>
+<p>O cenário: o treino leva horas, o time compra uma GPU quatro vezes mais rápida, e o tempo por
+época cai quinze por cento. Quinze. E a utilização da placa, se alguém for medir, fica baixa
+o tempo inteiro.</p>
+<p>A causa está numa palavra da fórmula do slide três: <code>h_t</code> <strong>exige</strong> <code>h_(t-1)</code>. Exige. Não é
+preferência de implementação, é a definição da arquitetura. Então o treino tem <code>T</code> etapas
+obrigatoriamente sequenciais, e não existe quantidade de núcleos paralelos que compre tempo
+aqui. É uma linha de montagem com uma estação só: comprar dez fábricas não acelera um carro
+que precisa passar por quinhentos postos em ordem.</p>
+<p>E deixa eu ser preciso sobre a confusão que sempre aparece aqui: essa dívida é no <strong>treino</strong>,
+não na geração. Gerar texto é sequencial em qualquer arquitetura, inclusive no Transformer —
+a palavra <code>n+1</code> depende da palavra <code>n</code> em todo mundo. O que a recorrência impede é o
+paralelismo no treino, onde a frase inteira já é conhecida de antemão e poderia ser
+processada de uma vez.</p>
+<blockquote>
+<p>Ideia central: "O que matou a recorrência não foi qualidade. Foi ela não deixar você gastar dinheiro para ir mais rápido."</p>
+</blockquote></div></details><details><summary>Slide 6 · O que o gating do LSTM compra · 00:28–00:34</summary><div class="prose"><p>A resposta de 1997 para o segundo sintoma é o LSTM, e o que ela tem de bom cabe num sinal de
+mais.</p>
+<p>A ideia: além do estado que já existia, uma segunda memória — a célula, <code>c_t</code> — e três
+válvulas aprendidas que decidem o que fazer com ela. Está no slide, em duas linhas. As
+válvulas são sigmoides, e é por isso que elas funcionam como válvula: a saída fica entre zero
+e um, então zero fecha e um deixa passar inteiro. Uma decide o que apagar, outra o que
+escrever, a terceira o que exportar.</p>
+<p>E agora a linha que importa mais que todas: <code>c_t = f_t ⊙ c_(t-1) + i_t ⊙ g_t</code>. O <strong>sinal de
+mais</strong>. A célula nova é a célula velha, filtrada, mais o que entrou de novo. Isso significa
+que existe um caminho de <code>c_(t-1)</code> até <code>c_t</code> que não passa por multiplicação de matriz — e
+como o gradiente volta pelo mesmo caminho por onde a informação foi, ele ganhou uma rodovia
+aditiva para atravessar quinhentos passos.</p>
+<p>Agora a parte que a V1 desta aula não dizia com clareza, e eu quero dizer: o LSTM <strong>não
+resolveu</strong> o desaparecimento do gradiente. Quando as válvulas fecham, o decaimento volta
+inteiro. O que ele fez foi tirar o problema das mãos da álgebra e pôr nas mãos da rede — que
+agora pode decidir manter a porta aberta nos canais em que a dependência longa importa. Isso
+é enorme e é diferente de resolver.</p>
+<p>Minha analogia: a rede simples reescreve o caderno inteiro a cada página. O LSTM tem um
+caderno de anotações e três decisões por página — o que rasurar, o que anotar de novo, o que
+mostrar para fora.</p>
+<p>E um alerta que eu vou repetir na aula que vem sobre cabeças de atenção, então já fica
+plantado: as portas não são regras programadas. Ninguém escreveu "esta porta guarda o
+sujeito". São camadas densas com sigmoide, treinadas pelo gradiente da tarefa final.</p>
+<p>E deixa eu fechar a dívida que ficou da Aula 3. Lembram do <code>banco</code>? Em 2018, o ELMo
+popularizou representações em que o vetor de cada palavra é construído a partir dos estados
+de LSTMs nos dois sentidos. O vetor de <code>banco</code> muda com a frase. <strong>Sem atenção.</strong></p>
+<p>Isso separa duas ideias que parecem sinônimas e não são. Contextualizar é fazer a
+representação depender da frase; uma RNN já faz isso. Atender é dar ao passo atual acesso
+ponderado a um conjunto de estados. Bahdanau vai acrescentar esse acesso, mas ainda com RNNs
+dos dois lados. Só o Transformer vai retirar a recorrência e liberar paralelismo no treino.</p>
+<blockquote>
+<p>Ideia central: "O LSTM não resolveu o gradiente. Ele deu à rede o poder de decidir quando não estragá-lo."</p>
+<p>Ideia central: "Contextualizar, consultar e paralelizar são três coisas diferentes. Hoje a gente separa as três."</p>
+</blockquote></div></details><details><summary>Slide 7 · O placar das três dívidas · 00:34–00:38</summary><div class="prose"><p>Quatro minutos para o slide mais importante do primeiro bloco, que é o placar.</p>
+<p>O LSTM funcionou. Tradução comercial de 2015, reconhecimento de fala, autocompletar de
+teclado — tudo isso era LSTM. Então por que a área abandonou em dois anos? Porque sobraram
+três dívidas, e o veredito de cada uma é diferente.</p>
+<p>Dívida um, dependência longa: <strong>aliviada</strong>. Melhorou muito, não acabou. O token 1 e o token
+500 continuam separados por 499 passos de computação.</p>
+<p>Dívida dois, gradiente: <strong>contida</strong>. Recorte de gradiente segura o lado que explode, e o lado
+que desaparece ficou sob a mão da rede. É engenharia de contenção.</p>
+<p>Dívida três, paralelismo: <strong>intacta</strong>. Nada do que o LSTM faz muda o fato de <code>h_t</code> exigir
+<code>h_(t-1)</code>. Ela não foi nem discutida — e é ela que quebra a arquitetura.</p>
+<p>Guardem o placar. Daqui a pouco eu volto a ele com uma quarta coluna: a atenção de Bahdanau
+remove o resumo fixo e cria acesso curto, mas deixa essa terceira dívida intacta. A Aula 6 é
+que muda o veredito do paralelismo.</p>
+<blockquote>
+<p>Ideia central: "Duas dívidas foram renegociadas. A terceira não foi nem discutida — e é ela que quebra a arquitetura."</p>
+</blockquote></div></details><details><summary>Slide 8 · Onde memória e acesso se concentram · 00:38–00:43</summary><div class="prose"><p>Agora eu monto a arquitetura concreta onde as três se encontram, porque é dela que sai a
+curva com que eu abri a aula. Tradução automática, 2014.</p>
+<p>Duas redes. A primeira, o encoder, lê a frase em português inteira e não produz saída nenhuma
+— só atualiza o estado dela, palavra por palavra. Quando a frase acaba, eu pego o último
+estado e chamo de <code>c</code>. A segunda rede, o decoder, começa a partir de <code>c</code> e escreve a frase em
+inglês, uma palavra por vez.</p>
+<p><code>c = h_T</code>. Está no slide, e é a linha que define o problema. O significado inteiro da origem
+— cinco palavras ou cinquenta — tem que caber num vetor de dimensão fixa. E o decoder, dali
+para frente, <strong>não tem mais acesso à frase de origem</strong>.</p>
+<p>Olha o que se encontra nessa ponte. Primeiro, memória: a capacidade de <code>c</code> é constante
+enquanto a entrada cresce. Segundo, acesso: a posição <code>j</code> só influencia a saída depois de
+atravessar uma cadeia longa até <code>c</code> e depois o decoder. A terceira dívida, o paralelismo, não
+mora no vetor <code>c</code>; ela atravessa os dois blocos porque ambos são recorrentes. Essa distinção
+vai impedir a gente de atribuir à atenção de 2014 um ganho que só aparece em 2017.</p>
+<blockquote>
+<p>Ideia central: "A curva com que eu abri a aula é o retrato de um vetor de tamanho fixo tentando carregar uma entrada de tamanho variável."</p>
+</blockquote></div></details><details><summary>Slide 9 · [Demo] Medir os três sintomas · 00:43–00:55</summary><div class="prose"><p>Chega de afirmação. Doze minutos medindo.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Nenhuma das três medições é ilustração. As três são a evidência dos slides que eu acabei de dar."</p>
+</blockquote></div></details><details><summary>Slide 10 · Acesso em vez de compressão · 01:05–01:17</summary><div class="prose"><p>Voltando. O desenho do seq2seq ainda está no quadro com o <code>c</code> circulado. Agora eu apago
+aquele círculo.</p>
+<p>Bahdanau, Cho e Bengio, 2014. O artigo muda <strong>uma</strong> coisa, pequena de escrever e enorme de
+consequência: em vez de um <code>c</code> para a frase toda, existe um <code>c_t</code> para cada passo do decoder.</p>
+<p>As três linhas estão no slide e eu vou ler cada uma, sem mexer em nenhuma.</p>
+<p>Primeira: <code>e_(t,j) = vᵀ tanh(W s_(t-1) + U h_j)</code>. Isso <strong>compara</strong>. De um lado, onde eu estou
+na tradução; do outro, o que tem na posição <code>j</code> da origem. O resultado é um número: quão
+relevante é aquela posição para o que eu estou escrevendo agora.</p>
+<p>Segunda: <code>α_(t,j) = exp(e_(t,j)) / Σ_k exp(e_(t,k))</code>. Isso transforma comparações em
+<strong>orçamento</strong>. Os pesos ficam positivos e somam um. Cada palavra que o decoder vai escrever
+ganha cem por cento de atenção para distribuir sobre as posições da origem.</p>
+<p>Terceira: <code>c_t = Σ_j α_(t,j) h_j</code>. Isso <strong>lê</strong> a origem segundo aquele orçamento. Média
+ponderada de todos os estados do encoder. Nenhum é escolhido de verdade, nenhum é descartado
+de verdade.</p>
+<p>E agora a consequência que resolve o gargalo do slide 1: depois que os estados <code>h_j</code> existem,
+o decoder alcança qualquer um deles por uma aresta de atenção. O caminho de <code>h_j</code> ao contexto
+do passo <code>t</code> tem comprimento <strong>um</strong>. Não é que a ponte ficou maior. Os estados do encoder
+ficam todos na mesa, disponíveis, e o modelo aprende como ponderá-los.</p>
+<p>Um cuidado, porque a turma sempre extrapola: em 2014 isso <strong>não</strong> substitui a recorrência. Os
+<code>h_j</code> continuam saindo de uma RNN, um por posição, sequencialmente. A atenção aqui é acessório
+da recorrência. O caminho de <code>x_j</code> até <code>h_j</code> e a produção dos estados do decoder ainda têm
+passos recorrentes. A tese de que atenção basta para retirar a recorrência é de 2017.</p>
+<blockquote>
+<p>Ideia central: "Prova de memória contra prova com consulta. O conteúdo é o mesmo; o que muda é o direito de olhar a fonte na hora de responder."</p>
+</blockquote></div></details><details><summary>Slide 11 · A evidência: uma legenda que ninguém escreveu · 01:17–01:28</summary><div class="prose"><p>Agora o resultado mais bonito do artigo, e ele é um efeito colateral.</p>
+<p>Se eu empilho os vetores de peso de todos os passos, eu tenho uma matriz: cada linha é um
+passo da geração, cada coluna é uma posição da origem, e cada linha soma um. Projetada como
+mapa de calor, aparece uma diagonal — e uma diagonal num mapa de calor de tradução é um
+alinhamento de palavras. É a Figura 3 do artigo, que está aqui na tela.</p>
+<p>Olha a diagonal quebrando naquele bloco. Aquilo é um grupo nominal cuja ordem inverte entre
+as duas línguas. O modelo aprendeu a atravessar em bloco: ele não traduz na ordem, ele sabe
+voltar.</p>
+<p>E aqui está o ponto que vale a aula inteira, então eu vou dizer devagar: <strong>em nenhum momento
+alguém deu rótulo de alinhamento para esse modelo</strong>. O único sinal de treino foi a tradução
+correta. O alinhamento apareceu porque era o caminho mais barato para acertar a tradução. É
+uma legenda que ninguém escreveu.</p>
+<p>E um cuidado de rigor, que volta na Aula 6 e na Aula 27: peso alto não é explicação causal. É
+tentador ler a matriz como "ele traduziu assim porque olhou ali", e isso é uma inferência mais
+forte do que o dado permite. Os autores foram cuidadosos e chamaram o resultado de alinhamento
+<em>suave</em> — suave porque cada palavra de destino se liga a uma distribuição sobre as de origem,
+nunca a uma só.</p>
+<blockquote>
+<p>Ideia central: "Ninguém ensinou alinhamento a esse modelo. Ele foi treinado para traduzir, e o alinhamento apareceu porque era o caminho mais barato para traduzir bem."</p>
+</blockquote></div></details><details><summary>Slide 12 · Q, K, V: três papéis antes de três matrizes · 01:28–01:39</summary><div class="prose"><p>Agora eu reescrevo aquelas três linhas com outros nomes, e é a reescrita mais importante do
+módulo. É por causa dela que esta aula existe antes da próxima.</p>
+<p>O que a atenção faz tem a forma de uma <strong>busca</strong>. Existe uma consulta, existem itens
+indexados, existe conteúdo devolvido. Se eu nomear os papéis com cuidado, a consulta é
+<code>q_t = W_s s_(t-1)</code>, a parte transformada do estado do decoder. A chave de cada posição é
+<code>k_j = U_h h_j</code>, a parte transformada do estado do encoder que entra na comparação. E o
+valor é <code>v_j = h_j</code>, o conteúdo que entra na média ponderada.</p>
+<p>Comparando com o dicionário que vocês usam em Python: em <code>d[k]</code> a comparação é igualdade
+exata, o resultado é um item, e chave errada dá erro. Na atenção, a comparação é uma <strong>função
+aprendida</strong> que devolve um número contínuo, e o resultado nunca é um item: é uma mistura de
+todos, ponderada. Busca por relevância, não busca por chave.</p>
+<p>O detalhe importante é mais sutil do que “K e V são iguais”. Os dois <strong>partem</strong> de <code>h_j</code>,
+mas a chave passa por <code>U_h</code> dentro do score, enquanto o valor entra como <code>h_j</code> na soma. A
+notação Q/K/V ainda é uma leitura funcional. Na aula seguinte ela vira três projeções
+matriciais explícitas e um produto <code>QKᵀ</code>.</p>
+<p>Duas perguntas ficam abertas. E se as projeções de query, key e value fossem explícitas e o
+score aditivo virasse um produto interno calculado como matriz? E, mais radical: e se as
+queries viessem da <strong>própria sequência de entrada</strong>, cada token consultando os outros da mesma
+frase, sem uma RNN produzindo os estados? Essa segunda pergunta tem nome: self-attention.</p>
+<blockquote>
+<p>Ideia central: "Q, K e V começam como três papéis. No Transformer, eles viram três projeções explícitas da mesma entrada."</p>
+</blockquote></div></details><details><summary>Slide 13 · [Exercício] Diagnosticar, não calcular · 01:39–01:50</summary><div class="prose"><p>Oito minutos, em dupla. Três sintomas, e para cada um eu quero a causa e a evidência.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Nenhuma das três se resolve calculando. As três se resolvem sabendo o que a arquitetura descarta."</p>
+</blockquote></div></details><details><summary>Slide 14 · Fechamento: se a atenção dá acesso, para que serve a recorrência? · 01:50–02:00</summary><div class="prose"><p>Deixa eu juntar as peças e deixar vocês com uma pergunta na cabeça até quinta.</p>
+<p>A gente começou com uma curva: qualidade que cai com o comprimento da frase. Atrás dela tinha
+uma arquitetura que lê em ordem e carrega um resumo. O LSTM melhora memória e gradiente, mas
+continua sequencial. No seq2seq básico, memória e acesso ainda apertam num vetor fixo. A
+atenção de Bahdanau ataca <strong>esse</strong> ponto: troca compressão por acesso, produz um contexto por
+passo e revela um alinhamento que ninguém supervisionou. O que ela não faz é retirar as RNNs.</p>
+<p>Agora a pergunta que eu quero deixar com vocês, e ela é séria: se a atenção já dá ao decoder
+acesso direto a qualquer posição da entrada, <strong>para que ainda serve a recorrência?</strong> Qual é o
+trabalho que ela está fazendo ali que a atenção não faria? Em 2017, três anos depois de
+Bahdanau, um grupo respondeu "nenhum" e escreveu um artigo cujo título é exatamente essa
+resposta.</p>
+<p>É a próxima aula. E vocês vão reconhecer as três linhas de hoje lá dentro, em outra ordem,
+com outros nomes, e sem uma única recorrência.</p>
+<p>Para casa, duas coisas. A leitura é Bahdanau, Cho e Bengio, arXiv 1409.0473, seções 1 a 3 e a
+discussão da Figura 3 — e a pergunta dirigida é por que a Figura 3 é evidência de um
+alinhamento aprendido <strong>sem rótulo de alinhamento</strong>. A segunda são cinco linhas sobre o que se
+ganha ao transformar os papéis de query, key e value em projeções explícitas e fazer as
+queries nascerem da própria sequência. Quem escrever essas cinco linhas já entrou na aula
+que vem.</p>
+<blockquote>
+<p>Ideia central: "Em 2017 alguém respondeu 'para nada' — e o título do artigo é a resposta."</p>
+</blockquote>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p>Doze minutos, três medições. Duas rodam em NumPy puro, uma é de quadro. Nenhuma delas depende
+de rede, e a essencial funciona com giz e nada mais. Na V2 a demo deixa de ilustrar a
+arquitetura e passa a ser a <strong>evidência</strong> dos slides 4, 8 e 1 — nessa ordem.</p>
+<p>Insumos preparados na véspera: as doze linhas da Medição 1 salvas num arquivo e já rodadas,
+com a saída em texto; a frase longa escrita num papel na minha mão, para eu não improvisar no
+quadro; e as Figuras 2 e 3 do paper de Bahdanau baixadas localmente.</p></div></details><details><summary>Medição 1 — o produto que decide o gradiente (3 min)</summary><div class="prose"><p><strong>1.</strong> <strong>[Abro <code>codigo/demo-gradiente-rnn.py</code>]</strong> Isto aqui não é uma rede neural. É um caso
+controlado que isola o produto repetido no caminho do gradiente. Eu uso uma transformação
+diagonal <code>ganho · I</code> para que a norma depois de <code>T</code> passos seja exatamente <code>ganho^T</code>:</p>
+<pre><code class="language-python">import numpy as np
+d = 32
+for ganho in (0.9, 1.1):
+    W = ganho * np.eye(d)
+    for T in (10, 50, 200):
+        J = np.eye(d)
+        for _ in range(T):
+            J = J @ W
+        print(f&quot;ganho={ganho}  T={T:3d}  norma={np.linalg.norm(J, 2):.3e}&quot;)
+</code></pre>
+<p><strong>2.</strong> <strong>[Rodo e leio a coluna da direita]</strong> Ganho zero vírgula nove: <code>3,49·10⁻¹</code> em dez
+passos, <code>5,15·10⁻³</code> em cinquenta, <code>7,06·10⁻¹⁰</code> em duzentos. Ganho um vírgula um:
+<code>2,59</code>, <code>1,17·10²</code>, <code>1,90·10⁸</code>. São cerca de dezoito ordens de grandeza de diferença no fim,
+com a mesma dimensão.</p>
+<p><strong>3.</strong> <strong>[Volto ao slide 4]</strong> Isto não prova que toda RNN terá exatamente esses números; numa
+rede real, pesos e derivadas mudam a cada passo. O experimento isola a mecânica: um ganho
+moderadamente diferente de um, repetido muitas vezes, muda a escala exponencialmente. E
+reparem no que eu <strong>não</strong> mudei: a dimensão é 32 nas duas rodadas.</p></div></details><details><summary>Medição 2 — a compressão em quatro números (5 min)</summary><div class="prose"><p><strong>4.</strong> <strong>[Escrevo no quadro a frase longa que eu preparei]</strong> Vou escrever uma frase aqui.
+Comprida de propósito, com o sujeito no começo, o verbo principal no fim e duas orações
+encaixadas no meio. Alguma coisa do tipo "A pesquisadora que orientou os três alunos que
+publicaram o artigo sobre tradução automática no ano passado defendeu a tese em dezembro."</p>
+<p><strong>5.</strong> <strong>[Proponho a tarefa de compressão e recolho propostas]</strong> Essa frase inteira tem que
+caber em <strong>quatro números inteiros</strong>. Quatro. O critério é de vocês — quantidade de palavras,
+código de tema, qualquer esquema. Quem me dá quatro números? Vou anotar duas ou três propostas
+aqui do lado.</p>
+<p><strong>6.</strong> <strong>[Apago a frase e deixo só os quatro números]</strong> Agora eu apago a frase. Sumiu. Ficaram
+os quatro números de vocês, e eu vou pedir a tradução da frase para o inglês usando <strong>só</strong> o
+que sobrou no quadro.</p>
+<p><strong>7.</strong> <strong>[Espero a turma tentar e nomeio o que se perdeu]</strong> Dá para recuperar o tema — tem
+alguma coisa de pesquisa, de artigo, de tese. E não dá para recuperar quem era o sujeito, o
+que concorda com o quê, qual oração estava encaixada em qual, nem a ordem em que as coisas
+aconteceram. Essa é a parte que virou zero.</p>
+<p><strong>8.</strong> <strong>[Volto ao desenho do seq2seq e aponto o <code>c</code> circulado]</strong> Isso tem nome e o nome está
+no meu desenho: <code>c = h_T</code>. A diferença entre vocês e o modelo é que vocês tinham quatro
+números e ele tem mil — o que muda a escala do problema e não muda a natureza dele. E existe
+um comprimento a partir do qual duas frases diferentes colidem no mesmo vetor
+necessariamente; a conta está em A.4, para quem quiser.</p></div></details><details><summary>Medição 3 — a curva e a matriz (4 min)</summary><div class="prose"><p><strong>9.</strong> <strong>[Projeto a Figura 2 do paper]</strong> Esta é a curva com que eu abri a aula, agora com as
+duas arquiteturas juntas. A do modelo com vetor de contexto fixo cai a partir de umas trinta
+palavras e continua caindo. A do modelo com atenção fica plana até o fim do eixo. Mesma
+tarefa, mesmos dados, mesma família de rede recorrente por baixo. A única diferença é o acesso.</p>
+<p><strong>10.</strong> <strong>[Projeto a Figura 3 e fico em silêncio alguns segundos]</strong> E este é o efeito
+colateral. Cada linha é uma palavra que o modelo escreveu, cada coluna é uma palavra da
+origem, o brilho é o peso, e cada linha soma um. Olha a diagonal.</p>
+<p><strong>11.</strong> <strong>[Aponto o bloco onde a diagonal se quebra]</strong> E aqui, onde ela se rompe e atravessa em
+bloco: um grupo nominal cuja ordem inverte entre as línguas. O modelo aprendeu a voltar. É o
+oposto exato dos quatro números.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>Oito minutos de dupla, três de correção. O exercício da V1 era desenhar a grade de alinhamento
+com lápis e papel; ele virou extensão opcional, e o obrigatório passou a ser diagnóstico —
+porque o que a prova e o Lab 2 cobram é reconhecer a causa de um comportamento, não preencher
+uma grade.</p>
+<p><strong>1.</strong> <strong>[Projeto os três sintomas e formo as duplas]</strong> Oito minutos, em dupla. Três situações,
+e para cada uma eu quero duas coisas: a causa provável e <strong>que evidência confirmaria</strong>. A
+segunda parte é a que vale.</p>
+<p>Os três sintomas:</p>
+<ol>
+<li>Um tradutor acerta manchetes e desmonta em parágrafos. O erro cresce com o comprimento, e a
+   primeira coisa a quebrar é a concordância entre partes distantes. O treino já contém
+   exemplos longos em quantidade comparável.</li>
+<li>Um modelo recorrente acerta a concordância entre palavras vizinhas e <strong>nunca</strong> aprende a
+   concordância entre palavras separadas por quarenta posições. A loss desce, não há <code>NaN</code>, e
+   aumentar a dimensão do estado não mudou nada.</li>
+<li>Um time trocou a GPU por outra quatro vezes mais rápida e o tempo por época caiu 15%. Mesmo
+   modelo, mesmos dados, mesmo tamanho de lote; o profiler mostra uma cadeia de operações
+   pequenas, cada uma esperando a anterior.</li>
+</ol>
+<p><em>Como recolher:</em> três minutos. Peço uma dupla para o sintoma 1 e forço a segunda parte — "como
+você confirmaria?". Corrijo o 2 rápido, porque é o que sustenta a Aula 6. E uso o tempo que
+sobrar no 3, ligando com o custo que a Aula 6 vai pagar. Fecho com: "reparem que nenhum dos
+três pedia conta, e os três pediam saber o que a arquitetura descarta".</p>
+<p><em>Extensão para quem terminar antes (opcional):</em> desenhar a grade de alinhamento de um par
+PT→EN com inversão de ordem — linhas somando 1, ao menos uma linha com peso repartido — e
+calcular um <code>c_t</code> a partir de três scores dados, seguindo A.5. É o exercício que na V1 era
+obrigatório e aqui vira aprofundamento.</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a derivação
+em aula. A regra geral é remeter ao apêndice e seguir; conduzir uma derivação só se sobrar
+tempo, e anunciando que é conteúdo de consulta.</p></div></details><details><summary>&quot;De onde vem esse produto que some?&quot; → **A.2** · 6 min no quadro</summary><div class="prose"><p>A pergunta mais provável do Bloco 1. Eu escrevo a regra da cadeia ao longo do tempo em uma
+linha, mostro que a derivada de um passo é uma matriz diagonal vezes a <strong>mesma</strong> <code>W_h</code> em todo
+passo, e concluo que a norma do produto é limitada por uma base elevada a <code>T−1</code>. Três linhas.
+Fecho com os números da calculadora, que eles já viram.</p>
+<p><strong>Versão de 30 segundos:</strong> “O sinal de treino atravessa um fator por passo. Repetir um ganho
+um pouco menor que 1 o apaga; repetir um ganho um pouco maior o explode. A.2 mostra a regra da
+cadeia e a Medição 1 isola o efeito.”</p></div></details><details><summary>&quot;Escreve o LSTM inteiro?&quot; → **A.3** · 7 min no quadro</summary><div class="prose"><p>Custa caro e raramente compensa em aula. Se eu fizer, escrevo as seis equações e derivo só a
+linha da célula, mostrando que o fator que se propaga é <code>diag(f_t)</code> — diagonal e dependente do
+dado, contra a matriz cheia e fixa da rede simples. O ponto que vale o tempo é o produto das
+portas de esquecimento: se <code>f = 0.5</code>, <code>0.5^20</code> já é <code>10⁻⁶</code>, e é daí que sai o truque de
+inicializar o viés da porta em 1.</p>
+<p><strong>Versão de 30 segundos:</strong> “A equação decisiva é <code>c_t = f_t⊙c_(t-1) + i_t⊙g_t</code>: o sinal de
+mais cria um caminho direto, e <code>f_t</code> decide quanto desse caminho permanece aberto. As seis
+equações e a ressalva sobre caminhos indiretos estão em A.3.”</p></div></details><details><summary>&quot;Por que aumentar o vetor não basta?&quot; → **A.4** · 5 min no quadro</summary><div class="prose"><p>Vale fazer com a premissa explícita. Eu digo que a contagem de bits é um experimento mental
+sob precisão finita e não uma prova de que toda frase precisa de um código exclusivo. Ela
+mostra que a capacidade é limitada; não explica sozinha a queda observada. O argumento mais
+forte é o comprimento do caminho: aumentar <code>d</code> não encurta uma única aresta entre a posição
+antiga e a saída. A.4 traz os dois argumentos e os limites de cada um.</p>
+<p><strong>Versão de 30 segundos:</strong> “Um vetor maior compra capacidade. Ele não devolve ao decoder o
+direito de consultar a entrada nem encurta o caminho da informação. A.4 separa formalmente
+espaço de acesso.”</p></div></details><details><summary>&quot;Calcula um `c_t` no quadro?&quot; → **A.5** · 4 min no quadro</summary><div class="prose"><p>Barato e convence. Três scores — 2, 1 e meio —, as três exponenciais, a soma, os três pesos:
+0.63, 0.23 e 0.14. Depois eu dobro os três scores e refaço: o peso máximo salta de 0.63 para
+0.84 sem que a ordem tenha mudado. É a amplificação do softmax medida em dois minutos, e é
+exatamente o que vai justificar o <code>√d_k</code> na aula que vem. Se eu tiver que escolher um item
+desta parte para fazer, é este.</p>
+<p><strong>Versão de 30 segundos:</strong> “O softmax transforma scores em pesos positivos que somam 1; o
+contexto é a média ponderada dos estados. A.5 resolve <code>e=(2,1,0,5)</code> e mostra por que mudar a
+escala torna a distribuição mais concentrada.”</p></div></details><details><summary>&quot;Qual é a ponte de Bahdanau até `softmax(QKᵀ/√d_k)V`?&quot; → **A.6** · 6 min no quadro</summary><div class="prose"><p>Eu escrevo a forma genérica da atenção e separo papéis de fórmulas. Em Bahdanau,
+<code>q_t = W_s s_(t-1)</code>, <code>k_j = U_h h_j</code>, <code>v_j = h_j</code>, com score
+<code>v_aᵀ tanh(q_t + k_j)</code>. No Transformer, Q/K/V viram projeções explícitas, o score vira produto
+interno escalado e todas as queries podem ser calculadas em matriz. É uma passagem entre duas
+instâncias da mesma família, não uma igualdade literal. A tabela completa está em A.6.</p>
+<p><strong>Versão de 30 segundos:</strong> “Os dois mecanismos comparam uma consulta com posições e misturam
+valores. Bahdanau usa score aditivo entre estados recorrentes; o Transformer usa projeções
+Q/K/V e produto interno matricial. Mesma família de operação, instâncias diferentes.”</p></div></details><details><summary>Ordem de sacrifício</summary><div class="prose"><p>Se a aula atrasar, corto primeiro a narração longa da Medição 3, depois reduzo o slide 11 a
+cinco minutos e, só então, encurto a correção do exercício. <strong>Não corto</strong> o placar do slide 7,
+a distinção “acesso sem paralelismo” do slide 10 nem o mapeamento cuidadoso do slide 12.</p>
+<hr /></div></details><details><summary>Encerramento · 01:50–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 14 da Parte 1 — a síntese dos quatro elos
+(curva → três dívidas → vetor fixo → acesso), a pergunta aberta sobre para que serve a
+recorrência, a ponte para a Aula 6 e as duas tarefas da semana.</p>
+<blockquote>
+<p>Ideia central: "Hoje a gente trocou compressão por acesso e ganhou o alinhamento de graça. Quinta a gente joga a recorrência fora e descobre que não precisava dela."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 5 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="codigo-student.zip">↓ Notebooks e scripts do aluno</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Modelos sequenciais e o nascimento da atenção</h1>
+<h2>Slide 1 · O sintoma: a tradução que piora com o comprimento · 00:00–00:05</h2>
+<p>Boa noite, pessoal. Vou começar por um defeito, e não por uma arquitetura.</p>
+<p>No Lab 1, vocês fecharam o caminho texto → token → vetor e viram o limite do embedding
+estático: <code>banco</code> recebia o mesmo vetor em frases diferentes. Hoje a frase entra de verdade
+na computação. A pergunta muda: como carregar contexto ao longo de uma sequência — e o que
+essa escolha cobra em memória, treinamento e hardware?</p>
+<p>Imaginem um tradutor automático de 2014, desses que já funcionavam bem o suficiente para ir
+para produção. Ele traduz "o gato dorme" impecavelmente. Aí eu dou uma frase de quarenta
+palavras, com o sujeito no começo e o verbo principal no fim, e ele desmonta: perde o final,
+ou perde o começo, ou troca quem concorda com quem.</p>
+<p>Isso sozinho seria anedota. O que transforma em diagnóstico é a curva que está no slide. No
+eixo horizontal, o comprimento da frase de origem. No vertical, a qualidade da tradução
+medida. E a forma é o que interessa: plana até uns trinta, e daí em diante caindo — e
+continuando a cair. O erro não é aleatório. Ele é <strong>função do comprimento da entrada</strong>.</p>
+<p>Quando o erro acompanha o comprimento, a arquitetura vira uma suspeita forte — mas ainda não
+é um diagnóstico fechado. Poucos exemplos longos no treino também produziriam uma curva
+parecida. O que convence no artigo é a comparação controlada: mesmo conjunto de dados e mesmo
+procedimento de treino, modelo básico contra modelo com atenção. A diferença acompanha a
+arquitetura.</p>
+<blockquote>
+<p>Ideia central: "Uma curva não fecha o diagnóstico. Ela aponta a suspeita — e o experimento comparativo decide."</p>
+</blockquote>
+<h2>Slide 2 · Por que a intuição sozinha erra aqui · 00:05–00:10</h2>
+<p>Antes de eu contar a resposta, deixa eu gastar a resposta errada, porque ela é a primeira
+que vem à cabeça de todo mundo — inclusive à minha.</p>
+<p>O modelo comprime a frase inteira num resumo interno. Se ele erra em frases longas, a
+intuição diz: o resumo é pequeno demais, então é só aumentar. Faz sentido e pode ajudar. Mas
+isso compra <strong>espaço</strong>; não compra o direito de consultar novamente as posições da entrada,
+nem encurta o caminho que a informação percorre.</p>
+<p>O limite estrutural continua: existe <strong>um</strong> resumo, de tamanho fixo, para uma entrada de
+tamanho variável — e, depois de formado, ele é tudo o que sobra para o decoder. Aumentar o
+vetor desloca um limite de capacidade; não transforma memória em consulta.</p>
+<p>A segunda intuição errada é "treina mais". Essa eu vou desmontar no slide quatro, porque ela
+esbarra numa coisa mais interessante: existe um sinal de treino que simplesmente não chega
+aonde precisa chegar.</p>
+<p>A analogia que eu vou usar a aula inteira: é a diferença entre uma prova de memória e uma
+prova com consulta. O conteúdo é o mesmo. O que muda é o direito de olhar a fonte na hora de
+responder.</p>
+<blockquote>
+<p>Ideia central: "Falta acesso, não espaço. Comprar um caderno maior não resolve um problema de não poder olhar a fonte."</p>
+</blockquote>
+<h2>Slide 3 · O conceito em uso: ler em ordem e carregar um resumo · 00:10–00:16</h2>
+<p>Então vamos olhar a arquitetura que produz essa curva. Ela dominou a área de 1990 a 2016 e é
+mais simples que a fama dela.</p>
+<p>A ideia é ler em ordem. Um token por vez, e carregando comigo um único vetor de estado que
+resume tudo o que já passou. A regra está no slide, e ela é uma linha:</p>
+<p><code>h_t = f(h_(t-1), x_t)</code>, que na forma clássica é <code>h_t = tanh(W_h h_(t-1) + W_x x_t + b)</code>.</p>
+<p>Três leituras dessa linha. Primeira: <code>h_t</code> é o resumo comprimido de tudo o que veio antes.
+Segunda, e é a economia da coisa: é a <strong>mesma</strong> matriz aplicada em todos os passos. Cinco
+tokens ou quinhentos, o número de parâmetros é igual; muda só quantas vezes eu aplico a
+função. Para quem programa, isso é um <code>reduce</code>: <code>h</code> é o acumulador, <code>x_t</code> é o elemento, e a
+função de combinação foi aprendida em vez de escrita por mim.</p>
+<p>Terceira leitura, e essa é a que a turma costuma entender errado, então eu cravo: a rede
+<strong>não guarda</strong> os tokens anteriores em lugar nenhum. Ela guarda um vetor de tamanho fixo que
+foi sobrescrito a cada passo. O token de dez posições atrás só existe na medida em que
+sobreviveu a dez sobrescritas.</p>
+<blockquote>
+<p>Ideia central: "É um <code>reduce</code> sobre a frase, com a função de combinação aprendida. Só isso. O resto da aula é consequência."</p>
+</blockquote>
+<h2>Slide 4 · Sintoma 2: o modelo que esquece o sujeito · 00:16–00:23</h2>
+<p>Segundo sintoma, e ele é mais específico do que "o modelo esquece".</p>
+<p>O padrão que se observa é este: o modelo acerta a concordância entre palavras vizinhas, e
+<strong>nunca</strong> aprende a concordância entre palavras separadas por quarenta posições. Não é que
+erre de vez em quando — é que aquela dependência nunca entra. E enquanto isso a loss desce
+bonito, sem <code>NaN</code>, sem divergência, sem nada no log.</p>
+<p>Pausa de base, porque eu não vou assumir que todo mundo já fez Aprendizagem de Máquina. A
+<em>loss</em> é um número que mede o erro do modelo. O gradiente diz em que direção e com que força
+cada peso deve mudar para reduzir esse erro. Retropropagação é o procedimento que leva esse
+sinal do fim do cálculo para o começo usando a regra da cadeia.</p>
+<p>Numa RNN, esse caminho de volta atravessa um fator por passo. Em muitas direções, multiplicar
+muitos fatores atenua o sinal; em outras, pode amplificá-lo. O comportamento exato depende
+dos pesos e das ativações, mas a dependência exponencial do número de passos é o problema.</p>
+<p>Deixa eu fazer a conta aqui na calculadora, na frente de vocês, porque número na lousa vale
+mais que a palavra "exponencial". Zero vírgula nove elevado a dez: zero vírgula trinta e
+cinco, ainda dá para trabalhar. A cinquenta: cinco milésimos. A cem: três vezes dez elevado
+a menos cinco. E do outro lado, um vírgula um elevado a cinquenta já é cento e dezessete, e a
+cem passa de treze mil.</p>
+<p>Agora o ponto que muita gente mistura: capacidade e otimização são perguntas diferentes.
+Mantido o ganho por passo, aumentar só a dimensão não remove o expoente <code>T</code>. Um modelo maior
+pode ter mais capacidade e continuar sem receber sinal útil nos primeiros passos. A solução
+precisa mexer no <strong>caminho</strong> do gradiente.</p>
+<blockquote>
+<p>Ideia central: "A rede consegue representar a dependência longa. O que ela não consegue é aprendê-la — o sinal de treino morre no caminho de volta."</p>
+</blockquote>
+<h2>Slide 5 · Sintoma 3: a GPU que fica ociosa · 00:23–00:28</h2>
+<p>Terceiro sintoma, e esse é econômico — é o que decidiu a história da área.</p>
+<p>O cenário: o treino leva horas, o time compra uma GPU quatro vezes mais rápida, e o tempo por
+época cai quinze por cento. Quinze. E a utilização da placa, se alguém for medir, fica baixa
+o tempo inteiro.</p>
+<p>A causa está numa palavra da fórmula do slide três: <code>h_t</code> <strong>exige</strong> <code>h_(t-1)</code>. Exige. Não é
+preferência de implementação, é a definição da arquitetura. Então o treino tem <code>T</code> etapas
+obrigatoriamente sequenciais, e não existe quantidade de núcleos paralelos que compre tempo
+aqui. É uma linha de montagem com uma estação só: comprar dez fábricas não acelera um carro
+que precisa passar por quinhentos postos em ordem.</p>
+<p>E deixa eu ser preciso sobre a confusão que sempre aparece aqui: essa dívida é no <strong>treino</strong>,
+não na geração. Gerar texto é sequencial em qualquer arquitetura, inclusive no Transformer —
+a palavra <code>n+1</code> depende da palavra <code>n</code> em todo mundo. O que a recorrência impede é o
+paralelismo no treino, onde a frase inteira já é conhecida de antemão e poderia ser
+processada de uma vez.</p>
+<blockquote>
+<p>Ideia central: "O que matou a recorrência não foi qualidade. Foi ela não deixar você gastar dinheiro para ir mais rápido."</p>
+</blockquote>
+<h2>Slide 6 · O que o gating do LSTM compra · 00:28–00:34</h2>
+<p>A resposta de 1997 para o segundo sintoma é o LSTM, e o que ela tem de bom cabe num sinal de
+mais.</p>
+<p>A ideia: além do estado que já existia, uma segunda memória — a célula, <code>c_t</code> — e três
+válvulas aprendidas que decidem o que fazer com ela. Está no slide, em duas linhas. As
+válvulas são sigmoides, e é por isso que elas funcionam como válvula: a saída fica entre zero
+e um, então zero fecha e um deixa passar inteiro. Uma decide o que apagar, outra o que
+escrever, a terceira o que exportar.</p>
+<p>E agora a linha que importa mais que todas: <code>c_t = f_t ⊙ c_(t-1) + i_t ⊙ g_t</code>. O <strong>sinal de
+mais</strong>. A célula nova é a célula velha, filtrada, mais o que entrou de novo. Isso significa
+que existe um caminho de <code>c_(t-1)</code> até <code>c_t</code> que não passa por multiplicação de matriz — e
+como o gradiente volta pelo mesmo caminho por onde a informação foi, ele ganhou uma rodovia
+aditiva para atravessar quinhentos passos.</p>
+<p>Agora a parte que a V1 desta aula não dizia com clareza, e eu quero dizer: o LSTM <strong>não
+resolveu</strong> o desaparecimento do gradiente. Quando as válvulas fecham, o decaimento volta
+inteiro. O que ele fez foi tirar o problema das mãos da álgebra e pôr nas mãos da rede — que
+agora pode decidir manter a porta aberta nos canais em que a dependência longa importa. Isso
+é enorme e é diferente de resolver.</p>
+<p>Minha analogia: a rede simples reescreve o caderno inteiro a cada página. O LSTM tem um
+caderno de anotações e três decisões por página — o que rasurar, o que anotar de novo, o que
+mostrar para fora.</p>
+<p>E um alerta que eu vou repetir na aula que vem sobre cabeças de atenção, então já fica
+plantado: as portas não são regras programadas. Ninguém escreveu "esta porta guarda o
+sujeito". São camadas densas com sigmoide, treinadas pelo gradiente da tarefa final.</p>
+<p>E deixa eu fechar a dívida que ficou da Aula 3. Lembram do <code>banco</code>? Em 2018, o ELMo
+popularizou representações em que o vetor de cada palavra é construído a partir dos estados
+de LSTMs nos dois sentidos. O vetor de <code>banco</code> muda com a frase. <strong>Sem atenção.</strong></p>
+<p>Isso separa duas ideias que parecem sinônimas e não são. Contextualizar é fazer a
+representação depender da frase; uma RNN já faz isso. Atender é dar ao passo atual acesso
+ponderado a um conjunto de estados. Bahdanau vai acrescentar esse acesso, mas ainda com RNNs
+dos dois lados. Só o Transformer vai retirar a recorrência e liberar paralelismo no treino.</p>
+<blockquote>
+<p>Ideia central: "O LSTM não resolveu o gradiente. Ele deu à rede o poder de decidir quando não estragá-lo."</p>
+<p>Ideia central: "Contextualizar, consultar e paralelizar são três coisas diferentes. Hoje a gente separa as três."</p>
+</blockquote>
+<h2>Slide 7 · O placar das três dívidas · 00:34–00:38</h2>
+<p>Quatro minutos para o slide mais importante do primeiro bloco, que é o placar.</p>
+<p>O LSTM funcionou. Tradução comercial de 2015, reconhecimento de fala, autocompletar de
+teclado — tudo isso era LSTM. Então por que a área abandonou em dois anos? Porque sobraram
+três dívidas, e o veredito de cada uma é diferente.</p>
+<p>Dívida um, dependência longa: <strong>aliviada</strong>. Melhorou muito, não acabou. O token 1 e o token
+500 continuam separados por 499 passos de computação.</p>
+<p>Dívida dois, gradiente: <strong>contida</strong>. Recorte de gradiente segura o lado que explode, e o lado
+que desaparece ficou sob a mão da rede. É engenharia de contenção.</p>
+<p>Dívida três, paralelismo: <strong>intacta</strong>. Nada do que o LSTM faz muda o fato de <code>h_t</code> exigir
+<code>h_(t-1)</code>. Ela não foi nem discutida — e é ela que quebra a arquitetura.</p>
+<p>Guardem o placar. Daqui a pouco eu volto a ele com uma quarta coluna: a atenção de Bahdanau
+remove o resumo fixo e cria acesso curto, mas deixa essa terceira dívida intacta. A Aula 6 é
+que muda o veredito do paralelismo.</p>
+<blockquote>
+<p>Ideia central: "Duas dívidas foram renegociadas. A terceira não foi nem discutida — e é ela que quebra a arquitetura."</p>
+</blockquote>
+<h2>Slide 8 · Onde memória e acesso se concentram · 00:38–00:43</h2>
+<p>Agora eu monto a arquitetura concreta onde as três se encontram, porque é dela que sai a
+curva com que eu abri a aula. Tradução automática, 2014.</p>
+<p>Duas redes. A primeira, o encoder, lê a frase em português inteira e não produz saída nenhuma
+— só atualiza o estado dela, palavra por palavra. Quando a frase acaba, eu pego o último
+estado e chamo de <code>c</code>. A segunda rede, o decoder, começa a partir de <code>c</code> e escreve a frase em
+inglês, uma palavra por vez.</p>
+<p><code>c = h_T</code>. Está no slide, e é a linha que define o problema. O significado inteiro da origem
+— cinco palavras ou cinquenta — tem que caber num vetor de dimensão fixa. E o decoder, dali
+para frente, <strong>não tem mais acesso à frase de origem</strong>.</p>
+<p>Olha o que se encontra nessa ponte. Primeiro, memória: a capacidade de <code>c</code> é constante
+enquanto a entrada cresce. Segundo, acesso: a posição <code>j</code> só influencia a saída depois de
+atravessar uma cadeia longa até <code>c</code> e depois o decoder. A terceira dívida, o paralelismo, não
+mora no vetor <code>c</code>; ela atravessa os dois blocos porque ambos são recorrentes. Essa distinção
+vai impedir a gente de atribuir à atenção de 2014 um ganho que só aparece em 2017.</p>
+<blockquote>
+<p>Ideia central: "A curva com que eu abri a aula é o retrato de um vetor de tamanho fixo tentando carregar uma entrada de tamanho variável."</p>
+</blockquote>
+<h2>Slide 9 · [Demo] Medir os três sintomas · 00:43–00:55</h2>
+<p>Chega de afirmação. Doze minutos medindo.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Nenhuma das três medições é ilustração. As três são a evidência dos slides que eu acabei de dar."</p>
+</blockquote>
+<h2>Slide 10 · Acesso em vez de compressão · 01:05–01:17</h2>
+<p>Voltando. O desenho do seq2seq ainda está no quadro com o <code>c</code> circulado. Agora eu apago
+aquele círculo.</p>
+<p>Bahdanau, Cho e Bengio, 2014. O artigo muda <strong>uma</strong> coisa, pequena de escrever e enorme de
+consequência: em vez de um <code>c</code> para a frase toda, existe um <code>c_t</code> para cada passo do decoder.</p>
+<p>As três linhas estão no slide e eu vou ler cada uma, sem mexer em nenhuma.</p>
+<p>Primeira: <code>e_(t,j) = vᵀ tanh(W s_(t-1) + U h_j)</code>. Isso <strong>compara</strong>. De um lado, onde eu estou
+na tradução; do outro, o que tem na posição <code>j</code> da origem. O resultado é um número: quão
+relevante é aquela posição para o que eu estou escrevendo agora.</p>
+<p>Segunda: <code>α_(t,j) = exp(e_(t,j)) / Σ_k exp(e_(t,k))</code>. Isso transforma comparações em
+<strong>orçamento</strong>. Os pesos ficam positivos e somam um. Cada palavra que o decoder vai escrever
+ganha cem por cento de atenção para distribuir sobre as posições da origem.</p>
+<p>Terceira: <code>c_t = Σ_j α_(t,j) h_j</code>. Isso <strong>lê</strong> a origem segundo aquele orçamento. Média
+ponderada de todos os estados do encoder. Nenhum é escolhido de verdade, nenhum é descartado
+de verdade.</p>
+<p>E agora a consequência que resolve o gargalo do slide 1: depois que os estados <code>h_j</code> existem,
+o decoder alcança qualquer um deles por uma aresta de atenção. O caminho de <code>h_j</code> ao contexto
+do passo <code>t</code> tem comprimento <strong>um</strong>. Não é que a ponte ficou maior. Os estados do encoder
+ficam todos na mesa, disponíveis, e o modelo aprende como ponderá-los.</p>
+<p>Um cuidado, porque a turma sempre extrapola: em 2014 isso <strong>não</strong> substitui a recorrência. Os
+<code>h_j</code> continuam saindo de uma RNN, um por posição, sequencialmente. A atenção aqui é acessório
+da recorrência. O caminho de <code>x_j</code> até <code>h_j</code> e a produção dos estados do decoder ainda têm
+passos recorrentes. A tese de que atenção basta para retirar a recorrência é de 2017.</p>
+<blockquote>
+<p>Ideia central: "Prova de memória contra prova com consulta. O conteúdo é o mesmo; o que muda é o direito de olhar a fonte na hora de responder."</p>
+</blockquote>
+<h2>Slide 11 · A evidência: uma legenda que ninguém escreveu · 01:17–01:28</h2>
+<p>Agora o resultado mais bonito do artigo, e ele é um efeito colateral.</p>
+<p>Se eu empilho os vetores de peso de todos os passos, eu tenho uma matriz: cada linha é um
+passo da geração, cada coluna é uma posição da origem, e cada linha soma um. Projetada como
+mapa de calor, aparece uma diagonal — e uma diagonal num mapa de calor de tradução é um
+alinhamento de palavras. É a Figura 3 do artigo, que está aqui na tela.</p>
+<p>Olha a diagonal quebrando naquele bloco. Aquilo é um grupo nominal cuja ordem inverte entre
+as duas línguas. O modelo aprendeu a atravessar em bloco: ele não traduz na ordem, ele sabe
+voltar.</p>
+<p>E aqui está o ponto que vale a aula inteira, então eu vou dizer devagar: <strong>em nenhum momento
+alguém deu rótulo de alinhamento para esse modelo</strong>. O único sinal de treino foi a tradução
+correta. O alinhamento apareceu porque era o caminho mais barato para acertar a tradução. É
+uma legenda que ninguém escreveu.</p>
+<p>E um cuidado de rigor, que volta na Aula 6 e na Aula 27: peso alto não é explicação causal. É
+tentador ler a matriz como "ele traduziu assim porque olhou ali", e isso é uma inferência mais
+forte do que o dado permite. Os autores foram cuidadosos e chamaram o resultado de alinhamento
+<em>suave</em> — suave porque cada palavra de destino se liga a uma distribuição sobre as de origem,
+nunca a uma só.</p>
+<blockquote>
+<p>Ideia central: "Ninguém ensinou alinhamento a esse modelo. Ele foi treinado para traduzir, e o alinhamento apareceu porque era o caminho mais barato para traduzir bem."</p>
+</blockquote>
+<h2>Slide 12 · Q, K, V: três papéis antes de três matrizes · 01:28–01:39</h2>
+<p>Agora eu reescrevo aquelas três linhas com outros nomes, e é a reescrita mais importante do
+módulo. É por causa dela que esta aula existe antes da próxima.</p>
+<p>O que a atenção faz tem a forma de uma <strong>busca</strong>. Existe uma consulta, existem itens
+indexados, existe conteúdo devolvido. Se eu nomear os papéis com cuidado, a consulta é
+<code>q_t = W_s s_(t-1)</code>, a parte transformada do estado do decoder. A chave de cada posição é
+<code>k_j = U_h h_j</code>, a parte transformada do estado do encoder que entra na comparação. E o
+valor é <code>v_j = h_j</code>, o conteúdo que entra na média ponderada.</p>
+<p>Comparando com o dicionário que vocês usam em Python: em <code>d[k]</code> a comparação é igualdade
+exata, o resultado é um item, e chave errada dá erro. Na atenção, a comparação é uma <strong>função
+aprendida</strong> que devolve um número contínuo, e o resultado nunca é um item: é uma mistura de
+todos, ponderada. Busca por relevância, não busca por chave.</p>
+<p>O detalhe importante é mais sutil do que “K e V são iguais”. Os dois <strong>partem</strong> de <code>h_j</code>,
+mas a chave passa por <code>U_h</code> dentro do score, enquanto o valor entra como <code>h_j</code> na soma. A
+notação Q/K/V ainda é uma leitura funcional. Na aula seguinte ela vira três projeções
+matriciais explícitas e um produto <code>QKᵀ</code>.</p>
+<p>Duas perguntas ficam abertas. E se as projeções de query, key e value fossem explícitas e o
+score aditivo virasse um produto interno calculado como matriz? E, mais radical: e se as
+queries viessem da <strong>própria sequência de entrada</strong>, cada token consultando os outros da mesma
+frase, sem uma RNN produzindo os estados? Essa segunda pergunta tem nome: self-attention.</p>
+<blockquote>
+<p>Ideia central: "Q, K e V começam como três papéis. No Transformer, eles viram três projeções explícitas da mesma entrada."</p>
+</blockquote>
+<h2>Slide 13 · [Exercício] Diagnosticar, não calcular · 01:39–01:50</h2>
+<p>Oito minutos, em dupla. Três sintomas, e para cada um eu quero a causa e a evidência.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Nenhuma das três se resolve calculando. As três se resolvem sabendo o que a arquitetura descarta."</p>
+</blockquote>
+<h2>Slide 14 · Fechamento: se a atenção dá acesso, para que serve a recorrência? · 01:50–02:00</h2>
+<p>Deixa eu juntar as peças e deixar vocês com uma pergunta na cabeça até quinta.</p>
+<p>A gente começou com uma curva: qualidade que cai com o comprimento da frase. Atrás dela tinha
+uma arquitetura que lê em ordem e carrega um resumo. O LSTM melhora memória e gradiente, mas
+continua sequencial. No seq2seq básico, memória e acesso ainda apertam num vetor fixo. A
+atenção de Bahdanau ataca <strong>esse</strong> ponto: troca compressão por acesso, produz um contexto por
+passo e revela um alinhamento que ninguém supervisionou. O que ela não faz é retirar as RNNs.</p>
+<p>Agora a pergunta que eu quero deixar com vocês, e ela é séria: se a atenção já dá ao decoder
+acesso direto a qualquer posição da entrada, <strong>para que ainda serve a recorrência?</strong> Qual é o
+trabalho que ela está fazendo ali que a atenção não faria? Em 2017, três anos depois de
+Bahdanau, um grupo respondeu "nenhum" e escreveu um artigo cujo título é exatamente essa
+resposta.</p>
+<p>É a próxima aula. E vocês vão reconhecer as três linhas de hoje lá dentro, em outra ordem,
+com outros nomes, e sem uma única recorrência.</p>
+<p>Para casa, duas coisas. A leitura é Bahdanau, Cho e Bengio, arXiv 1409.0473, seções 1 a 3 e a
+discussão da Figura 3 — e a pergunta dirigida é por que a Figura 3 é evidência de um
+alinhamento aprendido <strong>sem rótulo de alinhamento</strong>. A segunda são cinco linhas sobre o que se
+ganha ao transformar os papéis de query, key e value em projeções explícitas e fazer as
+queries nascerem da própria sequência. Quem escrever essas cinco linhas já entrou na aula
+que vem.</p>
+<blockquote>
+<p>Ideia central: "Em 2017 alguém respondeu 'para nada' — e o título do artigo é a resposta."</p>
+</blockquote>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p>Doze minutos, três medições. Duas rodam em NumPy puro, uma é de quadro. Nenhuma delas depende
+de rede, e a essencial funciona com giz e nada mais. Na V2 a demo deixa de ilustrar a
+arquitetura e passa a ser a <strong>evidência</strong> dos slides 4, 8 e 1 — nessa ordem.</p>
+<p>Insumos preparados na véspera: as doze linhas da Medição 1 salvas num arquivo e já rodadas,
+com a saída em texto; a frase longa escrita num papel na minha mão, para eu não improvisar no
+quadro; e as Figuras 2 e 3 do paper de Bahdanau baixadas localmente.</p>
+<h2>Medição 1 — o produto que decide o gradiente (3 min)</h2>
+<p><strong>1.</strong> <strong>[Abro <code>codigo/demo-gradiente-rnn.py</code>]</strong> Isto aqui não é uma rede neural. É um caso
+controlado que isola o produto repetido no caminho do gradiente. Eu uso uma transformação
+diagonal <code>ganho · I</code> para que a norma depois de <code>T</code> passos seja exatamente <code>ganho^T</code>:</p>
+<pre><code class="language-python">import numpy as np
+d = 32
+for ganho in (0.9, 1.1):
+    W = ganho * np.eye(d)
+    for T in (10, 50, 200):
+        J = np.eye(d)
+        for _ in range(T):
+            J = J @ W
+        print(f&quot;ganho={ganho}  T={T:3d}  norma={np.linalg.norm(J, 2):.3e}&quot;)
+</code></pre>
+<p><strong>2.</strong> <strong>[Rodo e leio a coluna da direita]</strong> Ganho zero vírgula nove: <code>3,49·10⁻¹</code> em dez
+passos, <code>5,15·10⁻³</code> em cinquenta, <code>7,06·10⁻¹⁰</code> em duzentos. Ganho um vírgula um:
+<code>2,59</code>, <code>1,17·10²</code>, <code>1,90·10⁸</code>. São cerca de dezoito ordens de grandeza de diferença no fim,
+com a mesma dimensão.</p>
+<p><strong>3.</strong> <strong>[Volto ao slide 4]</strong> Isto não prova que toda RNN terá exatamente esses números; numa
+rede real, pesos e derivadas mudam a cada passo. O experimento isola a mecânica: um ganho
+moderadamente diferente de um, repetido muitas vezes, muda a escala exponencialmente. E
+reparem no que eu <strong>não</strong> mudei: a dimensão é 32 nas duas rodadas.</p>
+<h2>Medição 2 — a compressão em quatro números (5 min)</h2>
+<p><strong>4.</strong> <strong>[Escrevo no quadro a frase longa que eu preparei]</strong> Vou escrever uma frase aqui.
+Comprida de propósito, com o sujeito no começo, o verbo principal no fim e duas orações
+encaixadas no meio. Alguma coisa do tipo "A pesquisadora que orientou os três alunos que
+publicaram o artigo sobre tradução automática no ano passado defendeu a tese em dezembro."</p>
+<p><strong>5.</strong> <strong>[Proponho a tarefa de compressão e recolho propostas]</strong> Essa frase inteira tem que
+caber em <strong>quatro números inteiros</strong>. Quatro. O critério é de vocês — quantidade de palavras,
+código de tema, qualquer esquema. Quem me dá quatro números? Vou anotar duas ou três propostas
+aqui do lado.</p>
+<p><strong>6.</strong> <strong>[Apago a frase e deixo só os quatro números]</strong> Agora eu apago a frase. Sumiu. Ficaram
+os quatro números de vocês, e eu vou pedir a tradução da frase para o inglês usando <strong>só</strong> o
+que sobrou no quadro.</p>
+<p><strong>7.</strong> <strong>[Espero a turma tentar e nomeio o que se perdeu]</strong> Dá para recuperar o tema — tem
+alguma coisa de pesquisa, de artigo, de tese. E não dá para recuperar quem era o sujeito, o
+que concorda com o quê, qual oração estava encaixada em qual, nem a ordem em que as coisas
+aconteceram. Essa é a parte que virou zero.</p>
+<p><strong>8.</strong> <strong>[Volto ao desenho do seq2seq e aponto o <code>c</code> circulado]</strong> Isso tem nome e o nome está
+no meu desenho: <code>c = h_T</code>. A diferença entre vocês e o modelo é que vocês tinham quatro
+números e ele tem mil — o que muda a escala do problema e não muda a natureza dele. E existe
+um comprimento a partir do qual duas frases diferentes colidem no mesmo vetor
+necessariamente; a conta está em A.4, para quem quiser.</p>
+<h2>Medição 3 — a curva e a matriz (4 min)</h2>
+<p><strong>9.</strong> <strong>[Projeto a Figura 2 do paper]</strong> Esta é a curva com que eu abri a aula, agora com as
+duas arquiteturas juntas. A do modelo com vetor de contexto fixo cai a partir de umas trinta
+palavras e continua caindo. A do modelo com atenção fica plana até o fim do eixo. Mesma
+tarefa, mesmos dados, mesma família de rede recorrente por baixo. A única diferença é o acesso.</p>
+<p><strong>10.</strong> <strong>[Projeto a Figura 3 e fico em silêncio alguns segundos]</strong> E este é o efeito
+colateral. Cada linha é uma palavra que o modelo escreveu, cada coluna é uma palavra da
+origem, o brilho é o peso, e cada linha soma um. Olha a diagonal.</p>
+<p><strong>11.</strong> <strong>[Aponto o bloco onde a diagonal se quebra]</strong> E aqui, onde ela se rompe e atravessa em
+bloco: um grupo nominal cuja ordem inverte entre as línguas. O modelo aprendeu a voltar. É o
+oposto exato dos quatro números.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>Oito minutos de dupla, três de correção. O exercício da V1 era desenhar a grade de alinhamento
+com lápis e papel; ele virou extensão opcional, e o obrigatório passou a ser diagnóstico —
+porque o que a prova e o Lab 2 cobram é reconhecer a causa de um comportamento, não preencher
+uma grade.</p>
+<p><strong>1.</strong> <strong>[Projeto os três sintomas e formo as duplas]</strong> Oito minutos, em dupla. Três situações,
+e para cada uma eu quero duas coisas: a causa provável e <strong>que evidência confirmaria</strong>. A
+segunda parte é a que vale.</p>
+<p>Os três sintomas:</p>
+<ol>
+<li>Um tradutor acerta manchetes e desmonta em parágrafos. O erro cresce com o comprimento, e a
+   primeira coisa a quebrar é a concordância entre partes distantes. O treino já contém
+   exemplos longos em quantidade comparável.</li>
+<li>Um modelo recorrente acerta a concordância entre palavras vizinhas e <strong>nunca</strong> aprende a
+   concordância entre palavras separadas por quarenta posições. A loss desce, não há <code>NaN</code>, e
+   aumentar a dimensão do estado não mudou nada.</li>
+<li>Um time trocou a GPU por outra quatro vezes mais rápida e o tempo por época caiu 15%. Mesmo
+   modelo, mesmos dados, mesmo tamanho de lote; o profiler mostra uma cadeia de operações
+   pequenas, cada uma esperando a anterior.</li>
+</ol>
+<p><em>Como recolher:</em> três minutos. Peço uma dupla para o sintoma 1 e forço a segunda parte — "como
+você confirmaria?". Corrijo o 2 rápido, porque é o que sustenta a Aula 6. E uso o tempo que
+sobrar no 3, ligando com o custo que a Aula 6 vai pagar. Fecho com: "reparem que nenhum dos
+três pedia conta, e os três pediam saber o que a arquitetura descarta".</p>
+<p><em>Extensão para quem terminar antes (opcional):</em> desenhar a grade de alinhamento de um par
+PT→EN com inversão de ordem — linhas somando 1, ao menos uma linha com peso repartido — e
+calcular um <code>c_t</code> a partir de três scores dados, seguindo A.5. É o exercício que na V1 era
+obrigatório e aqui vira aprofundamento.</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a derivação
+em aula. A regra geral é remeter ao apêndice e seguir; conduzir uma derivação só se sobrar
+tempo, e anunciando que é conteúdo de consulta.</p>
+<h2>"De onde vem esse produto que some?" → <strong>A.2</strong> · 6 min no quadro</h2>
+<p>A pergunta mais provável do Bloco 1. Eu escrevo a regra da cadeia ao longo do tempo em uma
+linha, mostro que a derivada de um passo é uma matriz diagonal vezes a <strong>mesma</strong> <code>W_h</code> em todo
+passo, e concluo que a norma do produto é limitada por uma base elevada a <code>T−1</code>. Três linhas.
+Fecho com os números da calculadora, que eles já viram.</p>
+<p><strong>Versão de 30 segundos:</strong> “O sinal de treino atravessa um fator por passo. Repetir um ganho
+um pouco menor que 1 o apaga; repetir um ganho um pouco maior o explode. A.2 mostra a regra da
+cadeia e a Medição 1 isola o efeito.”</p>
+<h2>"Escreve o LSTM inteiro?" → <strong>A.3</strong> · 7 min no quadro</h2>
+<p>Custa caro e raramente compensa em aula. Se eu fizer, escrevo as seis equações e derivo só a
+linha da célula, mostrando que o fator que se propaga é <code>diag(f_t)</code> — diagonal e dependente do
+dado, contra a matriz cheia e fixa da rede simples. O ponto que vale o tempo é o produto das
+portas de esquecimento: se <code>f = 0.5</code>, <code>0.5^20</code> já é <code>10⁻⁶</code>, e é daí que sai o truque de
+inicializar o viés da porta em 1.</p>
+<p><strong>Versão de 30 segundos:</strong> “A equação decisiva é <code>c_t = f_t⊙c_(t-1) + i_t⊙g_t</code>: o sinal de
+mais cria um caminho direto, e <code>f_t</code> decide quanto desse caminho permanece aberto. As seis
+equações e a ressalva sobre caminhos indiretos estão em A.3.”</p>
+<h2>"Por que aumentar o vetor não basta?" → <strong>A.4</strong> · 5 min no quadro</h2>
+<p>Vale fazer com a premissa explícita. Eu digo que a contagem de bits é um experimento mental
+sob precisão finita e não uma prova de que toda frase precisa de um código exclusivo. Ela
+mostra que a capacidade é limitada; não explica sozinha a queda observada. O argumento mais
+forte é o comprimento do caminho: aumentar <code>d</code> não encurta uma única aresta entre a posição
+antiga e a saída. A.4 traz os dois argumentos e os limites de cada um.</p>
+<p><strong>Versão de 30 segundos:</strong> “Um vetor maior compra capacidade. Ele não devolve ao decoder o
+direito de consultar a entrada nem encurta o caminho da informação. A.4 separa formalmente
+espaço de acesso.”</p>
+<h2>"Calcula um <code>c_t</code> no quadro?" → <strong>A.5</strong> · 4 min no quadro</h2>
+<p>Barato e convence. Três scores — 2, 1 e meio —, as três exponenciais, a soma, os três pesos:
+0.63, 0.23 e 0.14. Depois eu dobro os três scores e refaço: o peso máximo salta de 0.63 para
+0.84 sem que a ordem tenha mudado. É a amplificação do softmax medida em dois minutos, e é
+exatamente o que vai justificar o <code>√d_k</code> na aula que vem. Se eu tiver que escolher um item
+desta parte para fazer, é este.</p>
+<p><strong>Versão de 30 segundos:</strong> “O softmax transforma scores em pesos positivos que somam 1; o
+contexto é a média ponderada dos estados. A.5 resolve <code>e=(2,1,0,5)</code> e mostra por que mudar a
+escala torna a distribuição mais concentrada.”</p>
+<h2>"Qual é a ponte de Bahdanau até <code>softmax(QKᵀ/√d_k)V</code>?" → <strong>A.6</strong> · 6 min no quadro</h2>
+<p>Eu escrevo a forma genérica da atenção e separo papéis de fórmulas. Em Bahdanau,
+<code>q_t = W_s s_(t-1)</code>, <code>k_j = U_h h_j</code>, <code>v_j = h_j</code>, com score
+<code>v_aᵀ tanh(q_t + k_j)</code>. No Transformer, Q/K/V viram projeções explícitas, o score vira produto
+interno escalado e todas as queries podem ser calculadas em matriz. É uma passagem entre duas
+instâncias da mesma família, não uma igualdade literal. A tabela completa está em A.6.</p>
+<p><strong>Versão de 30 segundos:</strong> “Os dois mecanismos comparam uma consulta com posições e misturam
+valores. Bahdanau usa score aditivo entre estados recorrentes; o Transformer usa projeções
+Q/K/V e produto interno matricial. Mesma família de operação, instâncias diferentes.”</p>
+<h2>Ordem de sacrifício</h2>
+<p>Se a aula atrasar, corto primeiro a narração longa da Medição 3, depois reduzo o slide 11 a
+cinco minutos e, só então, encurto a correção do exercício. <strong>Não corto</strong> o placar do slide 7,
+a distinção “acesso sem paralelismo” do slide 10 nem o mapeamento cuidadoso do slide 12.</p>
+<hr />
+<h2>Encerramento · 01:50–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 14 da Parte 1 — a síntese dos quatro elos
+(curva → três dívidas → vetor fixo → acesso), a pergunta aberta sobre para que serve a
+recorrência, a ponte para a Aula 6 e as duas tarefas da semana.</p>
+<blockquote>
+<p>Ideia central: "Hoje a gente trocou compressão por acesso e ganhou o alinhamento de graça. Quinta a gente joga a recorrência fora e descobre que não precisava dela."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 5 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-04/index.html">← Aula anterior</a><a class="button" href="../aula-06/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

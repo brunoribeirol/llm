@@ -1,0 +1,187 @@
+{
+  "id": 30,
+  "title": "Apresentação final: demonstrar e defender com evidência",
+  "subtitle": "Ensaie uma apresentação de 12 minutos, escolha um caso difícil e monte uma defesa verificável. Esta oficina não calcula nota oficial nem revela avaliações da turma.",
+  "nodes": [
+    "Problema",
+    "Arquitetura",
+    "Demo",
+    "Métricas",
+    "Limites",
+    "Defesa"
+  ],
+  "controls": [
+    {
+      "key": "demoMinutes",
+      "label": "Minutos reservados à demonstração",
+      "type": "range",
+      "min": 2,
+      "max": 7,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "metricsMinutes",
+      "label": "Minutos reservados aos números",
+      "type": "range",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "cases",
+      "label": "Casos no conjunto apresentado",
+      "type": "range",
+      "min": 5,
+      "max": 100,
+      "step": 5,
+      "value": 20
+    },
+    {
+      "key": "passed",
+      "label": "Percentual de casos aprovados",
+      "type": "range",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "value": 75
+    },
+    {
+      "key": "caseType",
+      "label": "Caso demonstrado",
+      "type": "select",
+      "value": "paraphrase",
+      "options": [
+        {
+          "value": "happy",
+          "label": "Fato simples"
+        },
+        {
+          "value": "paraphrase",
+          "label": "Paráfrase com fonte"
+        },
+        {
+          "value": "outside",
+          "label": "Pergunta fora do escopo"
+        },
+        {
+          "value": "failure",
+          "label": "Falha com diagnóstico"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "title": "Doze minutos, uma tese",
+      "view": "timing",
+      "explanation": "A apresentação precisa ligar problema, arquitetura, execução, números e limites. O cronograma didático fixa um minuto para problema, dois para arquitetura e dois para limites, deixando o restante sujeito aos controles.",
+      "action": "Ajuste tempo de demo e números e observe se o total cabe em doze minutos.",
+      "board": "1 problema + 2 arquitetura + demo + números + 2 limites",
+      "speech": "A restrição de tempo obriga a escolher evidências. Não precisamos contar tudo que foi feito. Precisamos sustentar uma afirmação clara sobre o que o sistema faz e onde falha.",
+      "question": "Por que uma demo longa pode enfraquecer a apresentação?",
+      "answer": "Porque pode consumir o tempo de explicar avaliação e limitações, deixando o resultado sem sustentação.",
+      "focus": 0
+    },
+    {
+      "title": "O problema e seu usuário",
+      "view": "problem",
+      "explanation": "Uma boa abertura descreve uma tarefa verificável de uma pessoa concreta. O critério de sucesso precisa ser observável na execução e no conjunto de avaliação.",
+      "action": "Escolha o caso demonstrado e formule o resultado esperado antes de mostrá-lo.",
+      "board": "usuário + tarefa + condição verificável de sucesso",
+      "speech": "Evitem começar pela biblioteca escolhida. Comecem pela decisão que o usuário precisa tomar. Assim a turma sabe o que procurar na demonstração.",
+      "question": "Por que gerar texto útil é um critério insuficiente?",
+      "answer": "Porque não especifica correção, fontes, cobertura ou condição observável que permita decidir se houve sucesso.",
+      "focus": 0
+    },
+    {
+      "title": "Arquitetura ligada às técnicas do curso",
+      "view": "architecture",
+      "explanation": "O desenho deve mostrar componentes e o fluxo de dados que realmente existe. Cada técnica citada precisa corresponder a um artefato ou execução que a equipe consegue explicar.",
+      "action": "Siga a entrada até a saída e identifique onde entram duas técnicas estudadas.",
+      "board": "entrada → representação → recuperação → geração → avaliação",
+      "speech": "Um diagrama não deve ter componentes decorativos. A defesa pode pedir a saída de qualquer caixa. Se a caixa não produz algo observável, precisamos esclarecer sua função.",
+      "question": "Como demonstrar que RAG participa de fato do sistema?",
+      "answer": "Mostrar a consulta, os trechos recuperados e como eles entram na resposta, com identificadores verificáveis.",
+      "focus": 1
+    },
+    {
+      "title": "Escolher um caso que discrimine",
+      "view": "case",
+      "explanation": "Uma paráfrase, uma ausência de informação ou uma falha localizada revela mais que repetir um exemplo memorizado. O caso deve pertencer a uma categoria conhecida do conjunto de testes.",
+      "action": "Alterne os tipos de caso e compare o que cada um testa.",
+      "board": "caso difícil = hipótese específica posta à prova",
+      "speech": "Não precisamos torcer para tudo dar certo. Precisamos saber o que o caso testa. Se ele falhar, o registro ainda pode sustentar uma análise técnica competente.",
+      "question": "Uma falha durante a demo torna toda evidência inútil?",
+      "answer": "Não. Ela pode revelar comportamento relevante quando a equipe identifica a camada e explica o que o teste demonstra.",
+      "focus": 1
+    },
+    {
+      "title": "Mostrar a execução e sua fonte",
+      "view": "trace",
+      "explanation": "A resposta é acompanhada de recuperação, referência e motivo da parada. A trajetória permite separar sucesso por evidência de acerto casual.",
+      "action": "Compare fato simples, fora de escopo e falha com diagnóstico na linha de execução.",
+      "board": "resposta + trajetória + fonte",
+      "speech": "O público deve conseguir localizar de onde veio a afirmação principal. Mostro a observação antes de celebrar o resultado. Isso evita transformar uma frase convincente em prova de funcionamento.",
+      "question": "Que evidência falta numa captura contendo só a resposta?",
+      "answer": "Falta o caminho que a produziu: dados, chamadas, fontes e decisões.",
+      "focus": 2
+    },
+    {
+      "title": "Os números com n",
+      "view": "metrics",
+      "explanation": "O cartão mostra quantidade de aprovações derivada do percentual e arredondada para casos inteiros. A proporção realizada pode diferir da meta do controle em conjuntos pequenos.",
+      "action": "Mude o tamanho do conjunto e compare percentual desejado e contagem realmente possível.",
+      "board": "taxa observada = aprovados inteiros / n",
+      "speech": "Não podemos ter meio caso aprovado. Por isso uma amostra pequena permite poucos valores de taxa. Reportem a contagem junto com a proporção e a composição do conjunto.",
+      "question": "Em cinco casos, setenta e cinco por cento é uma taxa exata possível?",
+      "answer": "Não. As taxas variam de vinte em vinte pontos percentuais; arredondar casos muda o percentual observado.",
+      "focus": 3
+    },
+    {
+      "title": "Declarar juiz e calibração",
+      "view": "judge",
+      "explanation": "Uma nota automática precisa de rubrica, identidade ou regra do juiz e protocolo de calibração. Esta oficina lista essas evidências sem inventar valores de kappa para um projeto não observado.",
+      "action": "Confira o cartão do que apresentar e identifique qual campo falta no seu relatório.",
+      "board": "juiz + rubrica + amostra humana + acordo + limites",
+      "speech": "O número do juiz não vem sozinho. Quero saber como ele chegou à decisão. Se não houve calibração, a equipe deve declarar a ausência e limitar a conclusão.",
+      "question": "É melhor omitir que o juiz não foi calibrado?",
+      "answer": "Não. Declarar a limitação permite interpretar corretamente a força da evidência.",
+      "focus": 3
+    },
+    {
+      "title": "Uma limitação que muda uma decisão",
+      "view": "limits",
+      "explanation": "Uma limitação útil descreve condição de falha, consequência e próximo teste. Dizer apenas que o sistema pode errar não orienta uso nem desenvolvimento.",
+      "action": "Use o caso selecionado para formular uma limitação e um teste de correção.",
+      "board": "condição → falha → consequência → próximo teste",
+      "speech": "Escolham um limite sustentado pelo conjunto ou pela arquitetura. Expliquem o que o usuário deve esperar nessa condição. Depois proponham uma verificação capaz de mostrar melhora.",
+      "question": "Qual limitação é mais útil que pode alucinar?",
+      "answer": "Por exemplo: paráfrases sem termos compartilhados recuperam fonte errada; medir recall por categoria após alterar a recuperação.",
+      "focus": 4
+    },
+    {
+      "title": "Defender por composição",
+      "view": "defense",
+      "explanation": "A defesa pede explicar uma transformação e suas consequências no sistema. As perguntas ilustradas ligam mecanismo, artefato e evidência, sem antecipar uma avaliação oficial específica.",
+      "action": "Escolha uma pergunta do cartão e responda usando a trajetória exibida.",
+      "board": "mecanismo → consequência → evidência",
+      "speech": "Se a explicação terminar no nome da biblioteca, ainda falta o mecanismo. Podemos começar pela entrada de uma caixa e derivar sua saída. Depois ligamos isso à falha ou ao ganho observado.",
+      "question": "Como responder o que mudaria se aumentássemos k?",
+      "answer": "Explicar efeitos possíveis em recall, precisão, tamanho do contexto, custo e resposta, e indicar os casos usados para medir.",
+      "focus": 4
+    },
+    {
+      "title": "Fechar com algo reproduzível",
+      "view": "delivery",
+      "explanation": "Código executável, casos, configuração, relatório e limites formam uma entrega verificável. O roteiro da apresentação organiza essas evidências, mas não substitui os artefatos.",
+      "action": "Volte ao cronograma, ajuste os tempos e associe cada bloco a um arquivo ou resultado do projeto.",
+      "board": "afirmação → evidência → artefato reexecutável",
+      "speech": "Uma pessoa que não estava na sala deve conseguir conferir a conclusão. A apresentação aponta o caminho para esses artefatos. Encerramos com o que foi medido e o que ainda precisa de teste.",
+      "question": "Qual é a diferença entre uma promessa e a conclusão técnica da apresentação?",
+      "answer": "A conclusão identifica evidência, condições e limites verificáveis; a promessa apenas antecipa um resultado.",
+      "focus": 5
+    }
+  ]
+}

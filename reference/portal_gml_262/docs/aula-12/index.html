@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Pré-treinamento: dados, leis de escala e sistemas · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="12">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 12 / 3 — Treinamento: pré-treino, SFT e PEFT</p><h1>Pré-treinamento: dados, leis de escala e sistemas</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 12" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p>Estimar o custo de treino em FLOPs por <code>C ≈ 6ND</code> e o custo de inferência por <code>C ≈ 2N</code>, explicando a assimetria entre o que se paga uma vez e o que se paga para sempre.</p></li><li><p>Calcular a alocação compute-optimal de Chinchilla para um orçamento dado e <strong>justificar por que 20 tokens por parâmetro não é constante universal</strong>.</p></li><li><p>Decompor a memória de treino nos quatro consumidores — pesos, gradientes, estados do otimizador, ativações — e diagnosticar qual deles estourou.</p></li><li><p>Distinguir paralelismo de dados, de tensor e de pipeline pelo que cada um particiona e pelo que cada um passa a comunicar.</p></li><li><p>Explicar por que a curadoria de corpus é decisão de modelagem e não de infraestrutura, nomeando os efeitos da duplicata sobre memorização e contaminação.</p></li><li><p>Justificar por que FlashAttention acelera sem reduzir a complexidade assintótica.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · Abertura: três defeitos, nenhum deles no código · 00:00–00:05</summary><div class="prose"><p><strong>[Projeto os três defeitos juntos e leio os três em voz alta antes de dizer qualquer outra coisa]</strong></p>
+<p>Aula passada vocês puxaram quatro alavancas e mediram o efeito de cada uma em três eixos. Hoje a gente entra na fábrica que produziu o arquivo de pesos que estava do outro lado daquelas alavancas.</p>
+<p>E a primeira coisa que a fábrica tem não é uma GPU. É um <strong>orçamento</strong>.</p>
+<p>Três defeitos. Primeiro: "tenho um orçamento fechado, faço um modelo maior ou treino com mais tokens?" — e a indústria inteira respondeu isso errado até 2022, com dinheiro de verdade. Segundo: o treino estoura a memória da GPU <strong>antes</strong> de estourar a aritmética; dá <code>OOM</code> com a placa a trinta por cento de ocupação. Terceiro: o modelo devolve, palavra por palavra, um parágrafo do corpus — e acerta um benchmark que estava na web.</p>
+<p><strong>[Aponto a coluna "onde fecha"]</strong></p>
+<p>Nenhum dos três é bug de implementação. Os três são consequência correta de uma decisão de orçamento tomada antes da primeira linha de código. E cada um fecha num slide específico desta aula.</p>
+<blockquote>
+<p>Ideia central: "Vocês passaram duas aulas puxando alavancas. Hoje a gente entra na fábrica — e a primeira coisa que a fábrica tem é um orçamento."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 2 · O número que vocês trouxeram · 00:05–00:10</summary><div class="prose"><p>Lição de casa da aula passada. Quem tem aí o <code>N</code> e o <code>D</code> do modelo que rodou no Ollama?</p>
+<p><strong>[Preencho os dois campos na tela com o que a turma disser]</strong></p>
+<p>Agora as duas contas da aula, e eu vou só enunciar as duas.</p>
+<p>Treinar custa aproximadamente <strong>seis vezes</strong> <code>N</code> vezes <code>D</code> — parâmetros vezes tokens. Gerar um token custa aproximadamente <strong>duas vezes</strong> <code>N</code>. Nada de derivação agora; olhem o que as duas dizem.</p>
+<p>A primeira diz que treinar custa proporcional a <strong>capacidade vezes experiência</strong>. A segunda diz que gerar custa proporcional só à <strong>capacidade ativa</strong> — o <code>D</code> não aparece, porque o modelo já foi treinado.</p>
+<p>E é aí que está a economia inteira desta área: treinar é caríssimo e acontece <strong>uma vez</strong>. Inferir é barato por token e acontece um trilhão de vezes.</p>
+<blockquote>
+<p>Ideia central: "Uma conta de guardanapo separa o que se paga uma vez do que se paga para sempre."</p>
+</blockquote>
+<p><strong>[Escrevo <code>D/N</code> no quadro com o valor da turma e circulo]</strong></p>
+<p>Agora dividam <code>D</code> por <code>N</code>. Esse número fica no quadro a aula inteira, porque no meio dela uma teoria vai dizer que o valor certo é <strong>vinte</strong>. E o de vocês não é vinte.</p>
+<hr /></div></details><details><summary>Slide 3 · Transferência de aprendizado: um treino caro, muitas tarefas baratas · 00:10–00:15</summary><div class="prose"><p>Antes: uma tarefa, um dataset rotulado à mão, um modelo, um deploy. O teto era o custo de anotação — você conseguia resolver tantas tarefas quantas conseguisse pagar para rotular.</p>
+<p>Depois: um objetivo genérico, um pré-treino caríssimo, e adaptação com pouco ou nenhum dado novo. O teto virou o custo de compute.</p>
+<p><strong>[Aponto a régua logarítmica embaixo]</strong></p>
+<p>E para quem não fez Aprendizagem de Máquina antes: treinar é ajustar pesos por descida de gradiente para reduzir uma perda. A perda do pré-treino é <strong>a mesma</strong> entropia cruzada do próximo token que vocês minimizaram no Lab 2, no mini-GPT de dois vírgula sete milhões de parâmetros.</p>
+<blockquote>
+<p>Ideia central: "A perda do pré-treino é a mesma que vocês minimizaram no Lab 2. A diferença para o GPT-3 não é de ideia — é de orçamento."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 4 · O rótulo que não existe: o supervisor é o corpus · 00:15–00:20</summary><div class="prose"><p>Em aprendizado supervisionado clássico, alguém rotula. E o limite do que você consegue fazer é o quanto consegue pagar para rotular.</p>
+<p>No pré-treino ninguém rotulou nada. O rótulo de cada posição é <strong>o token seguinte</strong>, que já está no corpus.</p>
+<p><strong>[Aponto a conta na tela]</strong></p>
+<p>E olhem a densidade disso. No Lab 2, um lote de sessenta e quatro por cento e vinte e oito produzia oito mil cento e noventa e duas previsões supervisionadas de uma vez. De texto cru, sem ninguém anotar nada.</p>
+<p>Uma correção de vocabulário, porque ela tem consequência. Isso não é "não supervisionado". É <strong>auto-supervisionado</strong> — o rótulo existe, ele é só derivado do dado em vez de anotado por gente.</p>
+<p>E a consequência prática é a frase mais importante deste bloco:</p>
+<blockquote>
+<p>Ideia central: "O supervisor deste treino é o corpus. Então a qualidade do corpus é decisão de modelagem, não de infraestrutura."</p>
+</blockquote>
+<p>E é por isso que a próxima meia hora é sobre corpus.</p>
+<hr /></div></details><details><summary>Slide 5 · De onde vem o texto: a mistura do corpus · 00:20–00:26</summary><div class="prose"><p>Quatro fontes, e cada uma ensina uma coisa que as outras não ensinam.</p>
+<p>Web, dos derivados do CommonCrawl: trilhões de tokens, qualidade média baixa. O que ela dá é <strong>quantidade</strong> — e quantidade é insubstituível.</p>
+<p>Livros: volume médio, qualidade alta. O que só eles dão é <strong>coerência longa</strong> — dependência entre coisas separadas por milhares de tokens. Não existe outra fonte com texto tão longo e tão coerente.</p>
+<p>Código: volume médio, e uma propriedade única — a qualidade é <strong>verificável</strong>. O que ele ensina é formato e estrutura estrita. E aquele JSON que vocês pediram no Lab 3 e receberam perfeitamente formatado veio daqui.</p>
+<p>Curado, enciclopédico: volume pequeno, qualidade alta, <strong>densidade de fato</strong>.</p>
+<p><strong>[Aponto a faixa inferior]</strong></p>
+<p>E a mistura — quantas épocas de cada fonte — é uma decisão de treino. É exatamente o ponto em que os cartões de modelo ficam vagos.</p>
+<p>Agora, "curadoria importa" é a frase mais vazia que se pode dizer sobre isso, então eu vou dar a linhagem, porque ela é pública e é comparável. Começa em dois mil e dezenove com o CCNet, que filtra a web pela semelhança com a Wikipédia, e o C4, que filtra por regras. Passa pelo Gopher em vinte e um. E aí vêm os modernos: DCLM e FineWeb em vinte e quatro, Nemotron-CC no mesmo ano, OLMo 2 em vinte e cinco.</p>
+<p>E o que separa uma receita da outra são <strong>dois</strong> mecanismos, só dois. O primeiro é <strong>deduplicação</strong>, na prática por MinHash — porque a web repete, e repetição não vira generalização, vira memorização. Isso é literalmente o defeito três desta aula, o parágrafo que o modelo devolve literalmente. O segundo é <strong>filtro de qualidade por classificador</strong>: em vez de escrever regra a regra, treina-se um classificador barato para separar texto tipo-Wikipédia de texto tipo-web-bruta, e joga-se fora a cauda.</p>
+<blockquote>
+<p>Ideia central: "Curadoria não é adjetivo. São duas decisões — deduplicar e filtrar por classificador — e a diferença entre uma receita de dado e outra está quase toda aí."</p>
+<p>Ideia central: "Nenhuma das quatro fontes sozinha dá o modelo."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 6 · [Defeito 3 fechado] O parágrafo que o modelo devolve literalmente · 00:26–00:33</summary><div class="prose"><p>Defeito três, e agora com a causa.</p>
+<p>Um documento que aparece em mil espelhos da web é visto mil vezes pelo modelo. E um exemplo visto mil vezes não é aprendido — é <strong>memorizado</strong>.</p>
+<p>Três efeitos, e nenhum deles é sobre estética de dados. Primeiro: orçamento gasto em repetição. Cada passada por uma duplicata é compute que não comprou generalização nenhuma. Segundo: memorização literal, que é o sintoma do slide 1 e é também um risco de vazamento. Terceiro, e é o pior de todos: <strong>contaminação de benchmark</strong>. Se o conjunto de teste estava na web, o modelo não acertou a prova — ele já tinha visto o gabarito.</p>
+<blockquote>
+<p>Ideia central: "Deduplicar não é limpeza. É orçamento — e é a diferença entre um número de benchmark que significa algo e um que não significa nada."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 7 · Leis de escala: a perda cai como lei de potência · 00:33–00:40</summary><div class="prose"><p>Agora a parte que transformou isto de artesanato em engenharia.</p>
+<p>A perda de teste cai como <strong>lei de potência</strong> no compute. Em escala log-log, isso é uma reta. E o que uma reta permite é a coisa mais valiosa que existe quando se vai gastar milhões: <strong>prever antes de gastar</strong>.</p>
+<p><strong>[Aponto a reta no gráfico]</strong></p>
+<p>Kaplan e coautores estabeleceram as potências: quanto a perda cai por década de compute, de parâmetros, de dados. Não é lei da natureza — é ajuste empírico dentro de um regime. Mas dentro daquele regime ele extrapola, e foi isso que autorizou os saltos de escala que vieram depois.</p>
+<blockquote>
+<p>Ideia central: "Uma reta em log-log é a diferença entre apostar milhões e estimar milhões."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 8 · [Defeito 1 fechado] A pergunta não era &quot;quão grande&quot; — era &quot;como dividir o cheque&quot; · 00:40–00:47</summary><div class="prose"><p>Defeito um. E aqui está a mudança de pergunta que vale a aula inteira.</p>
+<p>Durante anos a pergunta foi "quão grande dá para fazer o modelo?". A pergunta certa era outra: <strong>dado um cheque fechado, como dividir entre capacidade e experiência?</strong></p>
+<p><strong>[Desenho o U no quadro enquanto falo]</strong></p>
+<p>Fixem o compute. Agora variem <code>N</code>, e com <code>C</code> fixo o <code>D</code> varia junto na direção oposta — porque <code>C</code> é seis vezes <code>N</code> vezes <code>D</code>. Modelo grandinho treinado pouco: perda alta, porque falta experiência. Modelo pequeno treinado muito: perda alta, porque falta capacidade.</p>
+<p>No meio tem um <strong>mínimo</strong>. E é um mínimo interior, não um extremo.</p>
+<p>Chinchilla mediu isso, e a razão que sai do fundo do U é aproximadamente <strong>vinte tokens por parâmetro</strong>.</p>
+<blockquote>
+<p>Ideia central: "O mínimo do U não é opinião de arquitetura. É onde as duas potências se cruzam."</p>
+</blockquote>
+<p>E é por isso que a indústria errou: todo mundo estava andando na parede esquerda do U, fazendo modelos cada vez maiores treinados com muito menos dados do que deveriam.</p>
+<hr /></div></details><details><summary>Slide 9 · [Demo] A curva isoFLOP e o ponto ótimo · 00:47–00:55</summary><div class="prose"><p><strong>[Passo para a Parte 2]</strong></p>
+<p>Os passos estão na Parte 2. O que eu digo antes de trocar de tela é o aviso de proveniência, porque ele é conteúdo:</p>
+<p>As constantes da superfície de perda deste script são calibradas para fins didáticos. Elas reproduzem a razão de vinte para um, mas <strong>não</strong> são os coeficientes publicados do ajuste. Eu digo isso porque é exatamente a exigência que o Lab 8 vai fazer com vocês: número na tela vem com procedência declarada.</p>
+<blockquote>
+<p>Ideia central: "O mínimo do U não é opinião. É onde as duas potências se cruzam — e a razão que sai dali é vinte tokens por parâmetro."</p>
+</blockquote>
+<hr />
+<p><em>Intervalo · 00:55–01:05</em></p>
+<hr /></div></details><details><summary>Slide 10 · `C ≈ 6ND` com hora de GPU real · 01:05–01:11</summary><div class="prose"><p>Segunda metade. A primeira foi sobre o orçamento; esta é sobre a máquina que tem de executá-lo.</p>
+<p>E a primeira coisa é converter FLOPs em algo que se compra. Pico da placa em TFLOP por segundo, vezes o número de placas, vezes segundos, vezes a <strong>MFU</strong> — a fração do pico que se aproveita de verdade, que na prática fica entre trinta e cinquenta por cento.</p>
+<p><strong>[Aponto a conta na tela]</strong></p>
+<p>Isso dá o <code>C</code> que vocês têm. E com o <code>C</code>, a alocação do slide 8 diz o <code>N</code> e o <code>D</code>.</p>
+<blockquote>
+<p>Ideia central: "Daqui para frente, orçamento não é abstração: é número de placas vezes dias vezes a fração que você realmente aproveita."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 11 · [Defeito 2 fechado] O `OOM` que acontece com a GPU ociosa · 01:11–01:21</summary><div class="prose"><p>Defeito dois, e é o mais concreto da aula para quem já sofreu.</p>
+<p>Por que dá <code>OOM</code> com a placa a trinta por cento de ocupação? Porque memória e aritmética são <strong>dois recursos diferentes</strong>, e o treino consome os dois em proporções que não têm nada a ver.</p>
+<p><strong>[Aponto os quatro blocos]</strong></p>
+<p>Quatro consumidores, não um. Os pesos. Os gradientes, que têm o mesmo tamanho dos pesos. Os dois momentos do Adam, que juntos têm o dobro do tamanho dos pesos. E as <strong>ativações</strong>.</p>
+<p>Os três primeiros dão a conta famosa: <strong>dezesseis bytes por parâmetro</strong>. Um modelo de um bilhão de parâmetros precisa de dezesseis gigabytes só para existir em treino, antes de processar um único token.</p>
+<p>E as ativações são a parte traiçoeira, porque elas não escalam com o modelo — escalam com <strong>lote vezes contexto</strong>. É o que estoura sem aviso quando alguém aumenta o batch para "aproveitar melhor a GPU".</p>
+<blockquote>
+<p>Ideia central: "Dezesseis bytes por parâmetro é o que o modelo precisa para existir. As ativações são o que ele precisa para pensar — e são elas que estouram."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 12 · Precisão mista: bf16 para calcular, fp32 para acumular · 01:21–01:26</summary><div class="prose"><p>Metade da memória e o dobro da velocidade, com uma ressalva que é o ponto do slide.</p>
+<p>Calcula-se em bf16 — dezesseis bits — porque é rápido e é metade da memória. Mas <strong>acumula-se</strong> em fp32.</p>
+<p>A razão é aritmética: somar milhares de números pequenos em meia precisão perde os pequenos. Quando o gradiente de um passo é muito menor que o valor acumulado, ele simplesmente desaparece na soma. Em fp32 não desaparece.</p>
+<blockquote>
+<p>Ideia central: "bf16 para calcular, fp32 para acumular. A precisão baixa é para velocidade; a alta é para não perder o gradiente pequeno."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 13 · Paralelismo de dados, de tensor e de pipeline · 01:26–01:36</summary><div class="prose"><p>Se não cabe numa placa, distribui. E há três formas de distribuir, que particionam coisas diferentes e <strong>comunicam</strong> coisas diferentes.</p>
+<p><strong>[Aponto os três diagramas em sequência]</strong></p>
+<p>Paralelismo de <strong>dados</strong>: cada placa tem o modelo inteiro e um pedaço do lote. Comunica <strong>gradientes</strong>, ao fim de cada passo. É o mais simples e o primeiro a se tentar. Com estados do otimizador particionados, ele também resolve boa parte do problema de memória.</p>
+<p>Paralelismo de <strong>tensor</strong>: a mesma camada é fatiada entre placas. Comunica <strong>ativações</strong>, no meio da camada, muitas vezes por passo. É rápido dentro de um nó com interconexão boa e ruim atravessando nós.</p>
+<p>Paralelismo de <strong>pipeline</strong>: camadas diferentes em placas diferentes. Comunica ativações <strong>entre estágios</strong>, e o problema dele é a bolha — placas ociosas esperando o estágio anterior.</p>
+<blockquote>
+<p>Ideia central: "A pergunta não é 'qual paralelismo é melhor'. É 'o que eu passo a comunicar, e quantas vezes por passo'."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 14 · FlashAttention: atenção exata, consciente da memória · 01:36–01:44</summary><div class="prose"><p>Última peça, e é a que mais confunde.</p>
+<p>FlashAttention é atenção <strong>exata</strong>. Não é aproximação, não é esparsidade, não é janela. O resultado é bit a bit o mesmo da atenção padrão.</p>
+<p>E ainda assim ela é várias vezes mais rápida. Como?</p>
+<p><strong>[Aponto o diagrama de HBM e SRAM]</strong></p>
+<p>Porque a atenção padrão materializa a matriz <code>n × n</code> de escores na memória principal da placa, escreve, lê de volta, aplica o softmax, escreve, lê de novo. FlashAttention processa em blocos que caibam na memória rápida e <strong>nunca materializa</strong> a matriz inteira.</p>
+<p>A complexidade assintótica é a mesma. O número de contas é praticamente o mesmo. O que muda é o número de <strong>idas e voltas à memória lenta</strong> — e nesse regime é a memória que manda, não a aritmética.</p>
+<blockquote>
+<p>Ideia central: "Mesma complexidade, mesmas contas, menos tráfego. E é o tráfego que estava custando o tempo."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 15 · [Exercício] Decidir, não calcular · 01:44–01:50</summary><div class="prose"><p><strong>[Projeto o cenário e formo as duplas]</strong></p>
+<p>Quatro minutos, em dupla. E o cenário já está resolvido na tela — a demo imprimiu os números. O que eu quero é a <strong>decisão</strong>.</p>
+<p>Oito placas equivalentes a A100 por sete dias, pico de trezentos e doze TFLOP por segundo em bf16, MFU de quarenta por cento. A demo disse: seis vezes dez à vigésima FLOPs, dois vírgula dois bilhões de parâmetros, quarenta e cinco bilhões de tokens.</p>
+<p>Quatro perguntas. Esse modelo cabe? O que estoura primeiro, memória ou aritmética — e que <strong>medição</strong> confirma? Se não couber numa placa, qual paralelismo primeiro, e o que ele passa a comunicar? E a quarta: vocês têm quarenta e cinco bilhões de tokens de orçamento e um corpus cru de trezentos bilhões com quarenta por cento de duplicata. Filtrar agressivamente ajuda ou atrapalha?</p>
+<blockquote>
+<p>Ideia central: "Nenhuma das quatro pede derivação. As quatro pedem saber o que a conta prevê."</p>
+</blockquote>
+<p>As fórmulas que vocês precisam estão no rodapé do slide. Isto não testa memória de fórmula.</p>
+<hr /></div></details><details><summary>Slide 16 · Fechamento: a fábrica entrega um completador de texto · 01:50–02:00</summary><div class="prose"><p><strong>[Volto aos três defeitos, riscados, com a causa ao lado]</strong></p>
+<p>Defeito um, a divisão do cheque: a curva isoFLOP tem mínimo interior. Defeito dois, o <code>OOM</code> com a placa ociosa: dezesseis bytes por parâmetro mais as ativações. Defeito três, o parágrafo literal: duplicata memoriza e contamina.</p>
+<p><strong>[Aponto o <code>D/N</code> que está no quadro desde o slide 2]</strong></p>
+<p>E agora o paradoxo. Uma teoria séria, medida com cuidado, disse que o ótimo é vinte tokens por parâmetro. O modelo que vocês rodaram tem milhares. Quem está errado?</p>
+<p><strong>Ninguém.</strong> E a razão é que os dois otimizam funções diferentes.</p>
+<p>Chinchilla otimiza o <strong>custo de treinar</strong>. Uma vez. Quem serve o modelo otimiza a <strong>inferência</strong> — e cada parâmetro extra custa memória e latência em <em>toda</em> requisição, para sempre.</p>
+<p>Então: treinar um modelo pequeno muito além de vinte para um é caro no treino e barato para sempre. E é exatamente por isso que existe um modelo de um bilhão bom o suficiente para rodar na máquina de vocês.</p>
+<blockquote>
+<p>Ideia central: "Vinte para um e milhares para um estão os dois certos. São ótimos de funções diferentes — e a diferença é quem paga a conta."</p>
+</blockquote>
+<p><strong>[Projeto o balão de prompt do fechamento]</strong></p>
+<p>Última coisa, e é o gancho de amanhã. Toda essa fábrica — o orçamento, as placas, a curadoria, o paralelismo — entrega uma máquina que <strong>continua texto</strong>.</p>
+<p>Prompt: "qual a capital da França?". Uma continuação perfeitamente coerente é: "qual a capital da Alemanha? qual a capital da Itália?".</p>
+<p>Não é defeito. É o objetivo funcionando exatamente como especificado.</p>
+<blockquote>
+<p>Ideia central: "Toda essa fábrica entrega uma máquina que continua texto. Amanhã a gente descobre que virar assistente custa uma fração de um por cento disso."</p>
+</blockquote>
+<p><strong>[Projeto as leituras e fico 20 s em silêncio]</strong></p>
+<p>Kaplan, Chinchilla, FlashAttention — os três arXiv na tela.</p>
+<p><strong>[Projeto o índice do apêndice por 20 s]</strong></p>
+<p>Seis itens. E eu nomeio um: o <strong>A.1</strong> é a derivação do <code>C ≈ 6ND</code> que eu prometi na Aula 10 quando alguém perguntou de onde vinha o seis. Está lá inteira, e é conta que a prova cobra.</p>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p>Oito minutos, <code>codigo/demo-scaling-laws.py</code>, Python puro, sem GPU e sem rede. Determinística.</p>
+<p><strong>1.</strong> <strong>[Rodo o script e paro na tabela de alocação]</strong> Aqui está a alocação ótima para orçamentos de dez à décima nona até dez à vigésima quinta potência de FLOPs. Três colunas: o compute, o <code>N</code> ótimo, o <code>D</code> ótimo. E a quarta coluna, que é a que interessa: <code>D</code> sobre <code>N</code>. <strong>[aponto]</strong> Vinte. Vinte. Vinte. Ao longo de seis ordens de grandeza de orçamento, a razão é estável — e é isso que faz dela uma regra útil.</p>
+<p><strong>2.</strong> <strong>[Mostro o gráfico de perda × compute em log-log]</strong> A lei de potência, e em log-log ela é uma reta. Isso é o que autoriza prever: dá para estimar a perda de um treino que ainda não aconteceu.</p>
+<p><strong>3.</strong> <strong>[Mostro as curvas isoFLOP com os mínimos marcados]</strong> E aqui está o U que eu desenhei no quadro. Cada curva é um orçamento fixo, variando o <code>N</code>. Olhem os mínimos marcados: eles não estão nas pontas, estão no meio. É a existência desse mínimo interior que responde o defeito um.</p>
+<p><strong>4.</strong> <strong>[Mostro o contrafactual do GPT-3]</strong> Este é o slide mais desconfortável da demo. Para o mesmo orçamento de compute que treinou o GPT-3 de cento e setenta e cinco bilhões de parâmetros com trezentos bilhões de tokens, a alocação ótima teria sido <strong>cinquenta e um bilhões de parâmetros com um trilhão de tokens</strong>. Mesmo dinheiro, modelo três vezes menor, perda menor. <strong>[pausa]</strong> Não é crítica retrospectiva fácil: ninguém sabia. É o que uma medição bem feita compra.</p>
+<p><strong>5.</strong> <strong>[Mostro a conversão de horas de GPU em FLOPs]</strong> E o último ato liga a teoria à fatura: pico, MFU, dias de placa, e o <code>C</code> que sai. Este é o par que vocês vão usar no exercício: seis vezes dez à vigésima FLOPs, dois vírgula dois bilhões de parâmetros.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>Quatro minutos de dupla mais dois de correção, dentro do slide 15.</p>
+<p><strong>1.</strong> <strong>[Projeto as quatro perguntas e formo as duplas]</strong> Quatro minutos. As fórmulas estão no rodapé — o que eu quero é a decisão, não a memória.</p>
+<p><strong>Item 1 (cabe?).</strong> A conta é <code>2,2e9 × 16 = 35,2e9</code> bytes, cerca de <strong>32,8 GiB</strong> de estados, contra <code>8 × 74,5 GiB</code> de memória agregada. <strong>Cabe distribuído; não cabe numa placa só.</strong> O erro dominante é contar só os pesos a dois bytes — dá quatro gigabytes e a conclusão errada de que cabe folgado. Quem errar assim errou de um jeito útil: mostra que a conta de dezesseis bytes não foi absorvida.</p>
+<p><strong>Item 2 (o que estoura primeiro).</strong> Memória, e a medição que confirma é ocupação da GPU contra memória alocada: <code>OOM</code> com utilização aritmética baixa é diagnóstico de memória, não de compute.</p>
+<p><strong>Item 3 (qual paralelismo).</strong> <strong>Dados, com estados do otimizador particionados</strong> — não tensor. O critério é: comece por dados, vá para tensor só quando uma camada isolada não couber. Um modelo de dois vírgula dois bilhões tem camadas que cabem folgadas. O erro nº 2 é responder "tensor" por soar mais sofisticado.</p>
+<p><strong>Item 4 (filtrar agressivamente).</strong> É o mais interessante e o que amarra os dois blocos. Filtrar ajuda: o orçamento é de quarenta e cinco bilhões de tokens e o corpus cru tem trezentos, então há folga de sobra para descartar — e quarenta por cento de duplicata significa que boa parte daquele volume supervisiona a mesma coisa repetidamente. Pelo slide 6: orçamento gasto em repetição não compra generalização. A resposta errada interessante é "filtrar reduz o corpus e o corpus é o supervisor" — está certa na premissa e erra na aritmética, porque ignora que sobra corpus.</p>
+<p><em>Como recolher:</em> dois minutos, e eu começo pelo item 4, não pelo primeiro. Se só houver tempo para um, é esse — porque é o que mostra que a decisão de dados e a decisão de orçamento são a mesma decisão.</p>
+<p><em>Extensão para quem terminar antes (opcional):</em> refazer à mão a aritmética que a demo fez — de pico e MFU até <code>C</code>, e de <code>C</code> até o par <code>(N, D)</code>. Gabarito completo em <strong>A.2</strong>.</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Esta parte <strong>não é fala planejada</strong>. É contingência. E nesta aula ela tem uma particularidade: a Aula 10 mandou a turma para cá com uma pergunta na mão, então o item 1 provavelmente vai ser puxado — e deve ser atendido.</p>
+<p><strong>Item 1 — "De onde vem esse seis?" (A.1, ~5 min).</strong>
+A pergunta que a Aula 10 gerou, e eu prometi responder hoje. Vale os cinco minutos. Escrevo no quadro: no forward, cada parâmetro participa de uma multiplicação e uma soma por token — <strong>dois</strong> FLOPs. No backward, preciso do gradiente em relação à entrada e em relação ao peso, o que dá o dobro — <strong>quatro</strong>. Dois mais quatro, seis. E aí vem a pergunta boa, que é sobre o otimizador: a atualização custa por <strong>parâmetro e por passo</strong>, não por token, então ela não escala com <code>D</code> e sai da conta. Escrevo essa razão e paro. <strong>Versão de 30 segundos:</strong> "dois no forward, quatro no backward, e a atualização do otimizador não entra porque paga por passo e não por token. A conta inteira, com a atualização contabilizada e descartada com número, está em A.1."</p>
+<p><strong>Item 2 — "Como se chega em vinte tokens por parâmetro?" (A.2, ~6 min).</strong>
+A mais caro da lista. Eu monto a otimização: minimizar a perda sujeito a <code>C = 6ND</code> fixo. Substituo o <code>D</code> por <code>C/(6N)</code>, derivo em relação a <code>N</code>, igualo a zero. Sai <code>N ∝ √C</code>, e com as constantes do ajuste, <code>N ≈ √(C/120)</code> e <code>D ≈ 20N</code>. Escrevo as premissas junto, porque elas são o ponto: a forma da superfície de perda é ajustada empiricamente, e o vinte é consequência <strong>daquelas</strong> constantes, não de matemática pura. <strong>Versão de 30 segundos:</strong> "minimiza a perda com o compute fixo, substituindo <code>D</code> por <code>C/6N</code> — sai <code>N</code> proporcional à raiz de <code>C</code>, e a razão vinte cai das constantes do ajuste empírico. Está em A.2, com as três ressalvas sobre o 20:1."</p>
+<p><strong>Item 3 — "De onde vêm os dezesseis bytes?" (A.4, ~3 min).</strong>
+Barata e produz um número que impressiona. Quatro bytes de peso em fp32, quatro de gradiente, e oito dos dois momentos do Adam — quatro cada. Quatro mais quatro mais oito, dezesseis. Instancio com um bilhão de parâmetros: dezesseis gigabytes antes de processar um token. E acrescento a parte que a conta famosa <strong>não</strong> cobre: as ativações, que escalam com lote vezes contexto. <strong>Versão de 30 segundos:</strong> "peso, gradiente e os dois momentos do Adam, quatro bytes cada, dão dezesseis por parâmetro — e as ativações são por cima disso. A decomposição está em A.4."</p>
+<p><strong>Item 4 — "Se FlashAttention não muda a complexidade, como ela acelera?" (A.6, ~4 min).</strong>
+A melhor pergunta técnica que pode aparecer nesta aula. Escrevo os dois esquemas e conto <strong>acessos à memória lenta</strong>, não operações: a atenção padrão escreve e lê a matriz <code>n × n</code> várias vezes; a FlashAttention processa em blocos e nunca a materializa. Mesma complexidade em FLOPs, tráfego muito menor — e o regime é limitado por tráfego. <strong>Versão de 30 segundos:</strong> "porque o gargalo não é a conta, é o tráfego entre a memória lenta e a rápida — e ela nunca materializa a matriz de escores. A contagem de acessos está em A.6, e o A.3 da Aula 29 fecha o argumento com a intensidade aritmética."</p>
+<hr /></div></details><details><summary>Encerramento · 01:50–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 16 da Parte 1 — os três defeitos riscados com a causa, a resolução do paradoxo do <code>D/N</code>, a constatação de que a fábrica entrega um completador de texto, as três leituras com 20 s de silêncio para fotografar, e os 20 s finais de índice do apêndice nomeando o A.1.</p>
+<blockquote>
+<p>Ideia central: "Toda essa fábrica entrega uma máquina que continua texto. Amanhã a gente descobre que virar assistente custa uma fração de um por cento disso."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 12 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="codigo-student.zip">↓ Notebooks e scripts do aluno</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Pré-treinamento: dados, leis de escala e sistemas</h1>
+<h2>Slide 1 · Abertura: três defeitos, nenhum deles no código · 00:00–00:05</h2>
+<p><strong>[Projeto os três defeitos juntos e leio os três em voz alta antes de dizer qualquer outra coisa]</strong></p>
+<p>Aula passada vocês puxaram quatro alavancas e mediram o efeito de cada uma em três eixos. Hoje a gente entra na fábrica que produziu o arquivo de pesos que estava do outro lado daquelas alavancas.</p>
+<p>E a primeira coisa que a fábrica tem não é uma GPU. É um <strong>orçamento</strong>.</p>
+<p>Três defeitos. Primeiro: "tenho um orçamento fechado, faço um modelo maior ou treino com mais tokens?" — e a indústria inteira respondeu isso errado até 2022, com dinheiro de verdade. Segundo: o treino estoura a memória da GPU <strong>antes</strong> de estourar a aritmética; dá <code>OOM</code> com a placa a trinta por cento de ocupação. Terceiro: o modelo devolve, palavra por palavra, um parágrafo do corpus — e acerta um benchmark que estava na web.</p>
+<p><strong>[Aponto a coluna "onde fecha"]</strong></p>
+<p>Nenhum dos três é bug de implementação. Os três são consequência correta de uma decisão de orçamento tomada antes da primeira linha de código. E cada um fecha num slide específico desta aula.</p>
+<blockquote>
+<p>Ideia central: "Vocês passaram duas aulas puxando alavancas. Hoje a gente entra na fábrica — e a primeira coisa que a fábrica tem é um orçamento."</p>
+</blockquote>
+<hr />
+<h2>Slide 2 · O número que vocês trouxeram · 00:05–00:10</h2>
+<p>Lição de casa da aula passada. Quem tem aí o <code>N</code> e o <code>D</code> do modelo que rodou no Ollama?</p>
+<p><strong>[Preencho os dois campos na tela com o que a turma disser]</strong></p>
+<p>Agora as duas contas da aula, e eu vou só enunciar as duas.</p>
+<p>Treinar custa aproximadamente <strong>seis vezes</strong> <code>N</code> vezes <code>D</code> — parâmetros vezes tokens. Gerar um token custa aproximadamente <strong>duas vezes</strong> <code>N</code>. Nada de derivação agora; olhem o que as duas dizem.</p>
+<p>A primeira diz que treinar custa proporcional a <strong>capacidade vezes experiência</strong>. A segunda diz que gerar custa proporcional só à <strong>capacidade ativa</strong> — o <code>D</code> não aparece, porque o modelo já foi treinado.</p>
+<p>E é aí que está a economia inteira desta área: treinar é caríssimo e acontece <strong>uma vez</strong>. Inferir é barato por token e acontece um trilhão de vezes.</p>
+<blockquote>
+<p>Ideia central: "Uma conta de guardanapo separa o que se paga uma vez do que se paga para sempre."</p>
+</blockquote>
+<p><strong>[Escrevo <code>D/N</code> no quadro com o valor da turma e circulo]</strong></p>
+<p>Agora dividam <code>D</code> por <code>N</code>. Esse número fica no quadro a aula inteira, porque no meio dela uma teoria vai dizer que o valor certo é <strong>vinte</strong>. E o de vocês não é vinte.</p>
+<hr />
+<h2>Slide 3 · Transferência de aprendizado: um treino caro, muitas tarefas baratas · 00:10–00:15</h2>
+<p>Antes: uma tarefa, um dataset rotulado à mão, um modelo, um deploy. O teto era o custo de anotação — você conseguia resolver tantas tarefas quantas conseguisse pagar para rotular.</p>
+<p>Depois: um objetivo genérico, um pré-treino caríssimo, e adaptação com pouco ou nenhum dado novo. O teto virou o custo de compute.</p>
+<p><strong>[Aponto a régua logarítmica embaixo]</strong></p>
+<p>E para quem não fez Aprendizagem de Máquina antes: treinar é ajustar pesos por descida de gradiente para reduzir uma perda. A perda do pré-treino é <strong>a mesma</strong> entropia cruzada do próximo token que vocês minimizaram no Lab 2, no mini-GPT de dois vírgula sete milhões de parâmetros.</p>
+<blockquote>
+<p>Ideia central: "A perda do pré-treino é a mesma que vocês minimizaram no Lab 2. A diferença para o GPT-3 não é de ideia — é de orçamento."</p>
+</blockquote>
+<hr />
+<h2>Slide 4 · O rótulo que não existe: o supervisor é o corpus · 00:15–00:20</h2>
+<p>Em aprendizado supervisionado clássico, alguém rotula. E o limite do que você consegue fazer é o quanto consegue pagar para rotular.</p>
+<p>No pré-treino ninguém rotulou nada. O rótulo de cada posição é <strong>o token seguinte</strong>, que já está no corpus.</p>
+<p><strong>[Aponto a conta na tela]</strong></p>
+<p>E olhem a densidade disso. No Lab 2, um lote de sessenta e quatro por cento e vinte e oito produzia oito mil cento e noventa e duas previsões supervisionadas de uma vez. De texto cru, sem ninguém anotar nada.</p>
+<p>Uma correção de vocabulário, porque ela tem consequência. Isso não é "não supervisionado". É <strong>auto-supervisionado</strong> — o rótulo existe, ele é só derivado do dado em vez de anotado por gente.</p>
+<p>E a consequência prática é a frase mais importante deste bloco:</p>
+<blockquote>
+<p>Ideia central: "O supervisor deste treino é o corpus. Então a qualidade do corpus é decisão de modelagem, não de infraestrutura."</p>
+</blockquote>
+<p>E é por isso que a próxima meia hora é sobre corpus.</p>
+<hr />
+<h2>Slide 5 · De onde vem o texto: a mistura do corpus · 00:20–00:26</h2>
+<p>Quatro fontes, e cada uma ensina uma coisa que as outras não ensinam.</p>
+<p>Web, dos derivados do CommonCrawl: trilhões de tokens, qualidade média baixa. O que ela dá é <strong>quantidade</strong> — e quantidade é insubstituível.</p>
+<p>Livros: volume médio, qualidade alta. O que só eles dão é <strong>coerência longa</strong> — dependência entre coisas separadas por milhares de tokens. Não existe outra fonte com texto tão longo e tão coerente.</p>
+<p>Código: volume médio, e uma propriedade única — a qualidade é <strong>verificável</strong>. O que ele ensina é formato e estrutura estrita. E aquele JSON que vocês pediram no Lab 3 e receberam perfeitamente formatado veio daqui.</p>
+<p>Curado, enciclopédico: volume pequeno, qualidade alta, <strong>densidade de fato</strong>.</p>
+<p><strong>[Aponto a faixa inferior]</strong></p>
+<p>E a mistura — quantas épocas de cada fonte — é uma decisão de treino. É exatamente o ponto em que os cartões de modelo ficam vagos.</p>
+<p>Agora, "curadoria importa" é a frase mais vazia que se pode dizer sobre isso, então eu vou dar a linhagem, porque ela é pública e é comparável. Começa em dois mil e dezenove com o CCNet, que filtra a web pela semelhança com a Wikipédia, e o C4, que filtra por regras. Passa pelo Gopher em vinte e um. E aí vêm os modernos: DCLM e FineWeb em vinte e quatro, Nemotron-CC no mesmo ano, OLMo 2 em vinte e cinco.</p>
+<p>E o que separa uma receita da outra são <strong>dois</strong> mecanismos, só dois. O primeiro é <strong>deduplicação</strong>, na prática por MinHash — porque a web repete, e repetição não vira generalização, vira memorização. Isso é literalmente o defeito três desta aula, o parágrafo que o modelo devolve literalmente. O segundo é <strong>filtro de qualidade por classificador</strong>: em vez de escrever regra a regra, treina-se um classificador barato para separar texto tipo-Wikipédia de texto tipo-web-bruta, e joga-se fora a cauda.</p>
+<blockquote>
+<p>Ideia central: "Curadoria não é adjetivo. São duas decisões — deduplicar e filtrar por classificador — e a diferença entre uma receita de dado e outra está quase toda aí."</p>
+<p>Ideia central: "Nenhuma das quatro fontes sozinha dá o modelo."</p>
+</blockquote>
+<hr />
+<h2>Slide 6 · [Defeito 3 fechado] O parágrafo que o modelo devolve literalmente · 00:26–00:33</h2>
+<p>Defeito três, e agora com a causa.</p>
+<p>Um documento que aparece em mil espelhos da web é visto mil vezes pelo modelo. E um exemplo visto mil vezes não é aprendido — é <strong>memorizado</strong>.</p>
+<p>Três efeitos, e nenhum deles é sobre estética de dados. Primeiro: orçamento gasto em repetição. Cada passada por uma duplicata é compute que não comprou generalização nenhuma. Segundo: memorização literal, que é o sintoma do slide 1 e é também um risco de vazamento. Terceiro, e é o pior de todos: <strong>contaminação de benchmark</strong>. Se o conjunto de teste estava na web, o modelo não acertou a prova — ele já tinha visto o gabarito.</p>
+<blockquote>
+<p>Ideia central: "Deduplicar não é limpeza. É orçamento — e é a diferença entre um número de benchmark que significa algo e um que não significa nada."</p>
+</blockquote>
+<hr />
+<h2>Slide 7 · Leis de escala: a perda cai como lei de potência · 00:33–00:40</h2>
+<p>Agora a parte que transformou isto de artesanato em engenharia.</p>
+<p>A perda de teste cai como <strong>lei de potência</strong> no compute. Em escala log-log, isso é uma reta. E o que uma reta permite é a coisa mais valiosa que existe quando se vai gastar milhões: <strong>prever antes de gastar</strong>.</p>
+<p><strong>[Aponto a reta no gráfico]</strong></p>
+<p>Kaplan e coautores estabeleceram as potências: quanto a perda cai por década de compute, de parâmetros, de dados. Não é lei da natureza — é ajuste empírico dentro de um regime. Mas dentro daquele regime ele extrapola, e foi isso que autorizou os saltos de escala que vieram depois.</p>
+<blockquote>
+<p>Ideia central: "Uma reta em log-log é a diferença entre apostar milhões e estimar milhões."</p>
+</blockquote>
+<hr />
+<h2>Slide 8 · [Defeito 1 fechado] A pergunta não era "quão grande" — era "como dividir o cheque" · 00:40–00:47</h2>
+<p>Defeito um. E aqui está a mudança de pergunta que vale a aula inteira.</p>
+<p>Durante anos a pergunta foi "quão grande dá para fazer o modelo?". A pergunta certa era outra: <strong>dado um cheque fechado, como dividir entre capacidade e experiência?</strong></p>
+<p><strong>[Desenho o U no quadro enquanto falo]</strong></p>
+<p>Fixem o compute. Agora variem <code>N</code>, e com <code>C</code> fixo o <code>D</code> varia junto na direção oposta — porque <code>C</code> é seis vezes <code>N</code> vezes <code>D</code>. Modelo grandinho treinado pouco: perda alta, porque falta experiência. Modelo pequeno treinado muito: perda alta, porque falta capacidade.</p>
+<p>No meio tem um <strong>mínimo</strong>. E é um mínimo interior, não um extremo.</p>
+<p>Chinchilla mediu isso, e a razão que sai do fundo do U é aproximadamente <strong>vinte tokens por parâmetro</strong>.</p>
+<blockquote>
+<p>Ideia central: "O mínimo do U não é opinião de arquitetura. É onde as duas potências se cruzam."</p>
+</blockquote>
+<p>E é por isso que a indústria errou: todo mundo estava andando na parede esquerda do U, fazendo modelos cada vez maiores treinados com muito menos dados do que deveriam.</p>
+<hr />
+<h2>Slide 9 · [Demo] A curva isoFLOP e o ponto ótimo · 00:47–00:55</h2>
+<p><strong>[Passo para a Parte 2]</strong></p>
+<p>Os passos estão na Parte 2. O que eu digo antes de trocar de tela é o aviso de proveniência, porque ele é conteúdo:</p>
+<p>As constantes da superfície de perda deste script são calibradas para fins didáticos. Elas reproduzem a razão de vinte para um, mas <strong>não</strong> são os coeficientes publicados do ajuste. Eu digo isso porque é exatamente a exigência que o Lab 8 vai fazer com vocês: número na tela vem com procedência declarada.</p>
+<blockquote>
+<p>Ideia central: "O mínimo do U não é opinião. É onde as duas potências se cruzam — e a razão que sai dali é vinte tokens por parâmetro."</p>
+</blockquote>
+<hr />
+<p><em>Intervalo · 00:55–01:05</em></p>
+<hr />
+<h2>Slide 10 · <code>C ≈ 6ND</code> com hora de GPU real · 01:05–01:11</h2>
+<p>Segunda metade. A primeira foi sobre o orçamento; esta é sobre a máquina que tem de executá-lo.</p>
+<p>E a primeira coisa é converter FLOPs em algo que se compra. Pico da placa em TFLOP por segundo, vezes o número de placas, vezes segundos, vezes a <strong>MFU</strong> — a fração do pico que se aproveita de verdade, que na prática fica entre trinta e cinquenta por cento.</p>
+<p><strong>[Aponto a conta na tela]</strong></p>
+<p>Isso dá o <code>C</code> que vocês têm. E com o <code>C</code>, a alocação do slide 8 diz o <code>N</code> e o <code>D</code>.</p>
+<blockquote>
+<p>Ideia central: "Daqui para frente, orçamento não é abstração: é número de placas vezes dias vezes a fração que você realmente aproveita."</p>
+</blockquote>
+<hr />
+<h2>Slide 11 · [Defeito 2 fechado] O <code>OOM</code> que acontece com a GPU ociosa · 01:11–01:21</h2>
+<p>Defeito dois, e é o mais concreto da aula para quem já sofreu.</p>
+<p>Por que dá <code>OOM</code> com a placa a trinta por cento de ocupação? Porque memória e aritmética são <strong>dois recursos diferentes</strong>, e o treino consome os dois em proporções que não têm nada a ver.</p>
+<p><strong>[Aponto os quatro blocos]</strong></p>
+<p>Quatro consumidores, não um. Os pesos. Os gradientes, que têm o mesmo tamanho dos pesos. Os dois momentos do Adam, que juntos têm o dobro do tamanho dos pesos. E as <strong>ativações</strong>.</p>
+<p>Os três primeiros dão a conta famosa: <strong>dezesseis bytes por parâmetro</strong>. Um modelo de um bilhão de parâmetros precisa de dezesseis gigabytes só para existir em treino, antes de processar um único token.</p>
+<p>E as ativações são a parte traiçoeira, porque elas não escalam com o modelo — escalam com <strong>lote vezes contexto</strong>. É o que estoura sem aviso quando alguém aumenta o batch para "aproveitar melhor a GPU".</p>
+<blockquote>
+<p>Ideia central: "Dezesseis bytes por parâmetro é o que o modelo precisa para existir. As ativações são o que ele precisa para pensar — e são elas que estouram."</p>
+</blockquote>
+<hr />
+<h2>Slide 12 · Precisão mista: bf16 para calcular, fp32 para acumular · 01:21–01:26</h2>
+<p>Metade da memória e o dobro da velocidade, com uma ressalva que é o ponto do slide.</p>
+<p>Calcula-se em bf16 — dezesseis bits — porque é rápido e é metade da memória. Mas <strong>acumula-se</strong> em fp32.</p>
+<p>A razão é aritmética: somar milhares de números pequenos em meia precisão perde os pequenos. Quando o gradiente de um passo é muito menor que o valor acumulado, ele simplesmente desaparece na soma. Em fp32 não desaparece.</p>
+<blockquote>
+<p>Ideia central: "bf16 para calcular, fp32 para acumular. A precisão baixa é para velocidade; a alta é para não perder o gradiente pequeno."</p>
+</blockquote>
+<hr />
+<h2>Slide 13 · Paralelismo de dados, de tensor e de pipeline · 01:26–01:36</h2>
+<p>Se não cabe numa placa, distribui. E há três formas de distribuir, que particionam coisas diferentes e <strong>comunicam</strong> coisas diferentes.</p>
+<p><strong>[Aponto os três diagramas em sequência]</strong></p>
+<p>Paralelismo de <strong>dados</strong>: cada placa tem o modelo inteiro e um pedaço do lote. Comunica <strong>gradientes</strong>, ao fim de cada passo. É o mais simples e o primeiro a se tentar. Com estados do otimizador particionados, ele também resolve boa parte do problema de memória.</p>
+<p>Paralelismo de <strong>tensor</strong>: a mesma camada é fatiada entre placas. Comunica <strong>ativações</strong>, no meio da camada, muitas vezes por passo. É rápido dentro de um nó com interconexão boa e ruim atravessando nós.</p>
+<p>Paralelismo de <strong>pipeline</strong>: camadas diferentes em placas diferentes. Comunica ativações <strong>entre estágios</strong>, e o problema dele é a bolha — placas ociosas esperando o estágio anterior.</p>
+<blockquote>
+<p>Ideia central: "A pergunta não é 'qual paralelismo é melhor'. É 'o que eu passo a comunicar, e quantas vezes por passo'."</p>
+</blockquote>
+<hr />
+<h2>Slide 14 · FlashAttention: atenção exata, consciente da memória · 01:36–01:44</h2>
+<p>Última peça, e é a que mais confunde.</p>
+<p>FlashAttention é atenção <strong>exata</strong>. Não é aproximação, não é esparsidade, não é janela. O resultado é bit a bit o mesmo da atenção padrão.</p>
+<p>E ainda assim ela é várias vezes mais rápida. Como?</p>
+<p><strong>[Aponto o diagrama de HBM e SRAM]</strong></p>
+<p>Porque a atenção padrão materializa a matriz <code>n × n</code> de escores na memória principal da placa, escreve, lê de volta, aplica o softmax, escreve, lê de novo. FlashAttention processa em blocos que caibam na memória rápida e <strong>nunca materializa</strong> a matriz inteira.</p>
+<p>A complexidade assintótica é a mesma. O número de contas é praticamente o mesmo. O que muda é o número de <strong>idas e voltas à memória lenta</strong> — e nesse regime é a memória que manda, não a aritmética.</p>
+<blockquote>
+<p>Ideia central: "Mesma complexidade, mesmas contas, menos tráfego. E é o tráfego que estava custando o tempo."</p>
+</blockquote>
+<hr />
+<h2>Slide 15 · [Exercício] Decidir, não calcular · 01:44–01:50</h2>
+<p><strong>[Projeto o cenário e formo as duplas]</strong></p>
+<p>Quatro minutos, em dupla. E o cenário já está resolvido na tela — a demo imprimiu os números. O que eu quero é a <strong>decisão</strong>.</p>
+<p>Oito placas equivalentes a A100 por sete dias, pico de trezentos e doze TFLOP por segundo em bf16, MFU de quarenta por cento. A demo disse: seis vezes dez à vigésima FLOPs, dois vírgula dois bilhões de parâmetros, quarenta e cinco bilhões de tokens.</p>
+<p>Quatro perguntas. Esse modelo cabe? O que estoura primeiro, memória ou aritmética — e que <strong>medição</strong> confirma? Se não couber numa placa, qual paralelismo primeiro, e o que ele passa a comunicar? E a quarta: vocês têm quarenta e cinco bilhões de tokens de orçamento e um corpus cru de trezentos bilhões com quarenta por cento de duplicata. Filtrar agressivamente ajuda ou atrapalha?</p>
+<blockquote>
+<p>Ideia central: "Nenhuma das quatro pede derivação. As quatro pedem saber o que a conta prevê."</p>
+</blockquote>
+<p>As fórmulas que vocês precisam estão no rodapé do slide. Isto não testa memória de fórmula.</p>
+<hr />
+<h2>Slide 16 · Fechamento: a fábrica entrega um completador de texto · 01:50–02:00</h2>
+<p><strong>[Volto aos três defeitos, riscados, com a causa ao lado]</strong></p>
+<p>Defeito um, a divisão do cheque: a curva isoFLOP tem mínimo interior. Defeito dois, o <code>OOM</code> com a placa ociosa: dezesseis bytes por parâmetro mais as ativações. Defeito três, o parágrafo literal: duplicata memoriza e contamina.</p>
+<p><strong>[Aponto o <code>D/N</code> que está no quadro desde o slide 2]</strong></p>
+<p>E agora o paradoxo. Uma teoria séria, medida com cuidado, disse que o ótimo é vinte tokens por parâmetro. O modelo que vocês rodaram tem milhares. Quem está errado?</p>
+<p><strong>Ninguém.</strong> E a razão é que os dois otimizam funções diferentes.</p>
+<p>Chinchilla otimiza o <strong>custo de treinar</strong>. Uma vez. Quem serve o modelo otimiza a <strong>inferência</strong> — e cada parâmetro extra custa memória e latência em <em>toda</em> requisição, para sempre.</p>
+<p>Então: treinar um modelo pequeno muito além de vinte para um é caro no treino e barato para sempre. E é exatamente por isso que existe um modelo de um bilhão bom o suficiente para rodar na máquina de vocês.</p>
+<blockquote>
+<p>Ideia central: "Vinte para um e milhares para um estão os dois certos. São ótimos de funções diferentes — e a diferença é quem paga a conta."</p>
+</blockquote>
+<p><strong>[Projeto o balão de prompt do fechamento]</strong></p>
+<p>Última coisa, e é o gancho de amanhã. Toda essa fábrica — o orçamento, as placas, a curadoria, o paralelismo — entrega uma máquina que <strong>continua texto</strong>.</p>
+<p>Prompt: "qual a capital da França?". Uma continuação perfeitamente coerente é: "qual a capital da Alemanha? qual a capital da Itália?".</p>
+<p>Não é defeito. É o objetivo funcionando exatamente como especificado.</p>
+<blockquote>
+<p>Ideia central: "Toda essa fábrica entrega uma máquina que continua texto. Amanhã a gente descobre que virar assistente custa uma fração de um por cento disso."</p>
+</blockquote>
+<p><strong>[Projeto as leituras e fico 20 s em silêncio]</strong></p>
+<p>Kaplan, Chinchilla, FlashAttention — os três arXiv na tela.</p>
+<p><strong>[Projeto o índice do apêndice por 20 s]</strong></p>
+<p>Seis itens. E eu nomeio um: o <strong>A.1</strong> é a derivação do <code>C ≈ 6ND</code> que eu prometi na Aula 10 quando alguém perguntou de onde vinha o seis. Está lá inteira, e é conta que a prova cobra.</p>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p>Oito minutos, <code>codigo/demo-scaling-laws.py</code>, Python puro, sem GPU e sem rede. Determinística.</p>
+<p><strong>1.</strong> <strong>[Rodo o script e paro na tabela de alocação]</strong> Aqui está a alocação ótima para orçamentos de dez à décima nona até dez à vigésima quinta potência de FLOPs. Três colunas: o compute, o <code>N</code> ótimo, o <code>D</code> ótimo. E a quarta coluna, que é a que interessa: <code>D</code> sobre <code>N</code>. <strong>[aponto]</strong> Vinte. Vinte. Vinte. Ao longo de seis ordens de grandeza de orçamento, a razão é estável — e é isso que faz dela uma regra útil.</p>
+<p><strong>2.</strong> <strong>[Mostro o gráfico de perda × compute em log-log]</strong> A lei de potência, e em log-log ela é uma reta. Isso é o que autoriza prever: dá para estimar a perda de um treino que ainda não aconteceu.</p>
+<p><strong>3.</strong> <strong>[Mostro as curvas isoFLOP com os mínimos marcados]</strong> E aqui está o U que eu desenhei no quadro. Cada curva é um orçamento fixo, variando o <code>N</code>. Olhem os mínimos marcados: eles não estão nas pontas, estão no meio. É a existência desse mínimo interior que responde o defeito um.</p>
+<p><strong>4.</strong> <strong>[Mostro o contrafactual do GPT-3]</strong> Este é o slide mais desconfortável da demo. Para o mesmo orçamento de compute que treinou o GPT-3 de cento e setenta e cinco bilhões de parâmetros com trezentos bilhões de tokens, a alocação ótima teria sido <strong>cinquenta e um bilhões de parâmetros com um trilhão de tokens</strong>. Mesmo dinheiro, modelo três vezes menor, perda menor. <strong>[pausa]</strong> Não é crítica retrospectiva fácil: ninguém sabia. É o que uma medição bem feita compra.</p>
+<p><strong>5.</strong> <strong>[Mostro a conversão de horas de GPU em FLOPs]</strong> E o último ato liga a teoria à fatura: pico, MFU, dias de placa, e o <code>C</code> que sai. Este é o par que vocês vão usar no exercício: seis vezes dez à vigésima FLOPs, dois vírgula dois bilhões de parâmetros.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>Quatro minutos de dupla mais dois de correção, dentro do slide 15.</p>
+<p><strong>1.</strong> <strong>[Projeto as quatro perguntas e formo as duplas]</strong> Quatro minutos. As fórmulas estão no rodapé — o que eu quero é a decisão, não a memória.</p>
+<p><strong>Item 1 (cabe?).</strong> A conta é <code>2,2e9 × 16 = 35,2e9</code> bytes, cerca de <strong>32,8 GiB</strong> de estados, contra <code>8 × 74,5 GiB</code> de memória agregada. <strong>Cabe distribuído; não cabe numa placa só.</strong> O erro dominante é contar só os pesos a dois bytes — dá quatro gigabytes e a conclusão errada de que cabe folgado. Quem errar assim errou de um jeito útil: mostra que a conta de dezesseis bytes não foi absorvida.</p>
+<p><strong>Item 2 (o que estoura primeiro).</strong> Memória, e a medição que confirma é ocupação da GPU contra memória alocada: <code>OOM</code> com utilização aritmética baixa é diagnóstico de memória, não de compute.</p>
+<p><strong>Item 3 (qual paralelismo).</strong> <strong>Dados, com estados do otimizador particionados</strong> — não tensor. O critério é: comece por dados, vá para tensor só quando uma camada isolada não couber. Um modelo de dois vírgula dois bilhões tem camadas que cabem folgadas. O erro nº 2 é responder "tensor" por soar mais sofisticado.</p>
+<p><strong>Item 4 (filtrar agressivamente).</strong> É o mais interessante e o que amarra os dois blocos. Filtrar ajuda: o orçamento é de quarenta e cinco bilhões de tokens e o corpus cru tem trezentos, então há folga de sobra para descartar — e quarenta por cento de duplicata significa que boa parte daquele volume supervisiona a mesma coisa repetidamente. Pelo slide 6: orçamento gasto em repetição não compra generalização. A resposta errada interessante é "filtrar reduz o corpus e o corpus é o supervisor" — está certa na premissa e erra na aritmética, porque ignora que sobra corpus.</p>
+<p><em>Como recolher:</em> dois minutos, e eu começo pelo item 4, não pelo primeiro. Se só houver tempo para um, é esse — porque é o que mostra que a decisão de dados e a decisão de orçamento são a mesma decisão.</p>
+<p><em>Extensão para quem terminar antes (opcional):</em> refazer à mão a aritmética que a demo fez — de pico e MFU até <code>C</code>, e de <code>C</code> até o par <code>(N, D)</code>. Gabarito completo em <strong>A.2</strong>.</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Esta parte <strong>não é fala planejada</strong>. É contingência. E nesta aula ela tem uma particularidade: a Aula 10 mandou a turma para cá com uma pergunta na mão, então o item 1 provavelmente vai ser puxado — e deve ser atendido.</p>
+<p><strong>Item 1 — "De onde vem esse seis?" (A.1, ~5 min).</strong>
+A pergunta que a Aula 10 gerou, e eu prometi responder hoje. Vale os cinco minutos. Escrevo no quadro: no forward, cada parâmetro participa de uma multiplicação e uma soma por token — <strong>dois</strong> FLOPs. No backward, preciso do gradiente em relação à entrada e em relação ao peso, o que dá o dobro — <strong>quatro</strong>. Dois mais quatro, seis. E aí vem a pergunta boa, que é sobre o otimizador: a atualização custa por <strong>parâmetro e por passo</strong>, não por token, então ela não escala com <code>D</code> e sai da conta. Escrevo essa razão e paro. <strong>Versão de 30 segundos:</strong> "dois no forward, quatro no backward, e a atualização do otimizador não entra porque paga por passo e não por token. A conta inteira, com a atualização contabilizada e descartada com número, está em A.1."</p>
+<p><strong>Item 2 — "Como se chega em vinte tokens por parâmetro?" (A.2, ~6 min).</strong>
+A mais caro da lista. Eu monto a otimização: minimizar a perda sujeito a <code>C = 6ND</code> fixo. Substituo o <code>D</code> por <code>C/(6N)</code>, derivo em relação a <code>N</code>, igualo a zero. Sai <code>N ∝ √C</code>, e com as constantes do ajuste, <code>N ≈ √(C/120)</code> e <code>D ≈ 20N</code>. Escrevo as premissas junto, porque elas são o ponto: a forma da superfície de perda é ajustada empiricamente, e o vinte é consequência <strong>daquelas</strong> constantes, não de matemática pura. <strong>Versão de 30 segundos:</strong> "minimiza a perda com o compute fixo, substituindo <code>D</code> por <code>C/6N</code> — sai <code>N</code> proporcional à raiz de <code>C</code>, e a razão vinte cai das constantes do ajuste empírico. Está em A.2, com as três ressalvas sobre o 20:1."</p>
+<p><strong>Item 3 — "De onde vêm os dezesseis bytes?" (A.4, ~3 min).</strong>
+Barata e produz um número que impressiona. Quatro bytes de peso em fp32, quatro de gradiente, e oito dos dois momentos do Adam — quatro cada. Quatro mais quatro mais oito, dezesseis. Instancio com um bilhão de parâmetros: dezesseis gigabytes antes de processar um token. E acrescento a parte que a conta famosa <strong>não</strong> cobre: as ativações, que escalam com lote vezes contexto. <strong>Versão de 30 segundos:</strong> "peso, gradiente e os dois momentos do Adam, quatro bytes cada, dão dezesseis por parâmetro — e as ativações são por cima disso. A decomposição está em A.4."</p>
+<p><strong>Item 4 — "Se FlashAttention não muda a complexidade, como ela acelera?" (A.6, ~4 min).</strong>
+A melhor pergunta técnica que pode aparecer nesta aula. Escrevo os dois esquemas e conto <strong>acessos à memória lenta</strong>, não operações: a atenção padrão escreve e lê a matriz <code>n × n</code> várias vezes; a FlashAttention processa em blocos e nunca a materializa. Mesma complexidade em FLOPs, tráfego muito menor — e o regime é limitado por tráfego. <strong>Versão de 30 segundos:</strong> "porque o gargalo não é a conta, é o tráfego entre a memória lenta e a rápida — e ela nunca materializa a matriz de escores. A contagem de acessos está em A.6, e o A.3 da Aula 29 fecha o argumento com a intensidade aritmética."</p>
+<hr />
+<h2>Encerramento · 01:50–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 16 da Parte 1 — os três defeitos riscados com a causa, a resolução do paradoxo do <code>D/N</code>, a constatação de que a fábrica entrega um completador de texto, as três leituras com 20 s de silêncio para fotografar, e os 20 s finais de índice do apêndice nomeando o A.1.</p>
+<blockquote>
+<p>Ideia central: "Toda essa fábrica entrega uma máquina que continua texto. Amanhã a gente descobre que virar assistente custa uma fração de um por cento disso."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 12 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-11/index.html">← Aula anterior</a><a class="button" href="../aula-13/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

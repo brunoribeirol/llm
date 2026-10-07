@@ -1,0 +1,305 @@
+# Laboratório 5: Pipeline RAG completo
+
+## Slide 1 · Abertura: hoje o RAG sai do slide e vira número · 00:00–00:05
+
+Boa noite, pessoal. Semana passada eu fechei a aula prometendo uma coisa, e eu vou repetir a promessa antes de a gente abrir o notebook: hoje vocês não me entregam um sistema que responde. Vocês me entregam um sistema que sabe o quanto acerta.
+
+Deixa eu recuperar onde a gente parou. Na Aula 18 eu desenhei as nove etapas do pipeline — limpeza, chunking, embedding, índice, embedding da consulta, recuperação, reranking, aumento do prompt, geração. Na Aula 19 eu mostrei que recuperação são duas famílias que erram em consultas quase disjuntas: o denso é cego para identificador, o esparso é cego para paráfrase, e a fusão por posição resolve as duas sem calibrar peso nenhum. E eu insisti numa frase que hoje vira código: o reranking não inventa documento. O `recall` do primeiro estágio é o teto do sistema inteiro.
+
+Hoje isso tudo vira um pipeline que roda de ponta a ponta e, principalmente, duas tabelas. Seis checkpoints. Os cinco primeiros constroem; o sexto mede.
+
+> Ideia central: "Duas aulas de slide sobre recuperação. Hoje o resultado disso é uma tabela com `recall@k` de três estratégias — e a tabela é o entregável, não o chatbot."
+
+---
+
+## Slide 2 · Setup, corpus embutido e modo degradado · 00:05–00:11
+
+Antes de código, três coisas operacionais, porque elas decidem se este lab funciona na sala de vocês.
+
+Primeira: o corpus já está dentro do notebook. Dezesseis dispositivos de um regulamento acadêmico fictício — artigos, parágrafos e três editais, com identificador canônico. Ninguém precisa baixar nada para começar, e ninguém vai perder trinta minutos limpando PDF hoje. E tem uma constante no topo, `CAMINHO_CORPUS`, que hoje está em `None`: quando ela apontar para uma pasta, o notebook ingere o corpus de vocês em vez do meu. Isso é o desafio da semana, não o lab de agora.
+
+Segunda: o modelo de embedding. É o multilíngue pequeno da demo da Aula 19, roda em CPU, e é a única coisa deste lab que depende de download. Se ele não vier, o notebook cai sozinho num vetorizador léxico em `numpy` puro e avisa na tela em letra grande. Os seis checkpoints funcionam nesse modo. O que eu exijo, e isso vale nota, é que o relatório **diga** qual vetorizador produziu os números.
+
+Terceira: chave de API. É opcional. O único checkpoint que usa um modelo de linguagem é o quinto, o da resposta com citação, e ele tem modo offline com resposta extrativa. Cinco dos seis checkpoints não chamam LLM nenhum. Isso é de propósito: a parte difícil do RAG está antes da geração, e eu não quero a nota de vocês dependendo de quota de free tier.
+
+> Ideia central: "Cinco dos seis checkpoints deste lab não chamam modelo de linguagem nenhum. A parte difícil do RAG mora antes da geração — e é aí que a gente vai passar as duas horas."
+
+---
+
+## Slide 3 · O mapa: seis checkpoints e o que eu recolho · 00:11–00:15
+
+Deixa eu desenhar as duas horas, porque a pior coisa num lab é não saber onde a gente está. E eu vou apresentar cada checkpoint **pelo que a tela imprime quando ele está certo** — porque é assim que vocês vão saber que terminaram, sem me perguntar.
+
+Checkpoint 1, chunking com metadados: a tela imprime `Checkpoint 1 OK`, vinte chunks, metadado íntegro, prefixo presente.
+
+Checkpoint 2, índice e busca densa: `Checkpoint 2 OK`, vinte vetores no backend que couber, e o `Art. 42` no top-três da consulta de controle.
+
+Checkpoint 3, BM25 e fusão: `Checkpoint 3 OK`, o RRF conferindo contra um caso que eu calculei à mão, e três linhas com a posição do edital no denso e no híbrido lado a lado.
+
+Checkpoint 4, reranking: `Checkpoint 4 OK`, dez inferências, o tempo, e a tabela de posição antes e depois.
+
+Checkpoint 5, citação: `Checkpoint 5 OK`, quatro casos de citação verificados.
+
+E o Checkpoint 6 não imprime linha de OK. Ele imprime **as duas tabelas** — e é o que decide a nota deste lab.
+
+Antes do intervalo, os dois primeiros, com trinta minutos e eu circulando. Depois do intervalo, os quatro últimos em trinta e cinco minutos, e eles são curtos de propósito.
+
+O que eu recolho: o notebook executado com as saídas visíveis, duas tabelas, o arquivo das consultas rotuladas, as respostas das cinco questões-guia e a declaração de uso de IA. Uma semana.
+
+E agora a frase mais importante deste slide, e ela é a razão de eu ter escrito ela também no plano de aula: **"montei um chatbot que responde" não cumpre o critério deste lab.** Um notebook que recebe pergunta e devolve texto bonito, sem conjunto rotulado, sem tabela e sem a comparação antes e depois do reranking, fica abaixo da média por construção. Não é rigor gratuito: é literalmente o item de trinta por cento da rubrica do projeto final.
+
+> Ideia central: "O entregável de hoje é um número. Sistema que responde bonito e não tem tabela de recall vale metade — e eu prefiro dizer isso agora do que na correção."
+
+---
+
+## Slide 4 · [Demo] O RAG mínimo em nove linhas · 00:15–00:35
+
+Vinte minutos agora comigo escrevendo, e vocês só olhando.
+
+Eu vou montar o pipeline inteiro da Aula 18 em nove linhas de código. E o motivo de eu fazer isso não é mostrar que é fácil — é mostrar que é *fácil demais*, e que é justamente por caber em nove linhas que quase ninguém mede o que construiu.
+
+O número que sai desta demo é ridículo de propósito: um `recall@1` de zero vírgula cinquenta, calculado à mão sobre duas consultas. Duas linhas de código, sem framework nenhum. É o Checkpoint 6 em escala de brinquedo.
+
+*[A demonstração completa está na Parte 2 deste roteiro.]*
+
+> Ideia central: "Nove linhas e o RAG está de pé. É por caber em nove linhas que a internet está cheia de RAG que ninguém mediu."
+
+---
+
+## Slide 5 · Checkpoint 1 — Chunking com metadados · 00:35–00:48
+
+Treze minutos, e o checkpoint mais chato e mais consequente do lab.
+
+**[Projeto o critério de conclusão antes de qualquer coisa]**
+
+Quando estiver certo, a tela imprime uma linha só: `Checkpoint 1 OK`, vinte chunks, metadado íntegro, prefixo presente. E para imprimir isso, o teste vai ter conferido cinco coisas.
+
+Vinte chunks a partir dos dezesseis dispositivos — porque quatro dos artigos têm parágrafo, e parágrafo vira chunk próprio. Nenhum chunk sem o campo `dispositivo`. Nenhum `dispositivo` repetido entre chunks. Nenhum chunk acima de novecentos caracteres. E o prefixo contextual presente no `texto_para_indexar` de todos.
+
+**[Aponto as duas assinaturas com os TODOs]**
+
+O que implementar são duas funções. A `fatiar_por_dispositivo`, que recebe os dezesseis documentos e devolve vinte chunks. E a `texto_para_indexar`, que monta o prefixo contextual: regulamento, capítulo, artigo, título, e só então o texto.
+
+O ponto conceitual é um só, e eu vou dizer com todas as letras: texto e metadado moram no **mesmo dicionário**. Vi muita gente guardar os metadados numa lista paralela, indexada por posição, e aí reordenar a lista de chunks em algum lugar do pipeline. O que acontece nesse caso é a pior categoria de bug que existe: a tabela do checkpoint seis sai plausível e errada, porque o gabarito passou a apontar para o chunk vizinho.
+
+> Ideia central: "Texto e etiqueta no mesmo objeto, sempre. Metadado em lista paralela é o bug que faz a tabela sair plausível e errada."
+
+---
+
+## Slide 6 · Checkpoint 2 — Indexar e buscar por vetor · 00:48–01:05
+
+Dezessete minutos. Agora o índice.
+
+**[Projeto o critério]**
+
+A tela vai imprimir `Checkpoint 2 OK`, vinte vetores no backend que o notebook escolheu. E o teste vai ter conferido três coisas: número de vetores igual ao número de chunks, `buscar_denso` devolvendo exatamente `k` resultados em ordem **decrescente** de score com o dicionário do chunk colado em cada um, e uma consulta de controle — a paráfrase do trancamento tem de trazer o `Art. 42` no top-três.
+
+**[Aponto as três caixas empilhadas atrás da fachada única]**
+
+Duas funções: `construir_indice` e `buscar_denso`. E uma coisa que eu quero dizer antes: o notebook tenta Chroma, cai para FAISS, cai para matriz `numpy`. Com vinte chunks, os três dão o mesmo resultado, e é por isso que o que vocês implementam é a **interface**, não o banco. Escolher banco vetorial é uma decisão de escala; com vinte chunks não existe decisão de escala nenhuma.
+
+O que não é detalhe de implementação: consulta e documento têm de ser vetorizados pelo mesmo modelo, com a mesma normalização. Com vetor normalizado, produto escalar é cosseno — é por isso que o notebook normaliza na ingestão e na consulta. Se alguém reiniciar a sessão do Colab, reindexar com um vetorizador e consultar com outro, o sistema não vai reclamar. Ele vai devolver vizinho aleatório com cosseno alto e cara de convicção.
+
+E se a consulta de controle falhar, o bug quase nunca está no `buscar_denso`. Está no prefixo do CP1.
+
+> Ideia central: "Vetor normalizado faz produto escalar virar cosseno. E vetorizar consulta e documento com modelos diferentes é o bug que nunca levanta exceção."
+
+---
+
+*Intervalo · 01:05–01:15*
+
+---
+
+## Slide 7 · Checkpoint 3 — BM25 e fusão por posição · 01:15–01:24
+
+Voltando. Nove minutos, e este é o checkpoint em que a Aula 19 vira uma função de seis linhas.
+
+**[Projeto o critério, que aqui tem três linhas de saída]**
+
+A tela imprime `Checkpoint 3 OK — RRF confere no caso calculado à mão`. E abaixo, três linhas: o top-cinco do denso, o top-cinco do híbrido, e a posição do edital nos dois lado a lado. O teste exige o documento certo no top-**dois** do híbrido, em posição igual ou melhor que no denso, e confere a pontuação do caso pequeno contra um sobre sessenta e um mais um sobre sessenta e dois — que é a conta que eu fiz à mão.
+
+**[Aponto o único TODO do slide]**
+
+O BM25 vem pronto no notebook — é o mesmo da demo da semana passada, comentado linha por linha, com `k₁` e `b` como constantes visíveis. Eu não vou fazer vocês reimplementarem índice invertido hoje; não é o aprendizado do lab.
+
+O TODO é o `combinar_rrf`. Ele recebe **listas de posições** e devolve uma lista fundida, com a soma de um sobre `k` mais `rank`, `k` igual a sessenta. Nenhum score entra nessa conta. É o ponto da aula passada: apuração por colocação, não por tempo de prova.
+
+O erro que eu mais vou ver nesses nove minutos é passar a lista de *scores* onde a função espera a lista de *posições*. O resultado sai numérico, sai ordenado, e não significa nada.
+
+E a recompensa é imediata: a consulta com identificador, aquela que o denso errava no CP2 e na demo, sobe para o topo do híbrido. Sem ninguém ajustar peso nenhum.
+
+> Ideia central: "O RRF olha posição e ignora score. Quem passar score onde eu pedi posição vai ter um número bonito que não quer dizer nada."
+
+---
+
+## Slide 8 · Checkpoint 4 — Reranking e a conta de inferências · 01:24–01:32
+
+Oito minutos. O `reordenar`.
+
+**[Projeto o critério]**
+
+A tela imprime `Checkpoint 4 OK`, o número de inferências e o tempo — dez inferências, porque `k_ret` é dez. E depois, uma tabela de três colunas: posição antes, posição depois, dispositivo. Essa tabela é a única coisa deste lab que mostra o reranker trabalhando de forma direta.
+
+O teste verifica uma coisa aparentemente boba e que é a lição do checkpoint: a saída é uma **permutação** da entrada. Mesmos dez documentos, ordem diferente. Nenhum documento novo apareceu, nenhum sumiu.
+
+**[Aponto o rodapé com a conta de escala]**
+
+Recebe a consulta e os dez candidatos do híbrido, monta os dez pares consulta-documento, chama o cross-encoder, ordena pelo score dele. Dez inferências por consulta, e o notebook imprime o número — porque essa conta é o argumento inteiro da arquitetura de dois estágios. Num acervo de dez mil chunks, rodar o cross-encoder em tudo são dez mil inferências por pergunta.
+
+E se o cross-encoder não baixar — ele é o download maior do lab, vai acontecer com alguém — o notebook usa um reranker de brinquedo por sobreposição de termos, rotulado como tal na saída. A tabela do checkpoint seis continua sendo uma comparação honesta antes e depois, desde que o relatório diga qual reranker rodou. Reportar o número sem dizer o que produziu o número é o que eu não aceito.
+
+> Ideia central: "A saída do reranker é uma permutação da entrada. Se apareceu documento novo ali, vocês escreveram um buscador, não um reordenador."
+
+---
+
+## Slide 9 · Checkpoint 5 — Responder citando as fontes · 01:32–01:40
+
+Oito minutos, e este é o único checkpoint que fala com um modelo de linguagem — quando há chave.
+
+**[Projeto o critério]**
+
+A tela imprime `Checkpoint 5 OK — 4 casos de citação verificados`, com o motor entre parênteses, e depois a resposta gerada mais a linha `citações válidas: True`. O teste confere que o prompt leva os três chunks finais com identificador e texto, que ele explica o formato da citação, e que a `validar_citacoes` aprova a resposta boa e reprova as duas ruins.
+
+**[Aponto os três cartões de resposta contrastados]**
+
+Duas funções. O `montar_prompt`, que empacota os três chunks finais com os identificadores deles e as regras de citação. E o `validar_citacoes`, que é a parte que interessa: uma regex que extrai todo `[fonte: …]` da resposta e confere se cada identificador citado estava mesmo no contexto entregue.
+
+Porque existem três coisas diferentes acontecendo quando um sistema cita, e a turma costuma tratar as três como uma. Citar um documento que estava no contexto: correto. Citar um documento que existe no corpus mas não estava no contexto: o modelo respondeu de memória, e a citação é enfeite. Citar um identificador que não existe em lugar nenhum: o modelo inventou a etiqueta.
+
+E quem não tem chave usa o modo offline, que monta a resposta a partir das frases recuperadas e cita normalmente. É um gerador de baixa fluência e de citação perfeita — e serve, porque o que está sendo avaliado aqui é a validação, não a prosa.
+
+> Ideia central: "Citar um documento que existe mas não estava no contexto é o modelo respondendo de memória com aparência de fonte. Isso é pior que não citar."
+
+---
+
+## Slide 10 · Checkpoint 6 — As dezoito consultas e a tabela · 01:40–01:50
+
+Dez minutos, e é o checkpoint que decide a nota deste lab.
+
+**[Projeto o critério, que aqui não é uma linha de OK]**
+
+Este checkpoint não imprime `Checkpoint 6 OK`. O critério dele é que **existam duas tabelas impressas pela função do notebook**, com cabeçalho declarando `|Q| = 18`, o vetorizador, o backend, o `k_rrf`, o `k_ret` e o reranker. E, embaixo da segunda tabela, três linhas de leitura que o próprio notebook escreve: o delta do `recall@3` marcado como **EMPÍRICO**, a pergunta `recall@10 idêntico?` marcada como **GARANTIDO**, e o aviso de método de que, com dezoito consultas, uma consulta vale cinco vírgula seis pontos percentuais.
+
+O notebook tem dezoito consultas rotuladas embutidas, no formato pergunta e ponto-e-vírgula e o dispositivo relevante. Doze paráfrases puras, três com identificador, três mistas — e cada uma com exatamente um dispositivo certo. Quem fez o dever da Aula 19 troca ou completa com as consultas do próprio corpus. E a composição não é acidental: é ela que faz as três estratégias se separarem na tabela.
+
+Vocês implementam `recall_em_k`, `precision_em_k` e `mrr` — três funções de duas linhas cada — e rodam a avaliação nas quatro configurações.
+
+**[Aponto a coluna do `recall@10` na Tabela 2]**
+
+E aí eu quero comentar a segunda tabela antes de vocês verem, porque as duas colunas dela se leem de formas diferentes.
+
+O `recall@10` fica **exatamente igual**, e isso é garantido — não é sorte, não é bug de medição. O conjunto dos dez candidatos é o mesmo antes e depois; o reranker só mudou a ordem dentro dele. É a frase da semana passada aparecendo como número na tabela de vocês. Se o `recall@10` de alguém mudou, o pipeline mudou em outro lugar, e é isso que eu vou procurar na correção.
+
+O `recall@3` muda, e a direção é empírica. Com o cross-encoder de verdade ele sobe. Com o reranker de brinquedo — quem não conseguiu baixar o modelo — ele pode **cair**, porque ordenar por sobreposição de termos é pior que a ordem que o RRF já tinha entregue. E isso não é erro de vocês: é um reranker ruim fazendo exatamente o que um reranker ruim faz. Reranker ruim estraga a vitrine. Nenhum reranker mexe no estoque.
+
+E tem uma terceira saída que sai de graça e que eu quero que vocês leiam: a tabela quebrada por tipo de consulta. Olhem a linha das consultas com identificador. O `recall@1` do denso perto de zero, o do BM25 perto de um. Aquilo é a Aula 19 inteira, medida por vocês, no corpus de vocês.
+
+> Ideia central: "O `recall@3` muda e o `recall@10` fica idêntico — e a segunda coluna é garantida. Essa linha da tabela é 'o reranking não inventa documento' escrito em número, por vocês."
+
+---
+
+## Slide 11 · Recolhimento e ponte para a Aula 21 · 01:50–02:00
+
+Deixa eu fechar e mandar vocês para casa.
+
+O inventário do que existe agora e não existia há duas horas: um pipeline de recuperação com chunking com metadados, índice vetorial, BM25, fusão por posição, reranking de segundo estágio, resposta com citação validada por código, e um conjunto rotulado de dezoito consultas com o `recall@k` medido nas três estratégias, antes e depois do reranking. Isso é um sistema de recuperação avaliado. Um mês atrás vocês não tinham nem o vocabulário para descrever isso.
+
+A entrega: notebook executado com saída visível, as duas tabelas com `k` e o número de consultas declarados, o arquivo das consultas rotuladas, as cinco questões-guia e a declaração de uso de IA. Uma semana.
+
+**[Projeto o índice do apêndice por 20 s]**
+
+Três itens, e eu nomeio dois. O **A.1** tem as três métricas calculadas por extenso sobre as dezoito consultas — é o item para conferir se a implementação de vocês está fazendo a conta que vocês pensam que ela faz. E o **A.3** responde à pergunta que eu quero que apareça no relatório: quantas consultas eu precisaria para essa diferença não ser ruído. Quem tiver `Δ recall@3` pequeno vai precisar dele para escrever o relatório honestamente.
+
+E duas coisas para guardar. A primeira é que este código não é descartável: a função `buscar` que vocês escreveram hoje é literalmente a ferramenta que o agente do Lab 7 vai chamar, na Aula 25. É por isso que o notebook salva o índice e isola a busca num módulo em vez de deixar tudo solto em célula. Guardem esse arquivo.
+
+A segunda é a ponte. Hoje o sistema de vocês é um cano: entra pergunta, sai resposta, sempre pelo mesmo caminho, sempre buscando. O sistema não decide nada — quem decidiu buscar foi vocês, escrevendo a chamada. Na próxima aula a gente entrega essa decisão para o modelo: ele olha as ferramentas disponíveis, escolhe uma, escreve uma chamada estruturada em JSON e pede para o programa executar. E aí duas perguntas ficam interessantes de um jeito novo: quem executa o quê, e o que acontece quando o nome de uma ferramenta está mal escolhido. Aula 21, Tool calling e Model Context Protocol.
+
+> Ideia central: "Hoje vocês construíram um cano que sempre busca. Semana que vem o modelo passa a decidir se busca — e essa é a primeira aula da parte de agentes."
+
+---
+
+## Parte 2 — Demonstração guiada
+
+Vinte minutos, live coding, corpus embutido, sem chave. O objetivo não é adiantar o Checkpoint 1: é fazer a turma ver o pipeline mínimo funcionando e falhando no mesmo minuto, para que os seis checkpoints sejam vividos como consertos e não como tarefas. Escrevo em células novas ao fim do notebook e apago antes de soltar a sala.
+
+Insumos da véspera: notebook rodado de ponta a ponta no Colab da oferta com os tempos anotados, o cache do modelo de embedding num `.zip` no pendrive, e a saída completa salva em texto para o caso de a rede morrer no meio.
+
+**1.** **[Imprimo três dos dezesseis dispositivos do corpus embutido]** Este é o corpus. Regulamento acadêmico fictício — eu inventei, não é de instituição nenhuma — com dezesseis dispositivos: artigos, parágrafos e três editais. Olha a estrutura de cada um: fonte, capítulo, dispositivo, título, texto. Esses cinco campos são o que vai virar metadado no checkpoint um, e é o que vai permitir citar a fonte no checkpoint cinco.
+
+**2.** **[Fatio de forma ingênua: um chunk por dispositivo, só o campo `texto`]** Agora o chunking mais ingênuo possível: um chunk por dispositivo, e eu jogo fora tudo menos o texto. Dezesseis strings. Guardem essa decisão, porque eu vou voltar nela em cinco minutos e ela vai custar caro.
+
+**3.** **[Vetorizo os dezesseis chunks, imprimo o shape da matriz e as normas]** Vetorizando. Olha o shape: dezesseis por trezentos e oitenta e quatro. E olha as normas — todas um, porque eu pedi vetores normalizados. Com norma um, produto escalar é cosseno, e a busca vira uma multiplicação de matriz. Três linhas de código e o índice está de pé.
+
+**4.** **[Consulto com uma paráfrase e imprimo o top-3 com cosseno]** Primeira consulta: "posso desistir de uma matéria depois do início das aulas?". Nenhuma dessas palavras está no artigo — o regulamento fala de trancamento de disciplina, não de desistir de matéria. Olha o top-três: o `Art. 42` em primeiro. A busca por significado funciona, e funciona bonito. Se eu parasse aqui, eu tinha um RAG e uma sensação ótima.
+
+**5.** **[Consulto com um identificador e imprimo o top-3]** Segunda consulta: "o que diz o edital PRG-2025-014?". Olha o resultado. Ele me trouxe *um* edital, com cosseno alto, e é o errado. E notem o que não aconteceu: nenhum erro, nenhum aviso, nenhuma incerteza reportada. É o ponto cego da semana passada, agora no código, com o número na tela.
+
+**6.** **[Ligo o prefixo contextual nos mesmos chunks, reindexo e repito a consulta 5]** Deixa eu tentar consertar do jeito mais barato. Volto ao passo dois e ponho o prefixo contextual: regulamento, capítulo, dispositivo, título, e depois o texto. Mesmo modelo, mesmo índice, reindexado. Repetindo a consulta do edital: melhorou — subiu de posição. E não resolveu. Chunking contextual ajuda, e não substitui casamento de termo exato. Isso é o Conceito 2 da Aula 19 aparecendo como diferença mensurável, não como opinião.
+
+**7.** **[Escrevo o `recall@1` das duas consultas à mão, em duas linhas]** Agora a coisa mais importante desses vinte minutos, e ela cabe em duas linhas. Eu tenho duas consultas e eu sei a resposta certa das duas. Então eu posso escrever: acertou a primeira, errou a segunda, `recall@1` igual a um sobre dois, zero e cinco. Pronto. Isso é uma avaliação de recuperação. Não tem framework, não tem biblioteca, não tem nada — tem gabarito e uma divisão. O checkpoint seis é isso com dezoito consultas em vez de duas. E já dá para dizer o incômodo: com duas consultas, cada uma vale cinquenta pontos percentuais. Com dezoito, cinco e seis.
+
+**8.** **[Apago as células da demo e projeto o mapa dos seis checkpoints]** E eu paro aqui. O que ficou de fora: BM25, a fusão, o reranking, a citação validada e o conjunto de dezoito consultas. Ou seja — ficou de fora exatamente o lab. Estas nove linhas são o RAG de tutorial de internet, e a diferença entre elas e o que vocês vão entregar hoje é a diferença entre um sistema e um sistema medido.
+
+---
+
+## Parte 3 — Hands-on
+
+Seis checkpoints. Eu circulo olhando tela e pedindo `print`, não esperando pergunta — em RAG o aluno não sabe que está errado, porque o sistema sempre devolve alguma coisa com cosseno alto. A pergunta que resolve metade dos casos é sempre a mesma: qual foi o texto que você vetorizou, exatamente?
+
+**1.** **[Lanço o Checkpoint 1 — chunking com metadados, 00:35–00:48]** Treze minutos. O critério é a linha `Checkpoint 1 OK — 20 chunks, metadado íntegro, prefixo presente`. As duas funções: `fatiar_por_dispositivo` e `texto_para_indexar`. Vinte chunks a partir dos dezesseis dispositivos, porque parágrafo vira chunk próprio. Cada chunk é um dicionário com texto e metadado juntos. E antes de rodar o teste, a célula de inspeção visual: três chunks impressos por extenso e o histograma de tamanhos.
+
+*Como recolher:* eu passo de mesa em mesa e peço para ver o `print` de um chunk, não pergunto se está funcionando. Aos 00:45 pergunto quantos têm `Checkpoint 1 OK` por mão levantada. Se for menos de dois terços, resolvo na tela só a parte do parágrafo, que é onde a lógica mora. Aos 00:48 libero a solução deste checkpoint, porque o CP2 não existe sem ele.
+
+**2.** **[Lanço o Checkpoint 2 — índice e retrieval denso, 00:48–01:05]** Dezessete minutos. O critério é `Checkpoint 2 OK` com o número de vetores e o backend, mais o `Art. 42` no top-três da consulta de controle. `construir_indice` e `buscar_denso`. O notebook já resolveu qual backend usar — Chroma, FAISS ou matriz — e o que vocês implementam é a interface. Vetorizar com `texto_para_indexar` de cada chunk, normalizar, guardar. E na busca: vetorizar a consulta com o **mesmo** vetorizador, buscar os `k` mais próximos, devolver o chunk inteiro com o metadado colado e o score.
+
+*Como recolher:* a consulta de controle do teste — a paráfrase do trancamento tem de trazer o `Art. 42` no top-três. Se não trouxer, a primeira coisa que eu peço não é o `buscar_denso`: é o `print` do que foi vetorizado. Aos 01:00, mão levantada. Aos 01:05 libero a solução e mando para o intervalo.
+
+**3.** **[Lanço o Checkpoint 3 — BM25 e fusão por posição, 01:15–01:24]** Nove minutos, um TODO só. O critério é `Checkpoint 3 OK — RRF confere no caso calculado à mão` mais as três linhas de posição. O BM25 está pronto e comentado; o que é de vocês é o `combinar_rrf`. Entra uma lista de rankings, e cada ranking é uma lista de **posições** ordenadas. Sai uma lista fundida pela soma de um sobre sessenta mais a posição.
+
+*Como recolher:* o teste do caso pequeno, que eu calculei à mão e está comentado no notebook. E o prêmio: a consulta do edital, que estava errada na demo e no CP2, agora vem em primeiro. Eu peço para alguém ler o resultado em voz alta — esse é o momento de maior retorno do lab e eu uso ele para empurrar a turma para o CP4. Se aparecer a pergunta do sessenta, resposta curta da Parte 4 e seguir.
+
+**4.** **[Lanço o Checkpoint 4 — reranking, 01:24–01:32]** Oito minutos. O critério é `Checkpoint 4 OK` com dez inferências e o tempo, mais a tabela de posição antes e depois. O `reordenar` monta os pares consulta-documento com os dez candidatos, chama o cross-encoder, ordena.
+
+*Como recolher:* a verificação de permutação — mesmos dez documentos, ordem diferente. Se apareceu documento novo na saída, o aluno escreveu um buscador. Pergunto em voz alta quantas inferências seriam num acervo de dez mil chunks e deixo a sala responder. Quem estiver no reranker de brinquedo por falha de download: registrar isso no notebook, em texto, agora — não na hora de escrever o relatório — e saber de antemão que o delta do CP6 pode vir negativo.
+
+**5.** **[Lanço o Checkpoint 5 — responder citando as fontes, 01:32–01:40]** Oito minutos. O critério é `Checkpoint 5 OK — 4 casos de citação verificados` mais a resposta impressa. `montar_prompt` e `validar_citacoes`. O prompt leva os três chunks finais com identificador e as regras de citação; a validação extrai os `[fonte: …]` da resposta por regex e confere contra o contexto. Quem tem chave usa API, com `getpass`; quem não tem usa a resposta extrativa, que é o padrão.
+
+*Como recolher:* os quatro casos de teste embutidos — resposta boa, resposta que cita fora do contexto, resposta que cita identificador inexistente. A função tem de aprovar a boa e reprovar as ruins. Se o tempo estourou, este é o checkpoint que vai para casa, e eu anuncio isso em voz alta e mando a sala inteira para o CP6.
+
+**6.** **[Lanço o Checkpoint 6 — conjunto rotulado e as duas tabelas, 01:40–01:50]** Dez minutos, e o checkpoint que decide a nota. O critério não é linha de OK: são as **duas tabelas impressas pela função do notebook**, com `|Q|`, `k`, vetorizador, backend e reranker no cabeçalho, mais as três linhas de leitura embaixo da Tabela 2. Três funções curtas — `recall_em_k`, `precision_em_k`, `mrr` — e a chamada do `avaliar` nas quatro configurações. Quem trouxe as consultas do próprio corpus troca as minhas pelas suas.
+
+*Como recolher:* as duas tabelas impressas, com `|Q|`, `k`, vetorizador e reranker declarados. Aos 01:48 eu peço para duas ou três pessoas lerem o `recall@3` do híbrido em voz alta e anoto a variação — e se a variação for grande, nomeio que a pergunta "quantas consultas eu precisaria" tem resposta escrita no A.3. E fecho com a pergunta que eu quero na cabeça deles: por que a coluna do `recall@10` não mudou? Quem responde "porque o reranker só reordena o que chegou" fechou o lab e fechou a Aula 19.
+
+---
+
+## Parte 4 — Apêndice: se perguntarem
+
+Em laboratório eu **não conduzo derivação no quadro** — o tempo é do teclado. O que esta parte traz são as respostas de trinta segundos, com o custo em minutos de fazer a versão longa caso eu decida pagar, e o que fazer quando a pergunta é boa demais para despachar.
+
+**Item 1 — "Por que o `recall@10` fica exatamente igual? Isso não é bug de medição?" (A.2, 30 s · 4 min no quadro).**
+A pergunta mais provável do lab, e ela vem da tabela. **Resposta curta:** "porque os dez candidatos são os mesmos antes e depois — o reranker só troca a ordem dentro do conjunto. `recall@10` só olha *quem está* no conjunto, não *em que posição*. Então a coluna é uma identidade, não uma medição." Se insistirem, a demonstração em três linhas de inclusão de conjuntos está em **A.4 da Aula 19**, e a leitura da tabela deles está em **A.2**. Se eu tiver quatro minutos e a sala estiver adiantada, vale escrever no quadro as três linhas de inclusão — é a única derivação deste lab que caberia ao vivo.
+
+**Item 2 — "Meu `Δ recall@3` deu negativo. O que eu errei?" (A.2, 30 s).**
+Provável em quem caiu no reranker de brinquedo. **Resposta curta:** "provavelmente nada. Ordenar por sobreposição de termos é pior que a ordem que o RRF já tinha entregue, então o reranker de brinquedo *piora* a vitrine. Antes de mexer no código: confira se o `recall@10` continua idêntico. Se estiver idêntico, o pipeline está certo e o reranker é que é ruim — isso é resultado, e vai para o relatório com o nome do reranker ao lado." A conta da decomposição do delta em consultas que subiram e consultas que desceram está em **A.2**.
+
+**Item 3 — "Com dezoito consultas, essa diferença de zero vírgula zero cinco significa alguma coisa?" (A.3, 30 s · 5 min no quadro).**
+A pergunta que eu **quero** que apareça, porque é a que faz o relatório ficar honesto — e o notebook já a provoca, imprimindo o aviso embaixo da Tabela 2. **Resposta curta:** "não. Com dezoito consultas cada uma vale cinco vírgula seis pontos percentuais, então zero vírgula zero cinco é *uma* consulta mudando de lado. O A.3 tem o erro-padrão, o número mínimo de consultas que precisariam mudar para a diferença não ser acaso, e quantas consultas seriam necessárias para resolver cinco pontos percentuais." Se sobrar tempo no fim, cinco minutos no quadro com a conta do pareamento resolvem essa pergunta para o resto do curso — mas em lab isso quase nunca sobra, e é por isso que está escrito.
+
+**Item 4 — "De onde vem o sessenta do RRF?" (Aula 19, 20 s).**
+**Resposta curta:** "é uma constante de amortecimento: ela decide o quanto o primeiro lugar vale a mais que o segundo. Com sessenta, a diferença entre as primeiras posições fica suave, e o que sobrevive à fusão é aparecer bem colocado nos *dois* rankings em vez de aparecer em primeiro num só." A derivação, com o efeito de `k` sobre o peso relativo das posições, está no apêndice da Aula 19 e **não** se conduz aqui.
+
+## Ordem de sacrifício
+
+Se o lab atrasar: o **CP5 vai para casa** primeiro — ele é o único que depende de chave e o único cuja nota é 10%. Depois, corto os passos 1 e 2 da demo (o corpus e o chunking ingênuo podem ser lidos do slide). **Não corto** o passo 5 nem o passo 7 da demo: o passo 5 é o ponto cego aparecendo no código, e o passo 7 é o `recall@1` à mão, que é a semente conceitual do CP6. E **não corto o CP6 em nenhuma hipótese** — sem ele não existe entregável, e 35% da nota deste lab mora nas duas tabelas.
+
+---
+
+## Encerramento · 01:50–02:00
+
+O encerramento está redigido como fala no Slide 11 da Parte 1 — o inventário do pipeline construído e medido, o checklist de entrega com prazo de uma semana, os vinte segundos de índice do apêndice nomeando o A.1 e o A.3, o aviso de guardar o módulo de busca porque o Lab 7 o consome como ferramenta do agente, e a ponte para a Aula 21 pela pergunta de quem decide buscar.
+
+> Ideia central: "Vocês têm um sistema de recuperação medido, com tabela e gabarito. E o arquivo da busca não é descartável: na Aula 25 ele vira uma das ferramentas do agente de vocês."
+
+---
+
+*Roteiro do Instrutor · Aula 20 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR*

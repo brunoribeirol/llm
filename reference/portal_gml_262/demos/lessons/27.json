@@ -1,0 +1,236 @@
+{
+  "id": 27,
+  "title": "Avaliação: do acerto aparente à evidência",
+  "subtitle": "Calcule métricas, acordo, kappa e viés de posição em pequenos conjuntos explícitos. O juiz é uma função sintética inspecionável, não uma chamada de LLM.",
+  "nodes": [
+    "Camadas",
+    "Amostra",
+    "Rubrica",
+    "Juiz",
+    "Calibração",
+    "Decisão"
+  ],
+  "controls": [
+    {
+      "key": "wording",
+      "label": "Redação da resposta lexical",
+      "type": "select",
+      "value": "paraphrase",
+      "options": [
+        {"value": "paraphrase", "label": "Paráfrase correta"},
+        {"value": "literal", "label": "Cópia literal"},
+        {"value": "wrong", "label": "Número errado, palavras parecidas"}
+      ]
+    },
+    {
+      "key": "tp",
+      "label": "Humano aprova / juiz aprova",
+      "type": "range",
+      "min": 0,
+      "max": 90,
+      "step": 1,
+      "value": 82
+    },
+    {
+      "key": "tn",
+      "label": "Humano reprova / juiz reprova",
+      "type": "range",
+      "min": 0,
+      "max": 90,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "fp",
+      "label": "Humano reprova / juiz aprova",
+      "type": "range",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "value": 8
+    },
+    {
+      "key": "fn",
+      "label": "Humano aprova / juiz reprova",
+      "type": "range",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "value": 8
+    },
+    {
+      "key": "bias",
+      "label": "Bônus para a primeira resposta",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "value": 0.2
+    },
+    {
+      "key": "verbosity",
+      "label": "Bônus por comprimento",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "value": 0.15
+    }
+  ],
+  "steps": [
+    {
+      "title": "Avaliar modelo ou sistema?",
+      "view": "layers",
+      "explanation": "O usuário experimenta uma cadeia que inclui dados, recuperação, prompt, modelo, ferramentas e interface. Uma falha na camada anterior pode impedir um modelo competente de responder corretamente.",
+      "action": "Examine as falhas ilustradas e atribua cada uma à menor camada que a explica.",
+      "board": "qual falha? qual camada? qual evidência?",
+      "speech": "Uma resposta errada não diz qual peça deve mudar. Antes de trocar o modelo, olhamos a fonte e a recuperação. A avaliação precisa acompanhar as fronteiras do sistema.",
+      "question": "Uma classificação geral de modelos mede a qualidade do seu retriever?",
+      "answer": "Não. É necessário avaliar o componente e o sistema nas entradas do domínio.",
+      "focus": 0
+    },
+    {
+      "title": "O denominador acompanha a taxa",
+      "view": "sample",
+      "explanation": "Uma taxa só é interpretável com o tamanho e a composição da amostra. Aqui as quatro contagens definem um conjunto de julgamentos binários que pode ser inspecionado por completo.",
+      "action": "Altere as contagens e acompanhe n e a proporção de aprovações humanas.",
+      "board": "n = TP + TN + FP + FN",
+      "speech": "Oitenta por cento em cinco casos tem significado diferente de oitenta por cento em quinhentos. Também precisamos saber quais casos foram escolhidos. Contagem, distribuição e protocolo vêm junto da taxa.",
+      "question": "Se todas as contagens forem zero, qual é a acurácia?",
+      "answer": "Não é definida. Não há observações que permitam calcular a proporção.",
+      "focus": 0
+    },
+    {
+      "title": "A matriz de confusão",
+      "view": "confusion",
+      "explanation": "Linhas representam o humano e colunas representam o juiz. Falsos positivos aprovam respostas que o humano reprovou; falsos negativos fazem o inverso.",
+      "action": "Aumente falsos positivos e localize exatamente a célula que muda.",
+      "board": "FP: juiz aprova, humano reprova",
+      "speech": "Leiam os eixos antes de interpretar o número. Trocar o significado das linhas altera o diagnóstico. A matriz permite separar um juiz permissivo de um juiz excessivamente severo.",
+      "question": "Por que acordo sozinho pode esconder o tipo de erro?",
+      "answer": "Porque soma coincidências sem separar aprovações indevidas e reprovações indevidas.",
+      "focus": 1
+    },
+    {
+      "title": "Acordo observado e esperado",
+      "view": "agreement",
+      "explanation": "O acordo observado conta a diagonal da matriz. O acordo esperado usa as marginais e estima coincidência sob independência entre os rótulos dos dois avaliadores.",
+      "action": "Concentre as contagens na célula de aprovação conjunta e compare p observado e p esperado.",
+      "board": "pₒ=(TP+TN)/n; pₑ=pH+·pJ+ + pH−·pJ−",
+      "speech": "Se quase todo mundo recebe aprovado, dois avaliadores podem concordar bastante só por usar esse rótulo com frequência. As marginais quantificam esse efeito. É essa referência que o kappa desconta.",
+      "question": "Acordo alto implica um instrumento discriminativo?",
+      "answer": "Não. Em dados muito desbalanceados, boa parte pode ser explicada pela prevalência dos rótulos.",
+      "focus": 1
+    },
+    {
+      "title": "Kappa e seu caso indefinido",
+      "view": "kappa",
+      "explanation": "Kappa é (p observado menos p esperado) dividido por um menos p esperado. Quando o denominador é zero, o coeficiente é indefinido e não deve ser apresentado como perfeito.",
+      "action": "Use 82, 2, 8 e 8 e depois uma matriz com somente aprovações conjuntas.",
+      "board": "κ = (pₒ−pₑ)/(1−pₑ)",
+      "speech": "Com a configuração inicial temos oitenta e quatro por cento de acordo. O desconto pelo acaso deixa kappa perto de zero vírgula onze. Isso não contradiz o acordo; responde a outra pergunta.",
+      "question": "Por que uma matriz com apenas um rótulo pode impedir o cálculo?",
+      "answer": "Porque as marginais podem produzir p esperado igual a um, zerando o denominador.",
+      "focus": 2
+    },
+    {
+      "title": "Uma rubrica precisa distinguir critérios",
+      "view": "rubric",
+      "explanation": "Correção, fundamentação e atendimento à pergunta são critérios diferentes. Citar o artigo certo sem responder ao que foi perguntado pode passar numa rubrica mal escrita.",
+      "action": "Compare as duas respostas ilustradas e indique qual critério diferencia as notas.",
+      "board": "correto + fundamentado + responde à pergunta",
+      "speech": "Uma nota só é útil se sabemos o que ela mede. Se o critério diz apenas possui citação, uma resposta vazia pode passar. Precisamos testar a redação da rubrica em casos de desacordo.",
+      "question": "Por que revisar a rubrica antes de trocar o juiz?",
+      "answer": "Porque o avaliador pode estar aplicando corretamente um critério que mede a coisa errada.",
+      "focus": 2
+    },
+    {
+      "title": "Pointwise e pairwise",
+      "view": "pairwise",
+      "explanation": "Uma rubrica atribui nota por critério; uma comparação pairwise ordena duas saídas. Vencer uma alternativa fraca não demonstra que a resposta alcançou um nível aceitável.",
+      "action": "Observe notas absolutas e vencedores para os mesmos pares sintéticos.",
+      "board": "melhor que B ≠ atende ao requisito",
+      "speech": "Comparar pode ser mais fácil que pontuar. Mas as perguntas não são equivalentes. Um sistema pode ganhar todas as disputas contra um adversário ruim e ainda reprovar no critério mínimo.",
+      "question": "Qual instrumento responde se a qualidade é suficiente?",
+      "answer": "Uma rubrica com limiares e critérios ligados ao uso, além da comparação relativa.",
+      "focus": 3
+    },
+    {
+      "title": "O viés da primeira posição",
+      "view": "position",
+      "explanation": "O juiz sintético soma qualidade aparente e bônus de posição. Julgar nas ordens A-B e B-A revela pares cujo vencedor depende da apresentação.",
+      "action": "Aumente o bônus para a primeira resposta e conte inversões.",
+      "board": "inversão = vencedor(A,B) ≠ vencedor(B,A)",
+      "speech": "Mantemos os textos fixos e só trocamos a ordem. Assim isolamos o mecanismo de posição. O resultado é da função sintética, não uma taxa medida em um produto real.",
+      "question": "Uma inversão significa que a qualidade real da resposta mudou?",
+      "answer": "Não. Mudou a decisão do avaliador diante da ordem de apresentação.",
+      "focus": 3
+    },
+    {
+      "title": "Verbosidade e plausibilidade",
+      "view": "verbosity",
+      "explanation": "A função sintética também adiciona um bônus por comprimento. Respostas longas e plausíveis podem vencer mesmo quando o rótulo humano indica uma alternativa factual curta.",
+      "action": "Aumente o bônus de comprimento e compare o vencedor com o rótulo humano.",
+      "board": "comprimento ≠ correção; plausibilidade ≠ evidência",
+      "speech": "O juiz pode premiar a aparência de completude. Uma fonte externa permite verificar o fato. Controlar comprimento ajuda a investigar o viés, mas não substitui a conferência factual.",
+      "question": "Eliminar viés de posição garante acordo com o humano?",
+      "answer": "Não. Pode permanecer viés de comprimento, preferência de estilo ou erro de verificação factual.",
+      "focus": 4
+    },
+    {
+      "title": "Dupla ordem e cobertura",
+      "view": "protocol",
+      "explanation": "O protocolo ilustrado mantém pares estáveis e transforma inversões em empates. Ele dobra julgamentos e reduz cobertura, sem corrigir erros estáveis que continuam contrariando o humano.",
+      "action": "Aumente o bônus de posição e acompanhe cobertura e número de julgamentos.",
+      "board": "cobertura = 1−taxa de inversão",
+      "speech": "Existe um preço para o protocolo. Descartamos justamente alguns pares difíceis. Depois precisamos olhar também os erros que sobreviveram às duas ordens.",
+      "question": "Cobertura baixa pode acompanhar alto acordo nos pares restantes?",
+      "answer": "Sim. Por isso acordo e cobertura precisam ser reportados juntos.",
+      "focus": 4
+    },
+    {
+      "title": "Factualidade por afirmação",
+      "view": "claims",
+      "explanation": "Uma resposta pode conter várias afirmações com suportes diferentes. Decompor o texto permite contar afirmações sustentadas e localizar o que foi inventado ou omitido.",
+      "action": "Leia as três afirmações e reconstrua a fração de sustentação.",
+      "board": "precisão factual = afirmações apoiadas / verificadas",
+      "speech": "Uma citação no fim do parágrafo não comprova cada frase. Separamos unidades verificáveis e buscamos suporte para cada uma. A ausência de uma informação pedida exige ainda um critério de cobertura.",
+      "question": "Boa precisão factual garante resposta completa?",
+      "answer": "Não. Um texto pode afirmar pouco e ser inteiramente correto, mas omitir partes essenciais da pergunta.",
+      "focus": 5
+    },
+    {
+      "title": "A incerteza acompanha o acordo",
+      "view": "uncertainty",
+      "explanation": "Uma proporção observada em poucos casos possui grande incerteza amostral. O intervalo de Wilson de 95% mostrado aqui usa a contagem de acordos e assume casos independentes representativos; não corrige viés do conjunto nem mede a incerteza de kappa.",
+      "action": "Multiplique as quatro contagens aproximadamente pelo mesmo fator e compare o acordo com a largura do intervalo.",
+      "board": "estimativa pontual + n + intervalo + hipóteses da amostra",
+      "speech": "O acordo continua parecido quando replicamos as proporções. O que muda é a precisão da estimativa sob as hipóteses declaradas. Copiar literalmente os mesmos casos não produz independência e não justifica estreitar o intervalo numa avaliação real.",
+      "question": "Um intervalo estreito elimina o problema de um conjunto enviesado?",
+      "answer": "Não. Ele descreve incerteza amostral sob um modelo; não garante representatividade, referências corretas ou ausência de contaminação.",
+      "focus": 4
+    },
+    {
+      "title": "Sobreposição lexical não é factualidade",
+      "view": "lexical",
+      "explanation": "A visualização calcula precisão e recall de unigramas com contagens limitadas pela referência. Ela também mostra BLEU-1 com penalidade de comprimento e ROUGE-1 recall, deixando explícito que não se trata do BLEU de quatro ordens nem de uma medida de equivalência semântica.",
+      "action": "Alterne paráfrase correta, cópia literal e número errado e compare os scores com a correção factual.",
+      "board": "precisão lexical = matches / candidato; recall lexical = matches / referência",
+      "speech": "Uma paráfrase pode trocar quase todas as palavras e preservar a resposta. Um número errado pode trocar uma palavra só e destruir o fato principal. É por isso que precisamos escolher a métrica de acordo com aquilo que a tarefa exige.",
+      "question": "Por que a resposta com número errado pode ter score lexical maior que a paráfrase correta?",
+      "answer": "Porque a métrica conta sobreposição de unidades de texto, sem atribuir ao número a importância factual que ele tem na pergunta.",
+      "focus": 5
+    },
+    {
+      "title": "Escolher com evidência e restrições",
+      "view": "decision",
+      "explanation": "A escolha de sistema combina qualidade no domínio, incerteza, custo e latência. Métricas de sobreposição lexical e rankings gerais não substituem a avaliação do objetivo do usuário.",
+      "action": "Compare o cartão de avaliação com o cartão de restrições e formule uma decisão condicionada.",
+      "board": "qualidade + n + protocolo + custo + latência",
+      "speech": "Quero uma decisão que outra equipe consiga revisar. Mostrem casos, denominadores e limites do instrumento. Se o resultado depende do juiz, mostrem também como ele foi calibrado.",
+      "question": "Qual dado precisa acompanhar uma nota produzida por juiz automático?",
+      "answer": "Rubrica, modelo ou regra do juiz, protocolo, conjunto e tamanho da amostra, calibração e limitações.",
+      "focus": 5
+    }
+  ]
+}

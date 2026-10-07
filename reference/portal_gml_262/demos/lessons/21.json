@@ -1,0 +1,225 @@
+{
+  "id": 21,
+  "title": "Ferramentas e MCP: do texto à execução",
+  "references": [
+    {"title": "MCP — arquitetura (especificação 2025-11-25)", "url": "https://modelcontextprotocol.io/specification/2025-11-25/architecture"},
+    {"title": "MCP — ciclo de vida e negociação", "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle"}
+  ],
+  "subtitle": "Siga uma chamada de calculadora, valide o contrato e conecte aplicações a servidores de contexto. A seleção do modelo é roteirizada; a aritmética é calculada no navegador.",
+  "nodes": [
+    "Intenção",
+    "Contrato",
+    "Chamada",
+    "Host",
+    "Resultado",
+    "Protocolo"
+  ],
+  "controls": [
+    {
+      "key": "amount",
+      "label": "Valor da compra",
+      "type": "range",
+      "min": 100,
+      "max": 1000,
+      "step": 20,
+      "value": 400
+    },
+    {
+      "key": "percent",
+      "label": "Desconto (%)",
+      "type": "range",
+      "min": 0,
+      "max": 50,
+      "step": 1,
+      "value": 15
+    },
+    {
+      "key": "argument",
+      "label": "Argumento emitido",
+      "type": "select",
+      "value": "valid",
+      "options": [
+        {
+          "value": "valid",
+          "label": "Números válidos"
+        },
+        {
+          "value": "text",
+          "label": "Texto no lugar de número"
+        },
+        {
+          "value": "extra",
+          "label": "Parâmetro desconhecido"
+        }
+      ]
+    },
+    {
+      "key": "catalog",
+      "label": "Descrição no catálogo",
+      "type": "select",
+      "value": "clear",
+      "options": [
+        {
+          "value": "clear",
+          "label": "Clara e específica"
+        },
+        {
+          "value": "vague",
+          "label": "Vaga"
+        }
+      ]
+    },
+    {
+      "key": "hosts",
+      "label": "Aplicações (N)",
+      "type": "range",
+      "min": 1,
+      "max": 8,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "servers",
+      "label": "Serviços (M)",
+      "type": "range",
+      "min": 1,
+      "max": 8,
+      "step": 1,
+      "value": 4
+    }
+  ],
+  "steps": [
+    {
+      "title": "Quem faz a conta?",
+      "view": "intent",
+      "explanation": "Uma pergunta com números pode exigir computação exata. O modelo desta demonstração é um roteiro que propõe uma chamada; quem calcula é uma função local.",
+      "action": "Altere o valor e o desconto; calcule mentalmente o resultado antes de avançar.",
+      "board": "pedido → chamada em texto → execução no host",
+      "speech": "Peço quinze por cento de quatrocentos. O modelo não ganhou uma calculadora dentro dos pesos. A aplicação recebeu um pedido e decidiu executar uma função.",
+      "question": "Onde a multiplicação é executada?",
+      "answer": "No host, depois que a chamada foi validada; o modelo apenas descreve a operação.",
+      "focus": 0
+    },
+    {
+      "title": "O catálogo que o modelo lê",
+      "view": "catalog",
+      "explanation": "Nome, descrição e parâmetros compõem a interface apresentada ao modelo. Uma descrição vaga pode deixar a escolha ambígua, mesmo quando o código da ferramenta é idêntico.",
+      "action": "Troque a descrição entre clara e vaga e compare os campos publicados.",
+      "board": "schema = nome + descrição + tipos",
+      "speech": "Leiam o catálogo como se nunca tivessem visto o código. A função é a mesma nas duas versões. Só o contrato comunica quando e como usá-la.",
+      "question": "Trocar a descrição prova aumento da acurácia?",
+      "answer": "Não. Aqui observamos a ambiguidade do contrato; medir acurácia exigiria chamadas reais e um conjunto de testes.",
+      "focus": 0
+    },
+    {
+      "title": "Tipos e campos obrigatórios",
+      "view": "schema",
+      "explanation": "O schema define dois números e seus limites. Isso permite detectar argumentos malformados antes de invocar a função, mas não comprova que a interpretação do pedido está correta.",
+      "action": "Selecione texto ou parâmetro desconhecido e veja qual regra deixa de ser satisfeita.",
+      "board": "válido sintaticamente ≠ semanticamente correto",
+      "speech": "Agora separemos duas perguntas. O objeto obedece ao contrato? O objeto representa o pedido do usuário? O schema ajuda na primeira; a segunda exige avaliação da tarefa.",
+      "question": "Um JSON válido pode pedir a conta errada?",
+      "answer": "Sim. Inverter base e porcentagem ou escolher a ferramenta inadequada pode produzir um objeto perfeitamente válido.",
+      "focus": 1
+    },
+    {
+      "title": "A mensagem de chamada",
+      "view": "call",
+      "explanation": "Uma chamada carrega nome, argumentos e identificador. Nesta representação didática, arguments contém JSON serializado, como em interfaces de tool calling que adotam esse formato.",
+      "action": "Mude o desconto e localize a mudança na string arguments.",
+      "board": "call_id ↔ tool_call_id",
+      "speech": "Aponto o identificador antes de apontar os números. Se houver duas chamadas simultâneas, a posição da mensagem não basta. O identificador mantém cada resultado ligado à solicitação correta.",
+      "question": "Por que guardar o identificador?",
+      "answer": "Para correlacionar chamada e retorno sem depender da ordem de conclusão.",
+      "focus": 1
+    },
+    {
+      "title": "Validação antes do despacho",
+      "view": "validate",
+      "explanation": "O host confere nome, tipos, limites e campos permitidos. Uma falha impede a execução e vira um resultado de erro inspecionável.",
+      "action": "Selecione os três tipos de argumento e observe a fronteira entre aceitar e rejeitar.",
+      "board": "parse → validar → autorizar → despachar",
+      "speech": "Não executamos um texto porque ele parece convincente. Primeiro transformamos a proposta num objeto validado. Depois conferimos se aquela operação está autorizada para este usuário.",
+      "question": "Validação substitui autorização?",
+      "answer": "Não. Uma chamada pode ter argumentos corretos e ainda pedir uma ação que o usuário não pode realizar.",
+      "focus": 2
+    },
+    {
+      "title": "O registro executável",
+      "view": "execute",
+      "explanation": "O registro associa um nome permitido a uma função específica. A calculadora desta página multiplica dois números validados e nunca interpreta código arbitrário.",
+      "action": "Volte a números válidos e varie a porcentagem de zero a cinquenta.",
+      "board": "desconto = valor × percentual / 100",
+      "speech": "O nome aponta para uma implementação que nós controlamos. Aqui só há multiplicação de números. Não há avaliação de expressão livre nem código vindo do modelo.",
+      "question": "É necessário usar eval para criar calculadora?",
+      "answer": "Não. Uma função restrita com parâmetros numéricos resolve esta tarefa e reduz a superfície de execução.",
+      "focus": 2
+    },
+    {
+      "title": "O resultado volta à conversa",
+      "view": "result",
+      "explanation": "A observação contém o resultado e o identificador da chamada. Só depois desse retorno a próxima etapa produz uma resposta em linguagem natural.",
+      "action": "Compare o resultado numérico com a mensagem de papel tool.",
+      "board": "assistant(call) → tool(result) → assistant(text)",
+      "speech": "O retorno não fica escondido num print. Ele entra na trajetória que será enviada ao modelo. Sem isso, a próxima resposta não tem acesso ao cálculo executado.",
+      "question": "O que acontece se o resultado não entrar no histórico?",
+      "answer": "O modelo não recebe a evidência da execução e pode repetir a chamada ou inventar uma resposta.",
+      "focus": 3
+    },
+    {
+      "title": "Trajetória e responsabilidade",
+      "view": "trace",
+      "explanation": "A trajetória separa pedido, proposta, validação, execução e síntese. Essa separação permite localizar defeitos sem atribuir toda falha ao modelo.",
+      "action": "Ative um argumento inválido e identifique a primeira linha que muda.",
+      "board": "falha = camada + evidência + passo",
+      "speech": "Quero um diagnóstico mais preciso que o agente errou. Mostrem a mensagem que iniciou o desvio. Se a validação rejeitou corretamente, ela protegeu o sistema em vez de causar o erro.",
+      "question": "Uma resposta final fluente demonstra que o ciclo funcionou?",
+      "answer": "Não. Precisamos conferir a chamada, a validação e a observação que sustenta essa resposta.",
+      "focus": 3
+    },
+    {
+      "title": "A conta das integrações",
+      "view": "integrations",
+      "explanation": "Integrações ponto a ponto podem exigir N vezes M adaptadores. Uma interface comum pode reduzir os tipos de integração para N mais M, sob a hipótese de adesão ao mesmo protocolo.",
+      "action": "Aumente aplicações e serviços e compare os dois totais.",
+      "board": "ponto a ponto: N·M; comum: N+M",
+      "speech": "Esta é uma conta de conectores, não uma promessa de custo total. Ainda existem autenticação, manutenção e diferenças semânticas. O protocolo reaproveita a forma da conversa entre participantes.",
+      "question": "N+M é sempre menor que N×M?",
+      "answer": "Não. Para catálogos pequenos pode empatar ou ser maior; o benefício de padronização cresce com o ecossistema.",
+      "focus": 4
+    },
+    {
+      "title": "Host, cliente e servidor",
+      "view": "mcp",
+      "explanation": "O host coordena o modelo e as permissões; um cliente mantém a conexão com um servidor. O servidor expõe capacidades, sem precisar receber toda a conversa do usuário.",
+      "action": "Varie a quantidade de serviços e conte as conexões cliente-servidor.",
+      "board": "host contém clientes; cliente ↔ servidor",
+      "speech": "MCP não é um agente novo. É uma fronteira de integração entre programas. O host continua responsável por decidir o contexto e controlar ações.",
+      "question": "O servidor precisa ver todas as mensagens do usuário?",
+      "answer": "Não. Ele deve receber os dados necessários à operação, mantendo as fronteiras de contexto.",
+      "focus": 4
+    },
+    {
+      "title": "Inicializar, descobrir, chamar",
+      "view": "handshake",
+      "explanation": "O ciclo básico negocia versão e capacidades antes das operações. Após a resposta de initialize, o cliente envia notifications/initialized; depois pode descobrir e chamar ferramentas.",
+      "action": "Inspecione as mensagens em ordem e localize qual delas é uma notificação sem id.",
+      "board": "initialize → initialized → tools/list → tools/call",
+      "speech": "Leiam a sequência como um protocolo entre processos. Primeiro combinamos o que ambos entendem. Só depois pedimos uma operação anunciada pelo servidor.",
+      "question": "Por que não começar imediatamente com tools/call?",
+      "answer": "Porque versão, capacidades e estado da conexão precisam ser estabelecidos antes do uso normal.",
+      "focus": 5
+    },
+    {
+      "title": "Ferramenta, recurso e prompt",
+      "view": "primitives",
+      "explanation": "Ferramentas oferecem operações, recursos oferecem dados e prompts oferecem modelos de interação. O protocolo padroniza o acesso, mas a aplicação continua definindo políticas e experiência de uso.",
+      "action": "Compare os três exemplos e diga quem inicia o uso em cada desenho.",
+      "board": "tool: operação; resource: dado; prompt: modelo",
+      "speech": "Buscar um prazo pode ser uma ferramenta. O texto do regulamento pode ser um recurso anexado pela aplicação. Um roteiro de revisão pode ser um prompt escolhido pelo usuário.",
+      "question": "Publicar um servidor MCP resolve permissões do produto?",
+      "answer": "Não. O host ainda precisa controlar acesso, consentimento e tratamento dos dados e resultados.",
+      "focus": 5
+    }
+  ]
+}

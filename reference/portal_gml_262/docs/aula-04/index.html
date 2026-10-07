@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Laboratório 1: Tokenizadores e embeddings · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="4">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 04 / 1 — Fundamentos: do texto ao Transformer</p><h1>Laboratório 1: Tokenizadores e embeddings</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 04" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Carregar</strong> tokenizadores de famílias diferentes (BPE byte-level, WordPiece, Unigram/SentencePiece) via Hugging Face e <strong>comparar</strong> contagem de tokens e fertilidade sobre um mesmo texto.</p></li><li><p><strong>Medir</strong> a razão de tokens PT/EN num corpus paralelo e <strong>projetar</strong> a consequência dessa razão em custo relativo e em ocupação de janela de contexto.</p></li><li><p><strong>Treinar</strong> um modelo Word2Vec skip-gram com <code>gensim</code> sobre corpus em português, reportando vocabulário resultante e tempo de treino.</p></li><li><p><strong>Visualizar</strong> embeddings em 2D com PCA e t-SNE e <strong>interpretar</strong> o agrupamento por grupo semântico.</p></li><li><p><strong>Testar</strong> analogias vetoriais e <strong>explicar</strong>, com evidência do próprio notebook, por que a maioria falha num corpus pequeno.</p></li><li><p><strong>Justificar</strong> qual intervenção — trocar de tokenizador ou treinar embeddings próprios — tem mais impacto num sistema em português, citando um número que ele mesmo mediu.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · Abertura: Lab 1 — do texto ao vetor · 00:00–00:04</summary><div class="prose"><p>Boa noite, pessoal. Hoje é o primeiro laboratório da disciplina, e ele fecha o Módulo 1 na parte
+prática: nas duas últimas aulas eu afirmei um monte de coisa sobre token e sobre vetor, e hoje a gente
+mede todas elas.</p>
+<p>Antes de qualquer coisa, uma informação que economiza a cota de vocês: <strong>este lab roda em CPU</strong>. Nenhuma
+célula daqui pede GPU. Se alguém já foi no menu de ambiente de execução e selecionou acelerador, dá para
+desligar sem medo — o primeiro lab que precisa de GPU de verdade é o Lab 2, na Aula 9, quando a gente
+treina um GPT pequeno. Hoje o gargalo é download de tokenizador, não computação.</p>
+<p>E deixa eu dizer o que a gente sai daqui com. Vocês saem com quatro tokenizadores reais medidos no mesmo
+texto, com a razão de tokens entre português e inglês calculada num corpus paralelo — o número que vira
+dinheiro na conta de API — e com um Word2Vec treinado por vocês, em português, cujos vizinhos vocês vão
+olhar e julgar.</p>
+<p>Uma nota rápida sobre este deck, e depois eu não falo mais disso: ele tem um apêndice, com cinco itens,
+organizados por checkpoint. É a conta por trás de cada número que vocês vão produzir hoje. Ninguém
+precisa disso para fazer o lab. Duas das seis questões-guia ficam muito melhores com ele — e eu vou
+dizer quais, daqui a dois slides.</p>
+<blockquote>
+<p>Ideia central: "Nas duas últimas aulas eu afirmei. Hoje vocês medem — e uma das coisas que vocês vão medir é onde a minha afirmação não se sustenta."</p>
+</blockquote></div></details><details><summary>Slide 2 · Recap: as Aulas 2 e 3 viram código hoje · 00:04–00:08</summary><div class="prose"><p>Deixa eu amarrar as duas aulas anteriores em quatro frases, porque cada checkpoint de hoje é uma delas
+virando medição.</p>
+<p>Aula 2: não existe "o" token. Existe um vocabulário aprendido de um corpus por um algoritmo — BPE
+juntando os pares mais frequentes, WordPiece juntando pelo ganho de verossimilhança, Unigram podando um
+vocabulário grande. E a consequência era prática: o mesmo conteúdo custa mais tokens em português do que
+em inglês, e isso é dinheiro e é janela de contexto. Hoje isso é o Checkpoint 1 e o Checkpoint 2.</p>
+<p>Aula 3: o significado não está no símbolo, está na posição dele num espaço vetorial. E aquela posição é
+subproduto — a gente treina um classificador de contexto que ninguém quer usar, joga o classificador
+fora e guarda a matriz. Hoje isso é o Checkpoint 3, onde vocês treinam essa matriz com as próprias mãos,
+e o Checkpoint 4, onde vocês olham a geometria dela.</p>
+<p>E eu deixei duas coisas em aberto na aula passada. A primeira foi de propósito e continua aberta: o
+<code>banco</code> com um vetor só, que é assunto da Aula 6 e não de hoje. A segunda é a pergunta dirigida — quais
+analogias vão falhar num corpus pequeno, e por quê. Hoje ninguém precisa responder isso de cabeça. Hoje
+a resposta sai com dado, no Checkpoint 4, e ela é a parte mais valiosa do entregável.</p>
+<blockquote>
+<p>Ideia central: "Aula 2 me deu a régua, Aula 3 me deu o mapa. Hoje a gente mede a sala com a régua e desenha o mapa."</p>
+</blockquote></div></details><details><summary>Slide 3 · O entregável e o critério · 00:08–00:12</summary><div class="prose"><p>Como todo lab desta disciplina, o que vale é o artefato. O entregável é o notebook <strong>executado</strong> — com as
+saídas visíveis, não com as células limpas — mais as respostas de seis questões-guia que estão no próprio
+notebook, mais a declaração de uso de IA.</p>
+<p>Prazo: uma semana. E eu repito a política, porque hoje é o primeiro lab: os oito labs valem trinta por
+cento da nota, e eu <strong>descarto a menor nota</strong> de vocês. Isso não é para relaxar hoje — é para que uma
+semana ruim não decida o semestre.</p>
+<p>Duas coisas que eu corrijo com rigor, e é melhor vocês saberem antes. A primeira: notebook sem saída
+volta para reexecução, porque eu não corrijo código que eu não vi rodar. A segunda, e essa é a que
+surpreende: eu quero o <strong>resultado real</strong>, inclusive o feio. No Checkpoint 4 a maioria das analogias de
+vocês vai falhar. Analogia que falhou entra na tabela como falha, com a explicação. Quem reexecutar o
+treino dez vezes até achar o caso bonito e me entregar só ele perde ponto em vez de ganhar.</p>
+<p>E agora o que eu prometi no slide 1. Das seis questões-guia, duas separam nota de verdade: a <strong>dois</strong>, que
+pergunta o que a razão entre português e inglês significa <strong>e o que ela não permite concluir</strong>, e a
+<strong>três</strong>, que pergunta por que as analogias falham. As duas estão respondidas com rigor no apêndice deste
+deck, em A ponto dois e A ponto cinco. Eu estou dizendo isso abertamente porque a resposta que eu quero
+não é a que se decora — é a que se entende.</p>
+<blockquote>
+<p>Ideia central: "Analogia que falhou entra na tabela como falha. O que eu avalio não é o resultado bonito — é a explicação do resultado que apareceu."</p>
+</blockquote></div></details><details><summary>Slide 4 · Setup do ambiente · 00:12–00:15</summary><div class="prose"><p>Agora três minutos de máquina. Vou pedir para a turma abrir o notebook e rodar a primeira célula <strong>já</strong>,
+antes de eu explicar qualquer coisa — porque ela instala as bibliotecas e baixa quatro tokenizadores, e
+eu prefiro que esse download aconteça enquanto eu falo do que enquanto vocês esperam.</p>
+<p>Um aviso sobre essa célula, e ele é o erro número um deste lab: ela fixa <code>gensim</code> na versão quatro ponto
+três ponto três e <code>scipy</code> abaixo de um ponto catorze, e depois de instalar <strong>o runtime precisa ser
+reiniciado</strong>. Se não reiniciar, o import do gensim quebra com uma mensagem sobre <code>triu</code> que não tem nada
+a ver com o que vocês fizeram — é uma função de álgebra linear que o scipy removeu na versão um ponto
+treze e que o gensim ainda chama. E a mensagem de erro não menciona versão nenhuma, o que faz a pessoa
+procurar no lugar errado. Reiniciar o ambiente de execução e rodar de novo resolve. Eu deixei isso escrito
+na capa do notebook em letra grande, porque metade da sala vai esbarrar nisso.</p>
+<p>A segunda célula é de imports e de duas constantes, e eu quero destacar uma delas agora para não ter que
+consertar depois: <code>PRECO_HIPOTETICO_POR_1K_TOKENS</code>, com valor zero vírgula cinquenta e o comentário "a
+definir na oferta". Isso é <strong>hipótese declarada do exercício</strong>. Não é preço de provedor nenhum, e ninguém
+sai daqui citando esse número como se fosse tabela de mercado. O que o exercício ensina é a aritmética,
+não a tabela de um fornecedor.</p>
+<p>A terceira célula carrega os quatro tokenizadores e imprime o tamanho do vocabulário de cada um — quatro
+números diferentes, e essa é a primeira medição do dia.</p>
+<blockquote>
+<p>Ideia central: "Se o import do gensim reclamar de uma função chamada <code>triu</code>, não é culpa de vocês: é o runtime que precisa reiniciar depois da instalação."</p>
+</blockquote></div></details><details><summary>Slide 5 · [Demo] Live coding: o caminho completo em 20 minutos · 00:15–00:35</summary><div class="prose"><p>Antes de vocês trabalharem, eu vou fazer o caminho inteiro na frente de vocês, num notebook em branco,
+digitando. São vinte minutos e não é para adiantar os checkpoints — é para que nenhum de vocês trave em
+sintaxe depois.</p>
+<p>O que eu vou mostrar é o espinho dorsal: um tokenizador, uma frase em português, as peças que saem, a
+conta de fertilidade, um Word2Vec treinado em poucos milhares de sentenças e três vizinhos semânticos.
+Vinte linhas de código para o caminho texto → tokens → vetores completo.</p>
+<p>E eu vou produzir três números na frente de vocês, que eu vou anotar no quadro e deixar lá: as duas
+fertilidades da mesma frase em português, e o tempo de treino em segundos. Guardem os três, porque eles
+voltam como critério de conclusão do Checkpoint 1 e do Checkpoint 3.</p>
+<p><em>[O live coding completo, passo a passo, está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Vinte linhas para ir de texto a vetor. O trabalho de hoje não é o caminho — é medir o caminho."</p>
+</blockquote></div></details><details><summary>Slide 6 · [Checkpoint 1] Quatro tokenizadores, três textos · 00:35–00:50</summary><div class="prose"><p>Agora são vocês. Quinze minutos no Checkpoint 1.</p>
+<p>Antes de falar do que fazer, eu vou dizer como vocês sabem que acabou. Quando estiver certo, a tela tem
+<strong>duas coisas</strong>. A primeira é uma tabela com <strong>doze linhas</strong> — quatro tokenizadores vezes três textos — e
+a coluna de fertilidade preenchida em todas as doze. Doze, não quatro: fertilidade é propriedade do par
+tokenizador e texto, e é por isso que a tabela é uma matriz e não uma lista. A segunda é a decomposição
+das palavras longas em português: as peças de cada uma, nos quatro vocabulários, com a contagem ao lado.</p>
+<p>Se vocês têm a tabela e não têm a coluna de fertilidade, vocês têm uma lista de contagens que não compara
+nada, porque os três textos têm tamanhos diferentes.</p>
+<p>Agora o que fazer. Quatro tokenizadores: o GPT-2 com BPE byte-level, o BERT inglês com WordPiece, o BERT
+português da Neuralmind — também WordPiece, mas com vocabulário aprendido em português — e o
+XLM-RoBERTa, que é Unigram sobre SentencePiece, multilíngue. Três textos: um parágrafo técnico em
+português, o mesmo parágrafo em inglês, e um trecho de código com indentação.</p>
+<p>E tem uma parte do checkpoint que é a mais reveladora: quebrar uma palavra longa em português e olhar as
+peças. Quando vocês virem o que o BPE do GPT-2 faz com <code>inconstitucionalmente</code>, e o que o WordPiece
+treinado em português faz com a mesma palavra, a Aula 2 inteira vai ficar óbvia de um jeito que o meu
+slide não conseguiu. E se alguém quiser saber por que a diferença é tão grande, a resposta curta é UTF-8:
+letra acentuada ocupa dois bytes, e num BPE byte-level isso vira dois símbolos base antes de qualquer
+merge. A conta está em A ponto um.</p>
+<p><em>[A condução completa está na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Um tokenizador treinado em português quebra <code>inconstitucionalmente</code> em pedaços que são morfemas. Um treinado em inglês quebra em pedaços que não são nada."</p>
+</blockquote></div></details><details><summary>Slide 7 · [Checkpoint 2] A razão PT/EN e a conta do custo · 00:50–01:05</summary><div class="prose"><p>Quinze minutos no Checkpoint 2, e esse é o checkpoint que eu mais quero que vocês levem para fora daqui,
+porque ele é o único que fala a língua de quem paga a conta.</p>
+<p>Como vocês sabem que acabou: <strong>três blocos na tela e um parágrafo no notebook.</strong> O primeiro bloco é, por
+tokenizador, os tokens do lado português, os do lado inglês, a razão média e o desvio — e o número de
+pares usados, que são vinte. O segundo é a projeção de custo. O terceiro é quantos pares cabem em oito
+mil cento e noventa e dois tokens em cada idioma, com a perda em porcentagem. E o parágrafo tem três
+linhas, sendo que a terceira é obrigatória e é a que vale nota: o que estes números <strong>não</strong> permitem
+concluir.</p>
+<p>Agora, o que fazer é rodar duas células. Mas eu quero avisar de uma armadilha que o próprio notebook arma,
+e é o ponto deste checkpoint.</p>
+<p>Ele imprime <strong>duas médias diferentes</strong>, em células diferentes. A coluna que se chama "razão média" é a
+média das razões par a par: para cada par, divide português por inglês, e depois tira a média das vinte
+divisões. A coluna de sobrepreço, na célula seguinte, sai de outra conta: soma todos os tokens do lado
+português, soma todos do lado inglês, e divide os dois totais. Essas duas contas <strong>dão números
+diferentes</strong>, e só uma delas é a da fatura.</p>
+<p>Qual? A da fatura é a razão dos totais, porque a conta de API é proporcional ao total de tokens. A outra
+serve para caracterizar o tokenizador, e para isso ela é a certa — com desvio e com o número de pares ao
+lado. Quem reportar a média das razões como "quanto o português custa mais" está reportando um número que
+não é o da fatura. A demonstração de que a razão dos totais é a média <strong>ponderada pelo comprimento</strong>, e um
+contraexemplo com dois pares em que os dois números dão um vírgula cinco e um vírgula catorze, estão em A
+ponto dois.</p>
+<p>E a segunda coisa que A ponto dois resolve, que eu vou só enunciar: em dinheiro a relação é linear, em
+janela ela é inversa. Razão de um vírgula trinta e três significa trinta e três por cento mais caro e
+<strong>vinte e cinco</strong> por cento menos conteúdo na janela. Não é o mesmo número, e sai da mesma razão.</p>
+<p><em>[A condução completa está na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Esse número é a razão pela qual o mesmo produto custa mais para atender em português. Não é opinião: é a divisão de duas contagens — e existem duas divisões possíveis."</p>
+</blockquote></div></details><details><summary>Slide 8 · [Checkpoint 3] Word2Vec em português com gensim · 01:15–01:32</summary><div class="prose"><p>Voltando. Dezessete minutos no Checkpoint 3, e aqui vocês param de usar modelo de outra pessoa e treinam
+o seu.</p>
+<p>Como vocês sabem que acabou: <strong>quatro linhas na tela.</strong> Qual das três fontes de corpus respondeu, com o
+tamanho em megabytes. Quantas sentenças e quantos tokens de palavra. O tempo de treino em segundos. E o
+tamanho do vocabulário depois do <code>min_count</code>. Mais o <code>most_similar</code> de três palavras escolhidas por
+vocês, cada uma com um comentário de uma linha julgando a vizinhança.</p>
+<p>Aquela terceira linha, o tempo de treino, é a materialização de uma frase que eu disse na Aula 3 —
+embedding é subproduto barato. Vocês vão ver quantos segundos custa. E a quarta linha, o tamanho do
+vocabulário, é a que mais importa para o Checkpoint 4, e eu vou explicar por quê.</p>
+<p>São seis parâmetros na chamada: cem dimensões, janela cinco, <code>min_count</code> cinco, dez amostras negativas,
+cinco épocas, skip-gram. Cada um desses números foi assunto da Aula 3, e agora eles são argumentos de uma
+chamada de função. A tabela que diz onde cada um deles entra no objetivo está em A ponto três, e é a
+leitura que eu recomendo antes de responder à questão-guia cinco.</p>
+<p>Duas coisas de lá que eu vou dizer em voz alta porque são contraintuitivas.</p>
+<p>A primeira é o <code>min_count</code>, que é a pegadinha honesta do checkpoint. Ele parece parâmetro de performance
+e é decisão semântica: ele decide quais palavras <strong>existem</strong> no mapa. E a aritmética é a lei de Zipf —
+subir o <code>min_count</code> corta <strong>muitos tipos e poucas ocorrências</strong>, porque a maior parte das palavras
+distintas de qualquer corpus aparece pouquíssimas vezes. Os vetores que sobram ficam melhor estimados; as
+palavras de domínio e os nomes próprios desaparecem. É trade-off, não ajuste.</p>
+<p>A segunda é sobre o <code>seed</code> igual a quarenta e dois, que está na chamada. Ele <strong>não</strong> garante
+reprodutibilidade aqui, porque <code>workers</code> é quatro: o gensim treina em várias threads sem sincronizar a
+ordem das atualizações, e o resultado depende do escalonamento do sistema. Duas execuções idênticas dão
+vetores diferentes. Se sobrarem dois minutos no fim, rodem a célula de treino duas vezes sem mudar nada e
+comparem os vizinhos — é o experimento mais barato do lab, e é a primeira vez neste curso que vocês vão
+ver um número se mover sozinho.</p>
+<p><em>[A condução completa está na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "<code>min_count</code> não é ajuste de performance. É a linha em que eu decido quais palavras existem no meu mapa."</p>
+</blockquote></div></details><details><summary>Slide 9 · [Checkpoint 4] PCA, t-SNE, vizinhos e analogias · 01:32–01:50</summary><div class="prose"><p>Dezoito minutos no último checkpoint, e é o que fecha o Módulo 1 inteiro.</p>
+<p>Como vocês sabem que acabou: <strong>duas coisas no notebook.</strong> Primeira, dois gráficos lado a lado, com eixo
+rotulado e legenda por grupo — um de PCA e um de t-SNE. Segunda, a tabela de quatro a seis analogias com
+o resultado <strong>real</strong> de cada uma, e a linha final dizendo quantas acertaram no top-um.</p>
+<p>Sobre os dois gráficos: eles existem porque mostram coisas diferentes, e a diferença tem consequência de
+leitura. A PCA é uma projeção linear, e ela tem uma propriedade que dá segurança: a distância no gráfico
+nunca é <strong>maior</strong> que a distância verdadeira. Então, num gráfico de PCA, se dois pontos aparecem longe,
+eles estão longe. O contrário não vale: dois pontos podem estar colados na tela e separados nas noventa e
+oito dimensões que a projeção jogou fora.</p>
+<p>O t-SNE é o oposto. Ele preserva vizinhança local e distorce escala global, e não é acidente: a função
+que ele minimiza pune muito quebrar uma vizinhança verdadeira e quase não pune inventar uma vizinhança
+falsa. A consequência prática, e é o erro de leitura mais comum deste lab: num t-SNE, <strong>a distância entre
+dois aglomerados não quer dizer nada</strong>. Nem o tamanho aparente de um aglomerado. Só a pertinência ao
+aglomerado quer dizer. A prova das duas coisas — a contração da PCA e a assimetria do t-SNE — está em A
+ponto quatro, com uma tabela de cinco afirmações dizendo qual gráfico autoriza qual.</p>
+<p>Segundo, as analogias. Quatro a seis, com <code>most_similar</code> positivo e negativo, e o resultado real de cada
+uma na tabela. E aqui eu volto na promessa da Aula 3: a maioria vai falhar.</p>
+<p>Mas eu quero que vocês distingam duas coisas na coluna de resultado, porque elas não são a mesma. Se
+aparecer <code>não</code>, a analogia rodou e o modelo errou. Se aparecer <code>fora do vocab</code>, <strong>o teste não rodou</strong> —
+uma das palavras da entrada não tem vetor, porque o <code>min_count</code> a cortou. Confundir as duas na resposta da
+questão-guia três é o erro que eu mais desconto. A tabela com as quatro razões estruturais da falha, e a
+evidência que confirma cada uma, está em A ponto cinco — e a ordem de diagnóstico também: primeiro
+disponibilidade, depois contagem, depois otimização, e só então conclusão sobre o método.</p>
+<p><em>[A condução completa está na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Distância num t-SNE não significa nada. Aglomerado significa. Quem lê distância em t-SNE está lendo um artefato da projeção."</p>
+</blockquote></div></details><details><summary>Slide 10 · Recolhimento e ponte para a Aula 5 · 01:50–02:00</summary><div class="prose"><p>Fechando. Três coisas no entregável: notebook executado com as saídas visíveis, as seis questões-guia
+respondidas, e a declaração de uso de IA. Uma semana de prazo. E de novo, porque é o primeiro lab: a
+menor nota dos oito é descartada, e notebook sem saída volta para reexecução antes de eu corrigir
+conteúdo.</p>
+<p>Deixa eu inventariar o que vocês têm agora, porque é bastante: quatro tokenizadores medidos no mesmo
+texto com fertilidade, a razão entre português e inglês com desvio e com o número de pares, um Word2Vec
+treinado por vocês, dois gráficos de projeção e uma tabela de analogias com o resultado que apareceu de
+verdade. Isso é o Módulo 1 inteiro virando número.</p>
+<p><em>[Projeto o índice do apêndice por vinte segundos: A ponto um fertilidade, A ponto dois a razão e as duas
+médias, A ponto três os hiperparâmetros dentro do objetivo, A ponto quatro PCA contra t-SNE, A ponto
+cinco as analogias em corpus pequeno.]</em></p>
+<p>E das seis questões-guia, eu repito: as duas que eu vou ler com mais atenção são a dois e a três, e as
+duas estão respondidas com rigor em A ponto dois e A ponto cinco.</p>
+<p>Agora, o que a gente fez hoje e onde isso trava. Vocês transformaram texto em tokens, tokens em IDs e IDs
+em vetores. E o vetor que vocês treinaram é <strong>fixo</strong>: a palavra tem um ID, o ID indexa uma linha de uma
+matriz, e aquela linha é a mesma sempre. Foi por isso que eu passei a Aula 3 inteira insistindo no
+<code>banco</code>: instituição e assento dividem uma linha de matriz, e a linha é a média confusa dos dois sentidos.</p>
+<p>Na próxima aula a gente ataca isso pela primeira vez de verdade. Aula 5, Modelos sequenciais e o
+nascimento da atenção: começa pelo modelo que lê a sequência em ordem e carrega estado — a rede recorrente
+— mostra exatamente onde ele quebra quando a dependência é longa, e chega na atenção de Bahdanau, que é o
+mecanismo que faz a representação de uma palavra depender do contexto em volta dela. É de lá que sai o
+Transformer, três aulas depois.</p>
+<blockquote>
+<p>Ideia central: "Hoje cada palavra tem uma linha de matriz e ela é sempre a mesma. A Aula 5 é onde a representação começa a olhar em volta antes de decidir o que ela é."</p>
+</blockquote>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p>Vinte minutos, no Colab projetado, num notebook em branco. Eu digito — não colo. O objetivo não é
+adiantar os checkpoints: é fazer o caminho texto → tokens → vetores inteiro na frente da turma, em poucas
+linhas, para que ninguém trave em sintaxe depois. Na V2 a demo tem uma função extra: <strong>os três números
+que ela produz são critérios de conclusão dos checkpoints</strong>, e eu anoto os três no quadro.</p>
+<p>Insumos preparados na véspera: um parágrafo técnico em português e o equivalente em inglês num arquivo de
+texto local, o notebook do aluno já aberto em outra aba, o cache dos quatro tokenizadores quente, e
+capturas de tela de cada saída caso a rede caia.</p>
+<p><strong>1.</strong> <strong>[Abro um notebook em branco e mostro o menu de ambiente de execução sem acelerador]</strong> Primeiro eu
+quero deixar visível que aqui não tem GPU selecionada. Esse lab é de CPU inteiro. O que vai demorar hoje é
+download de tokenizador, não conta de matriz — e é bom vocês verem a diferença entre um lab de CPU e o
+Lab 2, na Aula 9, que é o primeiro que pede acelerador de verdade.</p>
+<p><strong>2.</strong> <strong>[Digito <code>from transformers import AutoTokenizer</code> e carrego o <code>gpt2</code>]</strong> Uma linha para carregar um
+tokenizador de produção. Isso que baixou agora é o vocabulário do GPT-2 — o resultado de rodar BPE sobre
+um corpus enorme, majoritariamente em inglês. Não é código, é uma tabela de merges aprendida. É o artefato
+da Aula 2 baixando na frente de vocês.</p>
+<p><strong>3.</strong> <strong>[Tokenizo uma frase curta em português e imprimo os IDs]</strong> Agora uma frase em português. O que sai
+é uma lista de números inteiros, e é literalmente isso que o modelo vê — o modelo nunca viu uma letra na
+vida. Só que essa lista de números não me diz nada sobre a decisão que foi tomada. Preciso de outra coisa.</p>
+<p><strong>4.</strong> <strong>[Chamo <code>convert_ids_to_tokens</code> e imprimo as peças]</strong> Aqui está a decisão. Olha os pedaços em que a
+frase foi partida. Aquele caractere estranho no começo de algumas peças é como o byte-level BPE representa
+o espaço — o espaço é parte do token. E olha as palavras em português que viraram três, quatro pedaços.
+Cada pedaço é uma posição na sequência, e sequência é custo.</p>
+<p><strong>5.</strong> <strong>[Carrego <code>neuralmind/bert-base-portuguese-cased</code> e tokenizo a mesma frase, imprimindo as duas
+listas uma sob a outra]</strong> Mesma frase, tokenizador treinado em português. Vou botar as duas listas de
+peças uma embaixo da outra na saída, porque é a comparação que vale. Repararam? Onde o GPT-2 fez quatro
+pedaços sem sentido, esse aqui fez dois que parecem morfema. Não é que um algoritmo é melhor — é que um
+dos vocabulários viu português no treino e o outro não. E tem uma segunda razão, que eu não vou abrir
+agora: acento em UTF-8 são dois bytes, e o GPT-2 trabalha em bytes. Está em A ponto um.</p>
+<p><strong>6.</strong> <strong>[Calculo fertilidade das duas na mão, dividindo tokens por palavras separadas por espaço, e
+anoto os dois números no quadro]</strong> Contar tokens sozinho não compara nada, porque texto tem tamanhos
+diferentes. Então divido: tokens sobre palavras. Isso é fertilidade, e é consumo por quilômetro em vez de
+litros no tanque. Vou anotar os dois números aqui no quadro e eles ficam até o fim do próximo checkpoint —
+no Checkpoint 1 vocês fazem essa conta para quatro tokenizadores e três textos, e aí a tabela conta a
+história.</p>
+<p><strong>7.</strong> <strong>[Chamo <code>carregar_corpus_pt</code> do notebook do aluno com poucos milhares de sentenças e mostro qual
+fonte respondeu]</strong> Agora eu preciso de corpus para treinar vetores. Essa função tenta três fontes em ordem
+e me diz qual funcionou — olha a linha que ela imprimiu. Isso não é frescura de engenharia: rede de
+instituição cai, dataset muda de nome, e eu não quero que o lab de vocês morra por causa disso. E se cair
+na terceira, que é um mini-corpus embutido, ela avisa em letra maiúscula que os resultados vão ficar ruins
+de propósito.</p>
+<p><strong>8.</strong> <strong>[Tokenizo por espaço, treino <code>Word2Vec(sg=1)</code> com parâmetros pequenos, cronometro e anoto o tempo
+no quadro]</strong> Tokenização boba, por espaço, porque para Word2Vec isso basta. E o treino: skip-gram, cem
+dimensões, cinco épocas. Vou cronometrar na frente de vocês. Olha o tempo — e vai para o quadro, ao lado
+das fertilidades. Isso é a frase da Aula 3 ficando concreta: embedding é subproduto barato de uma tarefa
+que ninguém queria resolver.</p>
+<p><strong>9.</strong> <strong>[Chamo <code>most_similar</code> para três palavras — uma frequente, uma de domínio, uma rara]</strong> Três
+consultas. A primeira palavra é frequente e os vizinhos fazem sentido. A segunda é de domínio e os
+vizinhos são razoáveis. E a terceira — olha o que aconteceu: ou os vizinhos são lixo, ou a palavra nem
+está no vocabulário, porque o <code>min_count</code> cortou. Esse erro aí é o Checkpoint 4 de vocês inteiro,
+antecipado em uma linha. E é a razão de a quarta linha do critério do Checkpoint 3 ser o tamanho do
+vocabulário.</p>
+<p><strong>10.</strong> <strong>[Fecho o notebook em branco e volto para o notebook do aluno na célula do Checkpoint 1]</strong> Foi
+isso. Vinte linhas para ir de texto a vetor, e três números no quadro. O que vocês vão fazer agora nos
+checkpoints é o mesmo caminho com rigor: quatro tokenizadores em vez de dois, corpus paralelo em vez de uma
+frase, gráfico com eixo rotulado em vez de <code>print</code>, e uma tabela de analogias em que a maioria vai falhar.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>Sessenta e cinco minutos de trabalho da turma, em quatro checkpoints. Eu circulo a sala o tempo inteiro;
+meu papel aqui é destravar erro de execução, não ensinar conceito novo. Cada checkpoint tem um critério de
+conclusão observável e eu anuncio o tempo em voz alta na metade e a dois minutos do fim.</p>
+<p>Uma regra minha nos quatro: eu anuncio o checkpoint <strong>pelo que a tela vai imprimir</strong>, não pelo que
+implementar. Quem sabe o que espera reconhece o fim; quem só sabe o que digitar fica olhando para o código
+sem saber se terminou.</p>
+<p><strong>1.</strong> <strong>[Lanço o Checkpoint 1 — quatro tokenizadores, três textos, quinze minutos]</strong> Quinze minutos, e o
+alvo são duas coisas na tela: uma tabela de <strong>doze linhas</strong> com a coluna de fertilidade preenchida em
+todas, e a decomposição das palavras longas nos quatro vocabulários. Quem terminar a tabela e ficar olhando
+para ela sem escrever a interpretação não terminou o checkpoint.</p>
+<p><em>Como recolher:</em> aos 12 minutos eu peço em voz alta que a tabela esteja impressa. A conclusão observável é
+a tabela na tela com as doze linhas e a decomposição da palavra longa. Pergunto para dois ou três alunos,
+em voz alta, qual tokenizador ganhou no código — as respostas divergem e essa divergência abre a
+questão-guia quatro sem eu precisar explicar nada. E se alguém perguntar por que o código dá números tão
+diferentes, eu digo que a própria noção de "palavra" perde sentido ali e que a questão-guia quatro pergunta
+pelo <strong>número de tokens</strong>, não pela fertilidade — o motivo está em A.1.</p>
+<p><strong>2.</strong> <strong>[Lanço o Checkpoint 2 — corpus paralelo, razão PT/EN e projeção, quinze minutos]</strong> Quinze
+minutos, e o alvo são três blocos na tela mais um parágrafo de três linhas no notebook. Os três blocos: a
+razão média com desvio e com o número de pares; a projeção de custo com a constante hipotética; e quantos
+pares cabem em oito mil cento e noventa e dois tokens em cada idioma, com a perda. O parágrafo: o que os
+números significam e o que eles <strong>não</strong> permitem concluir.</p>
+<p><em>Como recolher:</em> a conclusão observável é a razão média impressa <strong>junto com o número de pares usados</strong> e
+a tabela de projeção preenchida. Aos 13 minutos eu anuncio o intervalo e escrevo o horário de volta no
+quadro. Quem não terminou a interpretação escrita termina depois; a medição é o que precisa estar rodada
+antes do intervalo. Se sobrar um minuto, eu digo em voz alta a assimetria — trinta e três por cento mais
+caro é vinte e cinco por cento menos janela — e remeto a A.2, porque essa é metade da resposta da
+questão-guia dois.</p>
+<p><strong>3.</strong> <strong>[Lanço o Checkpoint 3 — Word2Vec skip-gram em português, dezessete minutos]</strong> Dezessete minutos, e
+o alvo são quatro linhas na tela: fonte do corpus, número de sentenças, tempo de treino, tamanho do
+vocabulário. Mais três <code>most_similar</code> comentados. Skip-gram, cem dimensões, janela cinco, <code>min_count</code>
+cinco, dez negativas, cinco épocas.</p>
+<p><em>Como recolher:</em> a conclusão observável são as quatro linhas mais as três saídas de <code>most_similar</code> com
+comentário escrito ao lado. Aos 14 minutos eu pergunto em voz alta quantos ficaram com vocabulário abaixo
+de mil palavras — quem levantar a mão caiu no plano C do corpus e precisa saber disso <strong>antes</strong> de
+interpretar o Checkpoint 4, porque muda a leitura da tabela de analogias. E se sobrarem dois minutos, eu
+mando rodar a célula de treino uma segunda vez sem mudar nada: é a extensão mais barata e mais formativa
+do lab.</p>
+<p><strong>4.</strong> <strong>[Lanço o Checkpoint 4 — PCA, t-SNE, vizinhos e analogias, dezoito minutos]</strong> Dezoito minutos, e é
+o que fecha o módulo. O alvo são duas coisas no notebook: os dois gráficos com eixo rotulado e legenda por
+grupo, e a tabela de quatro a seis analogias com o resultado real de cada uma. Eu repito, porque é o
+ponto: analogia que falhou entra na tabela como falha.</p>
+<p><em>Como recolher:</em> aos 01:45 eu anuncio cinco minutos e digo que os dois gráficos salvos já satisfazem
+metade do critério. A conclusão observável é o par de gráficos mais a tabela de analogias com resultado
+real. Quem terminou vai para as extensões, e eu empurro principalmente a primeira — treinar um BPE próprio
+em português com a biblioteca <code>tokenizers</code>, vocabulário de oito mil, e comparar a fertilidade com a do
+GPT-2 no mesmo texto. Essa extensão é a que <strong>isola</strong> o efeito do corpus dos merges: mesmo algoritmo,
+corpus diferente. É o melhor material que alguém pode levar para a discussão da Aula 5, e A.1 explica por
+que ela isola.</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a matemática por trás
+de um checkpoint durante o lab. A regra num laboratório é mais rígida que numa aula teórica — <strong>a bancada
+tem prioridade</strong>. Derivação em sala de lab custa minutos de quem está travado numa célula, e esses minutos
+não voltam. A resposta padrão é uma frase de leitura conceitual mais o ponteiro para o item do apêndice, e
+a conversa continua na mesa de quem perguntou, não para a sala.</p>
+<p><strong>Item 1 — "Por que a média das razões não é igual à razão dos totais?" (A.2, ~4 min).</strong>
+A pergunta mais provável do lab, e a mais valiosa, porque é a questão-guia dois. Se eu decidir gastar os
+quatro minutos, o que rende é o <strong>contraexemplo com dois pares</strong>, não a álgebra: escrevo um par com dez
+tokens em português e cinco em inglês, e outro com trinta e trinta. A média das razões dá um vírgula
+cinco; a razão dos totais dá quarenta sobre trinta e cinco, um vírgula catorze. Dois números, os mesmos
+dados. E fecho dizendo qual é o da fatura e por quê: a conta de API soma tokens, então é a razão dos
+totais.
+<strong>Versão de 30 segundos:</strong> "a razão dos totais é a média das razões <strong>ponderada pelo comprimento</strong> — pares
+longos pesam mais. Para dinheiro use a razão dos totais; para caracterizar o tokenizador, a média com
+desvio. O contraexemplo com dois pares está em A.2."</p>
+<p><strong>Item 2 — "Por que trinta e três por cento mais caro é vinte e cinco por cento menos janela?" (A.2, ~3 min).</strong>
+Barata e satisfatória. Eu escrevo que o custo é proporcional ao número de tokens, então a razão de custo é
+a razão de tokens: mais trinta e três por cento. E que a quantidade de conteúdo que cabe numa janela fixa
+é proporcional ao <strong>inverso</strong> dos tokens por unidade, então a razão de conteúdo é um sobre um vírgula
+trinta e três, que é zero vírgula setenta e cinco — uma perda de vinte e cinco por cento. Duas
+consequências, uma razão, formas diferentes.
+<strong>Versão de 30 segundos:</strong> "preço escala com tokens, janela escala com o inverso de tokens. Trinta e três
+por cento mais caro é <code>1 − 1/1,33 = 25%</code> menos conteúdo. A conta está em A.2, e a versão geral está em A.4
+da Aula 2."</p>
+<p><strong>Item 3 — "O que exatamente o <code>negative=10</code> faz?" (A.3, ~5 min).</strong>
+Pergunta legítima no CP3, e a resposta boa é contraintuitiva, então vale fazer se houver janela. Eu digo o
+óbvio primeiro — dez negativos por positivo, custo de onze produtos internos em vez de cem mil — e depois
+o que quase ninguém sabe: pelo resultado que está em A.4 da Aula 3, no ótimo o produto interno de um par
+tende à informação mútua pontual <strong>menos o log de k</strong>. Com k igual a dez, isso é menos dois vírgula três.
+Ou seja: <code>negative</code> fixa o <strong>limiar de informatividade</strong> a partir do qual um par conta como associação.
+Subir k aumenta a exigência.
+<strong>Versão de 30 segundos:</strong> "controla duas coisas: o custo, que é <code>k+1</code> em vez de <code>|V|</code>; e o limiar — o alvo
+de todos os pares desce <code>log k</code>, então com dez negativos só pares com PMI acima de 2,3 recebem alvo
+positivo. Está em A.3."</p>
+<p><strong>Item 4 — "Por que a distância no t-SNE não vale?" (A.4, ~4 min).</strong>
+A pergunta mais importante do CP4 e a que eu mais quero que apareça, porque ela corrige o erro de leitura
+do lab. Não preciso do quadro: eu projeto o item do apêndice e leio a parcela da divergência. Se dois
+pontos são vizinhos no espaço original e ficam longe no gráfico, o custo é alto e o otimizador conserta.
+Se dois pontos são distantes no original e ficam perto no gráfico, o custo é multiplicado por uma
+probabilidade quase zero — o otimizador não é penalizado. Então quebrar vizinhança é caro e inventar
+vizinhança é grátis: local confiável, global não. E a PCA é o contrário, porque projeção ortogonal só
+encurta distância.
+<strong>Versão de 30 segundos:</strong> "a função que o t-SNE minimiza pune muito quebrar uma vizinhança verdadeira e
+quase não pune inventar uma falsa. Então aglomerado significa e distância entre aglomerados não significa.
+Na PCA vale o inverso: longe é longe de verdade, perto pode não ser. A tabela de leitura está em A.4."</p>
+<p><strong>Item 5 — "Por que a analogia falhou, se ela funciona no modelo da internet?" (A.5, ~5 min).</strong>
+A pergunta que fecha o lab, e se ela vier eu <strong>abro espaço</strong>, tirando dos minutos finais do CP4. Eu conduzo
+pelo argumento de sinal contra ruído: o vetor estimado é o verdadeiro mais um erro, o deslocamento da
+relação é a diferença dos verdadeiros mais a diferença dos erros, e a analogia sobrevive enquanto a
+magnitude da relação for muito maior que o ruído. O ruído cresce quando as contagens caem; a magnitude da
+relação não cresce com o corpus. E aí dou as ordens de grandeza: dez à nona palavras no artigo contra dez
+à sexta aqui. Três ordens de grandeza.
+<strong>Versão de 30 segundos:</strong> "a direção da relação é uma média de estimativas ruidosas, e em corpus pequeno o
+ruído fica da ordem do sinal. Antes disso, confiram se a palavra esperada <strong>tem vetor</strong> — <code>fora do vocab</code>
+não é falha do modelo, é o <code>min_count</code>. A tabela de razão × evidência está em A.5."</p></div></details><details><summary>Ordem de sacrifício</summary><div class="prose"><p>Se o lab atrasar: o <strong>Checkpoint 4 encolhe primeiro</strong> — os dois gráficos satisfazem metade do critério e a
+tabela de analogias vai para casa, o que eu digo explicitamente. Depois encolho a <strong>interpretação escrita
+do CP2</strong>, que também termina em casa, desde que a medição esteja rodada antes do intervalo. <strong>Não
+sacrifico</strong> o CP1 nem o CP3: o CP1 é a base da tabela que o entregável exige e o CP3 é pré-requisito do
+CP4 inteiro. E <strong>não sacrifico</strong> os três números da demo (as duas fertilidades e o tempo de treino): sem
+eles, o lançamento pelo observável dos CP1 e CP3 fica sem âncora, e o lab volta a ser "implemente isto".</p>
+<hr /></div></details><details><summary>Encerramento · 01:50–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 10 da Parte 1 — o inventário do que a turma mediu, o que
+entregar, o prazo, o critério de reexecução, o índice do apêndice projetado por vinte segundos com A.2 e
+A.5 indicados como as respostas das questões-guia 2 e 3, e a ponte para a Aula 5. O fio a puxar é o mesmo
+do <code>banco</code> da Aula 3: hoje cada palavra tem uma linha fixa de matriz, e é essa fixidez que a Aula 5 começa
+a desmontar.</p>
+<blockquote>
+<p>Ideia central: "Vocês saem daqui com texto virando número e número virando geometria. O que vocês não têm ainda é uma representação que muda quando o contexto muda — e é exatamente onde a Aula 5 começa."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 4 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="codigo-student.zip">↓ Notebooks e scripts do aluno</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Laboratório 1: Tokenizadores e embeddings</h1>
+<h2>Slide 1 · Abertura: Lab 1 — do texto ao vetor · 00:00–00:04</h2>
+<p>Boa noite, pessoal. Hoje é o primeiro laboratório da disciplina, e ele fecha o Módulo 1 na parte
+prática: nas duas últimas aulas eu afirmei um monte de coisa sobre token e sobre vetor, e hoje a gente
+mede todas elas.</p>
+<p>Antes de qualquer coisa, uma informação que economiza a cota de vocês: <strong>este lab roda em CPU</strong>. Nenhuma
+célula daqui pede GPU. Se alguém já foi no menu de ambiente de execução e selecionou acelerador, dá para
+desligar sem medo — o primeiro lab que precisa de GPU de verdade é o Lab 2, na Aula 9, quando a gente
+treina um GPT pequeno. Hoje o gargalo é download de tokenizador, não computação.</p>
+<p>E deixa eu dizer o que a gente sai daqui com. Vocês saem com quatro tokenizadores reais medidos no mesmo
+texto, com a razão de tokens entre português e inglês calculada num corpus paralelo — o número que vira
+dinheiro na conta de API — e com um Word2Vec treinado por vocês, em português, cujos vizinhos vocês vão
+olhar e julgar.</p>
+<p>Uma nota rápida sobre este deck, e depois eu não falo mais disso: ele tem um apêndice, com cinco itens,
+organizados por checkpoint. É a conta por trás de cada número que vocês vão produzir hoje. Ninguém
+precisa disso para fazer o lab. Duas das seis questões-guia ficam muito melhores com ele — e eu vou
+dizer quais, daqui a dois slides.</p>
+<blockquote>
+<p>Ideia central: "Nas duas últimas aulas eu afirmei. Hoje vocês medem — e uma das coisas que vocês vão medir é onde a minha afirmação não se sustenta."</p>
+</blockquote>
+<h2>Slide 2 · Recap: as Aulas 2 e 3 viram código hoje · 00:04–00:08</h2>
+<p>Deixa eu amarrar as duas aulas anteriores em quatro frases, porque cada checkpoint de hoje é uma delas
+virando medição.</p>
+<p>Aula 2: não existe "o" token. Existe um vocabulário aprendido de um corpus por um algoritmo — BPE
+juntando os pares mais frequentes, WordPiece juntando pelo ganho de verossimilhança, Unigram podando um
+vocabulário grande. E a consequência era prática: o mesmo conteúdo custa mais tokens em português do que
+em inglês, e isso é dinheiro e é janela de contexto. Hoje isso é o Checkpoint 1 e o Checkpoint 2.</p>
+<p>Aula 3: o significado não está no símbolo, está na posição dele num espaço vetorial. E aquela posição é
+subproduto — a gente treina um classificador de contexto que ninguém quer usar, joga o classificador
+fora e guarda a matriz. Hoje isso é o Checkpoint 3, onde vocês treinam essa matriz com as próprias mãos,
+e o Checkpoint 4, onde vocês olham a geometria dela.</p>
+<p>E eu deixei duas coisas em aberto na aula passada. A primeira foi de propósito e continua aberta: o
+<code>banco</code> com um vetor só, que é assunto da Aula 6 e não de hoje. A segunda é a pergunta dirigida — quais
+analogias vão falhar num corpus pequeno, e por quê. Hoje ninguém precisa responder isso de cabeça. Hoje
+a resposta sai com dado, no Checkpoint 4, e ela é a parte mais valiosa do entregável.</p>
+<blockquote>
+<p>Ideia central: "Aula 2 me deu a régua, Aula 3 me deu o mapa. Hoje a gente mede a sala com a régua e desenha o mapa."</p>
+</blockquote>
+<h2>Slide 3 · O entregável e o critério · 00:08–00:12</h2>
+<p>Como todo lab desta disciplina, o que vale é o artefato. O entregável é o notebook <strong>executado</strong> — com as
+saídas visíveis, não com as células limpas — mais as respostas de seis questões-guia que estão no próprio
+notebook, mais a declaração de uso de IA.</p>
+<p>Prazo: uma semana. E eu repito a política, porque hoje é o primeiro lab: os oito labs valem trinta por
+cento da nota, e eu <strong>descarto a menor nota</strong> de vocês. Isso não é para relaxar hoje — é para que uma
+semana ruim não decida o semestre.</p>
+<p>Duas coisas que eu corrijo com rigor, e é melhor vocês saberem antes. A primeira: notebook sem saída
+volta para reexecução, porque eu não corrijo código que eu não vi rodar. A segunda, e essa é a que
+surpreende: eu quero o <strong>resultado real</strong>, inclusive o feio. No Checkpoint 4 a maioria das analogias de
+vocês vai falhar. Analogia que falhou entra na tabela como falha, com a explicação. Quem reexecutar o
+treino dez vezes até achar o caso bonito e me entregar só ele perde ponto em vez de ganhar.</p>
+<p>E agora o que eu prometi no slide 1. Das seis questões-guia, duas separam nota de verdade: a <strong>dois</strong>, que
+pergunta o que a razão entre português e inglês significa <strong>e o que ela não permite concluir</strong>, e a
+<strong>três</strong>, que pergunta por que as analogias falham. As duas estão respondidas com rigor no apêndice deste
+deck, em A ponto dois e A ponto cinco. Eu estou dizendo isso abertamente porque a resposta que eu quero
+não é a que se decora — é a que se entende.</p>
+<blockquote>
+<p>Ideia central: "Analogia que falhou entra na tabela como falha. O que eu avalio não é o resultado bonito — é a explicação do resultado que apareceu."</p>
+</blockquote>
+<h2>Slide 4 · Setup do ambiente · 00:12–00:15</h2>
+<p>Agora três minutos de máquina. Vou pedir para a turma abrir o notebook e rodar a primeira célula <strong>já</strong>,
+antes de eu explicar qualquer coisa — porque ela instala as bibliotecas e baixa quatro tokenizadores, e
+eu prefiro que esse download aconteça enquanto eu falo do que enquanto vocês esperam.</p>
+<p>Um aviso sobre essa célula, e ele é o erro número um deste lab: ela fixa <code>gensim</code> na versão quatro ponto
+três ponto três e <code>scipy</code> abaixo de um ponto catorze, e depois de instalar <strong>o runtime precisa ser
+reiniciado</strong>. Se não reiniciar, o import do gensim quebra com uma mensagem sobre <code>triu</code> que não tem nada
+a ver com o que vocês fizeram — é uma função de álgebra linear que o scipy removeu na versão um ponto
+treze e que o gensim ainda chama. E a mensagem de erro não menciona versão nenhuma, o que faz a pessoa
+procurar no lugar errado. Reiniciar o ambiente de execução e rodar de novo resolve. Eu deixei isso escrito
+na capa do notebook em letra grande, porque metade da sala vai esbarrar nisso.</p>
+<p>A segunda célula é de imports e de duas constantes, e eu quero destacar uma delas agora para não ter que
+consertar depois: <code>PRECO_HIPOTETICO_POR_1K_TOKENS</code>, com valor zero vírgula cinquenta e o comentário "a
+definir na oferta". Isso é <strong>hipótese declarada do exercício</strong>. Não é preço de provedor nenhum, e ninguém
+sai daqui citando esse número como se fosse tabela de mercado. O que o exercício ensina é a aritmética,
+não a tabela de um fornecedor.</p>
+<p>A terceira célula carrega os quatro tokenizadores e imprime o tamanho do vocabulário de cada um — quatro
+números diferentes, e essa é a primeira medição do dia.</p>
+<blockquote>
+<p>Ideia central: "Se o import do gensim reclamar de uma função chamada <code>triu</code>, não é culpa de vocês: é o runtime que precisa reiniciar depois da instalação."</p>
+</blockquote>
+<h2>Slide 5 · [Demo] Live coding: o caminho completo em 20 minutos · 00:15–00:35</h2>
+<p>Antes de vocês trabalharem, eu vou fazer o caminho inteiro na frente de vocês, num notebook em branco,
+digitando. São vinte minutos e não é para adiantar os checkpoints — é para que nenhum de vocês trave em
+sintaxe depois.</p>
+<p>O que eu vou mostrar é o espinho dorsal: um tokenizador, uma frase em português, as peças que saem, a
+conta de fertilidade, um Word2Vec treinado em poucos milhares de sentenças e três vizinhos semânticos.
+Vinte linhas de código para o caminho texto → tokens → vetores completo.</p>
+<p>E eu vou produzir três números na frente de vocês, que eu vou anotar no quadro e deixar lá: as duas
+fertilidades da mesma frase em português, e o tempo de treino em segundos. Guardem os três, porque eles
+voltam como critério de conclusão do Checkpoint 1 e do Checkpoint 3.</p>
+<p><em>[O live coding completo, passo a passo, está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Vinte linhas para ir de texto a vetor. O trabalho de hoje não é o caminho — é medir o caminho."</p>
+</blockquote>
+<h2>Slide 6 · [Checkpoint 1] Quatro tokenizadores, três textos · 00:35–00:50</h2>
+<p>Agora são vocês. Quinze minutos no Checkpoint 1.</p>
+<p>Antes de falar do que fazer, eu vou dizer como vocês sabem que acabou. Quando estiver certo, a tela tem
+<strong>duas coisas</strong>. A primeira é uma tabela com <strong>doze linhas</strong> — quatro tokenizadores vezes três textos — e
+a coluna de fertilidade preenchida em todas as doze. Doze, não quatro: fertilidade é propriedade do par
+tokenizador e texto, e é por isso que a tabela é uma matriz e não uma lista. A segunda é a decomposição
+das palavras longas em português: as peças de cada uma, nos quatro vocabulários, com a contagem ao lado.</p>
+<p>Se vocês têm a tabela e não têm a coluna de fertilidade, vocês têm uma lista de contagens que não compara
+nada, porque os três textos têm tamanhos diferentes.</p>
+<p>Agora o que fazer. Quatro tokenizadores: o GPT-2 com BPE byte-level, o BERT inglês com WordPiece, o BERT
+português da Neuralmind — também WordPiece, mas com vocabulário aprendido em português — e o
+XLM-RoBERTa, que é Unigram sobre SentencePiece, multilíngue. Três textos: um parágrafo técnico em
+português, o mesmo parágrafo em inglês, e um trecho de código com indentação.</p>
+<p>E tem uma parte do checkpoint que é a mais reveladora: quebrar uma palavra longa em português e olhar as
+peças. Quando vocês virem o que o BPE do GPT-2 faz com <code>inconstitucionalmente</code>, e o que o WordPiece
+treinado em português faz com a mesma palavra, a Aula 2 inteira vai ficar óbvia de um jeito que o meu
+slide não conseguiu. E se alguém quiser saber por que a diferença é tão grande, a resposta curta é UTF-8:
+letra acentuada ocupa dois bytes, e num BPE byte-level isso vira dois símbolos base antes de qualquer
+merge. A conta está em A ponto um.</p>
+<p><em>[A condução completa está na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Um tokenizador treinado em português quebra <code>inconstitucionalmente</code> em pedaços que são morfemas. Um treinado em inglês quebra em pedaços que não são nada."</p>
+</blockquote>
+<h2>Slide 7 · [Checkpoint 2] A razão PT/EN e a conta do custo · 00:50–01:05</h2>
+<p>Quinze minutos no Checkpoint 2, e esse é o checkpoint que eu mais quero que vocês levem para fora daqui,
+porque ele é o único que fala a língua de quem paga a conta.</p>
+<p>Como vocês sabem que acabou: <strong>três blocos na tela e um parágrafo no notebook.</strong> O primeiro bloco é, por
+tokenizador, os tokens do lado português, os do lado inglês, a razão média e o desvio — e o número de
+pares usados, que são vinte. O segundo é a projeção de custo. O terceiro é quantos pares cabem em oito
+mil cento e noventa e dois tokens em cada idioma, com a perda em porcentagem. E o parágrafo tem três
+linhas, sendo que a terceira é obrigatória e é a que vale nota: o que estes números <strong>não</strong> permitem
+concluir.</p>
+<p>Agora, o que fazer é rodar duas células. Mas eu quero avisar de uma armadilha que o próprio notebook arma,
+e é o ponto deste checkpoint.</p>
+<p>Ele imprime <strong>duas médias diferentes</strong>, em células diferentes. A coluna que se chama "razão média" é a
+média das razões par a par: para cada par, divide português por inglês, e depois tira a média das vinte
+divisões. A coluna de sobrepreço, na célula seguinte, sai de outra conta: soma todos os tokens do lado
+português, soma todos do lado inglês, e divide os dois totais. Essas duas contas <strong>dão números
+diferentes</strong>, e só uma delas é a da fatura.</p>
+<p>Qual? A da fatura é a razão dos totais, porque a conta de API é proporcional ao total de tokens. A outra
+serve para caracterizar o tokenizador, e para isso ela é a certa — com desvio e com o número de pares ao
+lado. Quem reportar a média das razões como "quanto o português custa mais" está reportando um número que
+não é o da fatura. A demonstração de que a razão dos totais é a média <strong>ponderada pelo comprimento</strong>, e um
+contraexemplo com dois pares em que os dois números dão um vírgula cinco e um vírgula catorze, estão em A
+ponto dois.</p>
+<p>E a segunda coisa que A ponto dois resolve, que eu vou só enunciar: em dinheiro a relação é linear, em
+janela ela é inversa. Razão de um vírgula trinta e três significa trinta e três por cento mais caro e
+<strong>vinte e cinco</strong> por cento menos conteúdo na janela. Não é o mesmo número, e sai da mesma razão.</p>
+<p><em>[A condução completa está na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Esse número é a razão pela qual o mesmo produto custa mais para atender em português. Não é opinião: é a divisão de duas contagens — e existem duas divisões possíveis."</p>
+</blockquote>
+<h2>Slide 8 · [Checkpoint 3] Word2Vec em português com gensim · 01:15–01:32</h2>
+<p>Voltando. Dezessete minutos no Checkpoint 3, e aqui vocês param de usar modelo de outra pessoa e treinam
+o seu.</p>
+<p>Como vocês sabem que acabou: <strong>quatro linhas na tela.</strong> Qual das três fontes de corpus respondeu, com o
+tamanho em megabytes. Quantas sentenças e quantos tokens de palavra. O tempo de treino em segundos. E o
+tamanho do vocabulário depois do <code>min_count</code>. Mais o <code>most_similar</code> de três palavras escolhidas por
+vocês, cada uma com um comentário de uma linha julgando a vizinhança.</p>
+<p>Aquela terceira linha, o tempo de treino, é a materialização de uma frase que eu disse na Aula 3 —
+embedding é subproduto barato. Vocês vão ver quantos segundos custa. E a quarta linha, o tamanho do
+vocabulário, é a que mais importa para o Checkpoint 4, e eu vou explicar por quê.</p>
+<p>São seis parâmetros na chamada: cem dimensões, janela cinco, <code>min_count</code> cinco, dez amostras negativas,
+cinco épocas, skip-gram. Cada um desses números foi assunto da Aula 3, e agora eles são argumentos de uma
+chamada de função. A tabela que diz onde cada um deles entra no objetivo está em A ponto três, e é a
+leitura que eu recomendo antes de responder à questão-guia cinco.</p>
+<p>Duas coisas de lá que eu vou dizer em voz alta porque são contraintuitivas.</p>
+<p>A primeira é o <code>min_count</code>, que é a pegadinha honesta do checkpoint. Ele parece parâmetro de performance
+e é decisão semântica: ele decide quais palavras <strong>existem</strong> no mapa. E a aritmética é a lei de Zipf —
+subir o <code>min_count</code> corta <strong>muitos tipos e poucas ocorrências</strong>, porque a maior parte das palavras
+distintas de qualquer corpus aparece pouquíssimas vezes. Os vetores que sobram ficam melhor estimados; as
+palavras de domínio e os nomes próprios desaparecem. É trade-off, não ajuste.</p>
+<p>A segunda é sobre o <code>seed</code> igual a quarenta e dois, que está na chamada. Ele <strong>não</strong> garante
+reprodutibilidade aqui, porque <code>workers</code> é quatro: o gensim treina em várias threads sem sincronizar a
+ordem das atualizações, e o resultado depende do escalonamento do sistema. Duas execuções idênticas dão
+vetores diferentes. Se sobrarem dois minutos no fim, rodem a célula de treino duas vezes sem mudar nada e
+comparem os vizinhos — é o experimento mais barato do lab, e é a primeira vez neste curso que vocês vão
+ver um número se mover sozinho.</p>
+<p><em>[A condução completa está na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "<code>min_count</code> não é ajuste de performance. É a linha em que eu decido quais palavras existem no meu mapa."</p>
+</blockquote>
+<h2>Slide 9 · [Checkpoint 4] PCA, t-SNE, vizinhos e analogias · 01:32–01:50</h2>
+<p>Dezoito minutos no último checkpoint, e é o que fecha o Módulo 1 inteiro.</p>
+<p>Como vocês sabem que acabou: <strong>duas coisas no notebook.</strong> Primeira, dois gráficos lado a lado, com eixo
+rotulado e legenda por grupo — um de PCA e um de t-SNE. Segunda, a tabela de quatro a seis analogias com
+o resultado <strong>real</strong> de cada uma, e a linha final dizendo quantas acertaram no top-um.</p>
+<p>Sobre os dois gráficos: eles existem porque mostram coisas diferentes, e a diferença tem consequência de
+leitura. A PCA é uma projeção linear, e ela tem uma propriedade que dá segurança: a distância no gráfico
+nunca é <strong>maior</strong> que a distância verdadeira. Então, num gráfico de PCA, se dois pontos aparecem longe,
+eles estão longe. O contrário não vale: dois pontos podem estar colados na tela e separados nas noventa e
+oito dimensões que a projeção jogou fora.</p>
+<p>O t-SNE é o oposto. Ele preserva vizinhança local e distorce escala global, e não é acidente: a função
+que ele minimiza pune muito quebrar uma vizinhança verdadeira e quase não pune inventar uma vizinhança
+falsa. A consequência prática, e é o erro de leitura mais comum deste lab: num t-SNE, <strong>a distância entre
+dois aglomerados não quer dizer nada</strong>. Nem o tamanho aparente de um aglomerado. Só a pertinência ao
+aglomerado quer dizer. A prova das duas coisas — a contração da PCA e a assimetria do t-SNE — está em A
+ponto quatro, com uma tabela de cinco afirmações dizendo qual gráfico autoriza qual.</p>
+<p>Segundo, as analogias. Quatro a seis, com <code>most_similar</code> positivo e negativo, e o resultado real de cada
+uma na tabela. E aqui eu volto na promessa da Aula 3: a maioria vai falhar.</p>
+<p>Mas eu quero que vocês distingam duas coisas na coluna de resultado, porque elas não são a mesma. Se
+aparecer <code>não</code>, a analogia rodou e o modelo errou. Se aparecer <code>fora do vocab</code>, <strong>o teste não rodou</strong> —
+uma das palavras da entrada não tem vetor, porque o <code>min_count</code> a cortou. Confundir as duas na resposta da
+questão-guia três é o erro que eu mais desconto. A tabela com as quatro razões estruturais da falha, e a
+evidência que confirma cada uma, está em A ponto cinco — e a ordem de diagnóstico também: primeiro
+disponibilidade, depois contagem, depois otimização, e só então conclusão sobre o método.</p>
+<p><em>[A condução completa está na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Distância num t-SNE não significa nada. Aglomerado significa. Quem lê distância em t-SNE está lendo um artefato da projeção."</p>
+</blockquote>
+<h2>Slide 10 · Recolhimento e ponte para a Aula 5 · 01:50–02:00</h2>
+<p>Fechando. Três coisas no entregável: notebook executado com as saídas visíveis, as seis questões-guia
+respondidas, e a declaração de uso de IA. Uma semana de prazo. E de novo, porque é o primeiro lab: a
+menor nota dos oito é descartada, e notebook sem saída volta para reexecução antes de eu corrigir
+conteúdo.</p>
+<p>Deixa eu inventariar o que vocês têm agora, porque é bastante: quatro tokenizadores medidos no mesmo
+texto com fertilidade, a razão entre português e inglês com desvio e com o número de pares, um Word2Vec
+treinado por vocês, dois gráficos de projeção e uma tabela de analogias com o resultado que apareceu de
+verdade. Isso é o Módulo 1 inteiro virando número.</p>
+<p><em>[Projeto o índice do apêndice por vinte segundos: A ponto um fertilidade, A ponto dois a razão e as duas
+médias, A ponto três os hiperparâmetros dentro do objetivo, A ponto quatro PCA contra t-SNE, A ponto
+cinco as analogias em corpus pequeno.]</em></p>
+<p>E das seis questões-guia, eu repito: as duas que eu vou ler com mais atenção são a dois e a três, e as
+duas estão respondidas com rigor em A ponto dois e A ponto cinco.</p>
+<p>Agora, o que a gente fez hoje e onde isso trava. Vocês transformaram texto em tokens, tokens em IDs e IDs
+em vetores. E o vetor que vocês treinaram é <strong>fixo</strong>: a palavra tem um ID, o ID indexa uma linha de uma
+matriz, e aquela linha é a mesma sempre. Foi por isso que eu passei a Aula 3 inteira insistindo no
+<code>banco</code>: instituição e assento dividem uma linha de matriz, e a linha é a média confusa dos dois sentidos.</p>
+<p>Na próxima aula a gente ataca isso pela primeira vez de verdade. Aula 5, Modelos sequenciais e o
+nascimento da atenção: começa pelo modelo que lê a sequência em ordem e carrega estado — a rede recorrente
+— mostra exatamente onde ele quebra quando a dependência é longa, e chega na atenção de Bahdanau, que é o
+mecanismo que faz a representação de uma palavra depender do contexto em volta dela. É de lá que sai o
+Transformer, três aulas depois.</p>
+<blockquote>
+<p>Ideia central: "Hoje cada palavra tem uma linha de matriz e ela é sempre a mesma. A Aula 5 é onde a representação começa a olhar em volta antes de decidir o que ela é."</p>
+</blockquote>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p>Vinte minutos, no Colab projetado, num notebook em branco. Eu digito — não colo. O objetivo não é
+adiantar os checkpoints: é fazer o caminho texto → tokens → vetores inteiro na frente da turma, em poucas
+linhas, para que ninguém trave em sintaxe depois. Na V2 a demo tem uma função extra: <strong>os três números
+que ela produz são critérios de conclusão dos checkpoints</strong>, e eu anoto os três no quadro.</p>
+<p>Insumos preparados na véspera: um parágrafo técnico em português e o equivalente em inglês num arquivo de
+texto local, o notebook do aluno já aberto em outra aba, o cache dos quatro tokenizadores quente, e
+capturas de tela de cada saída caso a rede caia.</p>
+<p><strong>1.</strong> <strong>[Abro um notebook em branco e mostro o menu de ambiente de execução sem acelerador]</strong> Primeiro eu
+quero deixar visível que aqui não tem GPU selecionada. Esse lab é de CPU inteiro. O que vai demorar hoje é
+download de tokenizador, não conta de matriz — e é bom vocês verem a diferença entre um lab de CPU e o
+Lab 2, na Aula 9, que é o primeiro que pede acelerador de verdade.</p>
+<p><strong>2.</strong> <strong>[Digito <code>from transformers import AutoTokenizer</code> e carrego o <code>gpt2</code>]</strong> Uma linha para carregar um
+tokenizador de produção. Isso que baixou agora é o vocabulário do GPT-2 — o resultado de rodar BPE sobre
+um corpus enorme, majoritariamente em inglês. Não é código, é uma tabela de merges aprendida. É o artefato
+da Aula 2 baixando na frente de vocês.</p>
+<p><strong>3.</strong> <strong>[Tokenizo uma frase curta em português e imprimo os IDs]</strong> Agora uma frase em português. O que sai
+é uma lista de números inteiros, e é literalmente isso que o modelo vê — o modelo nunca viu uma letra na
+vida. Só que essa lista de números não me diz nada sobre a decisão que foi tomada. Preciso de outra coisa.</p>
+<p><strong>4.</strong> <strong>[Chamo <code>convert_ids_to_tokens</code> e imprimo as peças]</strong> Aqui está a decisão. Olha os pedaços em que a
+frase foi partida. Aquele caractere estranho no começo de algumas peças é como o byte-level BPE representa
+o espaço — o espaço é parte do token. E olha as palavras em português que viraram três, quatro pedaços.
+Cada pedaço é uma posição na sequência, e sequência é custo.</p>
+<p><strong>5.</strong> <strong>[Carrego <code>neuralmind/bert-base-portuguese-cased</code> e tokenizo a mesma frase, imprimindo as duas
+listas uma sob a outra]</strong> Mesma frase, tokenizador treinado em português. Vou botar as duas listas de
+peças uma embaixo da outra na saída, porque é a comparação que vale. Repararam? Onde o GPT-2 fez quatro
+pedaços sem sentido, esse aqui fez dois que parecem morfema. Não é que um algoritmo é melhor — é que um
+dos vocabulários viu português no treino e o outro não. E tem uma segunda razão, que eu não vou abrir
+agora: acento em UTF-8 são dois bytes, e o GPT-2 trabalha em bytes. Está em A ponto um.</p>
+<p><strong>6.</strong> <strong>[Calculo fertilidade das duas na mão, dividindo tokens por palavras separadas por espaço, e
+anoto os dois números no quadro]</strong> Contar tokens sozinho não compara nada, porque texto tem tamanhos
+diferentes. Então divido: tokens sobre palavras. Isso é fertilidade, e é consumo por quilômetro em vez de
+litros no tanque. Vou anotar os dois números aqui no quadro e eles ficam até o fim do próximo checkpoint —
+no Checkpoint 1 vocês fazem essa conta para quatro tokenizadores e três textos, e aí a tabela conta a
+história.</p>
+<p><strong>7.</strong> <strong>[Chamo <code>carregar_corpus_pt</code> do notebook do aluno com poucos milhares de sentenças e mostro qual
+fonte respondeu]</strong> Agora eu preciso de corpus para treinar vetores. Essa função tenta três fontes em ordem
+e me diz qual funcionou — olha a linha que ela imprimiu. Isso não é frescura de engenharia: rede de
+instituição cai, dataset muda de nome, e eu não quero que o lab de vocês morra por causa disso. E se cair
+na terceira, que é um mini-corpus embutido, ela avisa em letra maiúscula que os resultados vão ficar ruins
+de propósito.</p>
+<p><strong>8.</strong> <strong>[Tokenizo por espaço, treino <code>Word2Vec(sg=1)</code> com parâmetros pequenos, cronometro e anoto o tempo
+no quadro]</strong> Tokenização boba, por espaço, porque para Word2Vec isso basta. E o treino: skip-gram, cem
+dimensões, cinco épocas. Vou cronometrar na frente de vocês. Olha o tempo — e vai para o quadro, ao lado
+das fertilidades. Isso é a frase da Aula 3 ficando concreta: embedding é subproduto barato de uma tarefa
+que ninguém queria resolver.</p>
+<p><strong>9.</strong> <strong>[Chamo <code>most_similar</code> para três palavras — uma frequente, uma de domínio, uma rara]</strong> Três
+consultas. A primeira palavra é frequente e os vizinhos fazem sentido. A segunda é de domínio e os
+vizinhos são razoáveis. E a terceira — olha o que aconteceu: ou os vizinhos são lixo, ou a palavra nem
+está no vocabulário, porque o <code>min_count</code> cortou. Esse erro aí é o Checkpoint 4 de vocês inteiro,
+antecipado em uma linha. E é a razão de a quarta linha do critério do Checkpoint 3 ser o tamanho do
+vocabulário.</p>
+<p><strong>10.</strong> <strong>[Fecho o notebook em branco e volto para o notebook do aluno na célula do Checkpoint 1]</strong> Foi
+isso. Vinte linhas para ir de texto a vetor, e três números no quadro. O que vocês vão fazer agora nos
+checkpoints é o mesmo caminho com rigor: quatro tokenizadores em vez de dois, corpus paralelo em vez de uma
+frase, gráfico com eixo rotulado em vez de <code>print</code>, e uma tabela de analogias em que a maioria vai falhar.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>Sessenta e cinco minutos de trabalho da turma, em quatro checkpoints. Eu circulo a sala o tempo inteiro;
+meu papel aqui é destravar erro de execução, não ensinar conceito novo. Cada checkpoint tem um critério de
+conclusão observável e eu anuncio o tempo em voz alta na metade e a dois minutos do fim.</p>
+<p>Uma regra minha nos quatro: eu anuncio o checkpoint <strong>pelo que a tela vai imprimir</strong>, não pelo que
+implementar. Quem sabe o que espera reconhece o fim; quem só sabe o que digitar fica olhando para o código
+sem saber se terminou.</p>
+<p><strong>1.</strong> <strong>[Lanço o Checkpoint 1 — quatro tokenizadores, três textos, quinze minutos]</strong> Quinze minutos, e o
+alvo são duas coisas na tela: uma tabela de <strong>doze linhas</strong> com a coluna de fertilidade preenchida em
+todas, e a decomposição das palavras longas nos quatro vocabulários. Quem terminar a tabela e ficar olhando
+para ela sem escrever a interpretação não terminou o checkpoint.</p>
+<p><em>Como recolher:</em> aos 12 minutos eu peço em voz alta que a tabela esteja impressa. A conclusão observável é
+a tabela na tela com as doze linhas e a decomposição da palavra longa. Pergunto para dois ou três alunos,
+em voz alta, qual tokenizador ganhou no código — as respostas divergem e essa divergência abre a
+questão-guia quatro sem eu precisar explicar nada. E se alguém perguntar por que o código dá números tão
+diferentes, eu digo que a própria noção de "palavra" perde sentido ali e que a questão-guia quatro pergunta
+pelo <strong>número de tokens</strong>, não pela fertilidade — o motivo está em A.1.</p>
+<p><strong>2.</strong> <strong>[Lanço o Checkpoint 2 — corpus paralelo, razão PT/EN e projeção, quinze minutos]</strong> Quinze
+minutos, e o alvo são três blocos na tela mais um parágrafo de três linhas no notebook. Os três blocos: a
+razão média com desvio e com o número de pares; a projeção de custo com a constante hipotética; e quantos
+pares cabem em oito mil cento e noventa e dois tokens em cada idioma, com a perda. O parágrafo: o que os
+números significam e o que eles <strong>não</strong> permitem concluir.</p>
+<p><em>Como recolher:</em> a conclusão observável é a razão média impressa <strong>junto com o número de pares usados</strong> e
+a tabela de projeção preenchida. Aos 13 minutos eu anuncio o intervalo e escrevo o horário de volta no
+quadro. Quem não terminou a interpretação escrita termina depois; a medição é o que precisa estar rodada
+antes do intervalo. Se sobrar um minuto, eu digo em voz alta a assimetria — trinta e três por cento mais
+caro é vinte e cinco por cento menos janela — e remeto a A.2, porque essa é metade da resposta da
+questão-guia dois.</p>
+<p><strong>3.</strong> <strong>[Lanço o Checkpoint 3 — Word2Vec skip-gram em português, dezessete minutos]</strong> Dezessete minutos, e
+o alvo são quatro linhas na tela: fonte do corpus, número de sentenças, tempo de treino, tamanho do
+vocabulário. Mais três <code>most_similar</code> comentados. Skip-gram, cem dimensões, janela cinco, <code>min_count</code>
+cinco, dez negativas, cinco épocas.</p>
+<p><em>Como recolher:</em> a conclusão observável são as quatro linhas mais as três saídas de <code>most_similar</code> com
+comentário escrito ao lado. Aos 14 minutos eu pergunto em voz alta quantos ficaram com vocabulário abaixo
+de mil palavras — quem levantar a mão caiu no plano C do corpus e precisa saber disso <strong>antes</strong> de
+interpretar o Checkpoint 4, porque muda a leitura da tabela de analogias. E se sobrarem dois minutos, eu
+mando rodar a célula de treino uma segunda vez sem mudar nada: é a extensão mais barata e mais formativa
+do lab.</p>
+<p><strong>4.</strong> <strong>[Lanço o Checkpoint 4 — PCA, t-SNE, vizinhos e analogias, dezoito minutos]</strong> Dezoito minutos, e é
+o que fecha o módulo. O alvo são duas coisas no notebook: os dois gráficos com eixo rotulado e legenda por
+grupo, e a tabela de quatro a seis analogias com o resultado real de cada uma. Eu repito, porque é o
+ponto: analogia que falhou entra na tabela como falha.</p>
+<p><em>Como recolher:</em> aos 01:45 eu anuncio cinco minutos e digo que os dois gráficos salvos já satisfazem
+metade do critério. A conclusão observável é o par de gráficos mais a tabela de analogias com resultado
+real. Quem terminou vai para as extensões, e eu empurro principalmente a primeira — treinar um BPE próprio
+em português com a biblioteca <code>tokenizers</code>, vocabulário de oito mil, e comparar a fertilidade com a do
+GPT-2 no mesmo texto. Essa extensão é a que <strong>isola</strong> o efeito do corpus dos merges: mesmo algoritmo,
+corpus diferente. É o melhor material que alguém pode levar para a discussão da Aula 5, e A.1 explica por
+que ela isola.</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a matemática por trás
+de um checkpoint durante o lab. A regra num laboratório é mais rígida que numa aula teórica — <strong>a bancada
+tem prioridade</strong>. Derivação em sala de lab custa minutos de quem está travado numa célula, e esses minutos
+não voltam. A resposta padrão é uma frase de leitura conceitual mais o ponteiro para o item do apêndice, e
+a conversa continua na mesa de quem perguntou, não para a sala.</p>
+<p><strong>Item 1 — "Por que a média das razões não é igual à razão dos totais?" (A.2, ~4 min).</strong>
+A pergunta mais provável do lab, e a mais valiosa, porque é a questão-guia dois. Se eu decidir gastar os
+quatro minutos, o que rende é o <strong>contraexemplo com dois pares</strong>, não a álgebra: escrevo um par com dez
+tokens em português e cinco em inglês, e outro com trinta e trinta. A média das razões dá um vírgula
+cinco; a razão dos totais dá quarenta sobre trinta e cinco, um vírgula catorze. Dois números, os mesmos
+dados. E fecho dizendo qual é o da fatura e por quê: a conta de API soma tokens, então é a razão dos
+totais.
+<strong>Versão de 30 segundos:</strong> "a razão dos totais é a média das razões <strong>ponderada pelo comprimento</strong> — pares
+longos pesam mais. Para dinheiro use a razão dos totais; para caracterizar o tokenizador, a média com
+desvio. O contraexemplo com dois pares está em A.2."</p>
+<p><strong>Item 2 — "Por que trinta e três por cento mais caro é vinte e cinco por cento menos janela?" (A.2, ~3 min).</strong>
+Barata e satisfatória. Eu escrevo que o custo é proporcional ao número de tokens, então a razão de custo é
+a razão de tokens: mais trinta e três por cento. E que a quantidade de conteúdo que cabe numa janela fixa
+é proporcional ao <strong>inverso</strong> dos tokens por unidade, então a razão de conteúdo é um sobre um vírgula
+trinta e três, que é zero vírgula setenta e cinco — uma perda de vinte e cinco por cento. Duas
+consequências, uma razão, formas diferentes.
+<strong>Versão de 30 segundos:</strong> "preço escala com tokens, janela escala com o inverso de tokens. Trinta e três
+por cento mais caro é <code>1 − 1/1,33 = 25%</code> menos conteúdo. A conta está em A.2, e a versão geral está em A.4
+da Aula 2."</p>
+<p><strong>Item 3 — "O que exatamente o <code>negative=10</code> faz?" (A.3, ~5 min).</strong>
+Pergunta legítima no CP3, e a resposta boa é contraintuitiva, então vale fazer se houver janela. Eu digo o
+óbvio primeiro — dez negativos por positivo, custo de onze produtos internos em vez de cem mil — e depois
+o que quase ninguém sabe: pelo resultado que está em A.4 da Aula 3, no ótimo o produto interno de um par
+tende à informação mútua pontual <strong>menos o log de k</strong>. Com k igual a dez, isso é menos dois vírgula três.
+Ou seja: <code>negative</code> fixa o <strong>limiar de informatividade</strong> a partir do qual um par conta como associação.
+Subir k aumenta a exigência.
+<strong>Versão de 30 segundos:</strong> "controla duas coisas: o custo, que é <code>k+1</code> em vez de <code>|V|</code>; e o limiar — o alvo
+de todos os pares desce <code>log k</code>, então com dez negativos só pares com PMI acima de 2,3 recebem alvo
+positivo. Está em A.3."</p>
+<p><strong>Item 4 — "Por que a distância no t-SNE não vale?" (A.4, ~4 min).</strong>
+A pergunta mais importante do CP4 e a que eu mais quero que apareça, porque ela corrige o erro de leitura
+do lab. Não preciso do quadro: eu projeto o item do apêndice e leio a parcela da divergência. Se dois
+pontos são vizinhos no espaço original e ficam longe no gráfico, o custo é alto e o otimizador conserta.
+Se dois pontos são distantes no original e ficam perto no gráfico, o custo é multiplicado por uma
+probabilidade quase zero — o otimizador não é penalizado. Então quebrar vizinhança é caro e inventar
+vizinhança é grátis: local confiável, global não. E a PCA é o contrário, porque projeção ortogonal só
+encurta distância.
+<strong>Versão de 30 segundos:</strong> "a função que o t-SNE minimiza pune muito quebrar uma vizinhança verdadeira e
+quase não pune inventar uma falsa. Então aglomerado significa e distância entre aglomerados não significa.
+Na PCA vale o inverso: longe é longe de verdade, perto pode não ser. A tabela de leitura está em A.4."</p>
+<p><strong>Item 5 — "Por que a analogia falhou, se ela funciona no modelo da internet?" (A.5, ~5 min).</strong>
+A pergunta que fecha o lab, e se ela vier eu <strong>abro espaço</strong>, tirando dos minutos finais do CP4. Eu conduzo
+pelo argumento de sinal contra ruído: o vetor estimado é o verdadeiro mais um erro, o deslocamento da
+relação é a diferença dos verdadeiros mais a diferença dos erros, e a analogia sobrevive enquanto a
+magnitude da relação for muito maior que o ruído. O ruído cresce quando as contagens caem; a magnitude da
+relação não cresce com o corpus. E aí dou as ordens de grandeza: dez à nona palavras no artigo contra dez
+à sexta aqui. Três ordens de grandeza.
+<strong>Versão de 30 segundos:</strong> "a direção da relação é uma média de estimativas ruidosas, e em corpus pequeno o
+ruído fica da ordem do sinal. Antes disso, confiram se a palavra esperada <strong>tem vetor</strong> — <code>fora do vocab</code>
+não é falha do modelo, é o <code>min_count</code>. A tabela de razão × evidência está em A.5."</p>
+<h2>Ordem de sacrifício</h2>
+<p>Se o lab atrasar: o <strong>Checkpoint 4 encolhe primeiro</strong> — os dois gráficos satisfazem metade do critério e a
+tabela de analogias vai para casa, o que eu digo explicitamente. Depois encolho a <strong>interpretação escrita
+do CP2</strong>, que também termina em casa, desde que a medição esteja rodada antes do intervalo. <strong>Não
+sacrifico</strong> o CP1 nem o CP3: o CP1 é a base da tabela que o entregável exige e o CP3 é pré-requisito do
+CP4 inteiro. E <strong>não sacrifico</strong> os três números da demo (as duas fertilidades e o tempo de treino): sem
+eles, o lançamento pelo observável dos CP1 e CP3 fica sem âncora, e o lab volta a ser "implemente isto".</p>
+<hr />
+<h2>Encerramento · 01:50–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 10 da Parte 1 — o inventário do que a turma mediu, o que
+entregar, o prazo, o critério de reexecução, o índice do apêndice projetado por vinte segundos com A.2 e
+A.5 indicados como as respostas das questões-guia 2 e 3, e a ponte para a Aula 5. O fio a puxar é o mesmo
+do <code>banco</code> da Aula 3: hoje cada palavra tem uma linha fixa de matriz, e é essa fixidez que a Aula 5 começa
+a desmontar.</p>
+<blockquote>
+<p>Ideia central: "Vocês saem daqui com texto virando número e número virando geometria. O que vocês não têm ainda é uma representação que muda quando o contexto muda — e é exatamente onde a Aula 5 começa."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 4 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-03/index.html">← Aula anterior</a><a class="button" href="../aula-05/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>
