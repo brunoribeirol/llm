@@ -1,0 +1,203 @@
+{
+  "id": 23,
+  "title": "Agentes: observar, agir e saber parar",
+  "subtitle": "Inspecione um agente roteirizado que busca um prazo e calcula uma data relativa. Explore memória, verificação, custo e critérios de parada.",
+  "nodes": [
+    "Objetivo",
+    "Plano",
+    "Ação",
+    "Memória",
+    "Verificação",
+    "Parada"
+  ],
+  "controls": [
+    {
+      "key": "steps",
+      "label": "Orçamento de passos",
+      "type": "range",
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "value": 5
+    },
+    {
+      "key": "delta",
+      "label": "Tokens novos por volta",
+      "type": "range",
+      "min": 50,
+      "max": 800,
+      "step": 50,
+      "value": 250
+    },
+    {
+      "key": "mode",
+      "label": "Comportamento",
+      "type": "select",
+      "value": "normal",
+      "options": [
+        {
+          "value": "normal",
+          "label": "Busca → conta → resposta"
+        },
+        {
+          "value": "loop",
+          "label": "Repete a mesma busca"
+        },
+        {
+          "value": "early",
+          "label": "Responde sem evidência"
+        },
+        {
+          "value": "repair",
+          "label": "Corrige argumento inválido"
+        }
+      ]
+    },
+    {
+      "key": "memory",
+      "label": "Anexar observações ao histórico",
+      "type": "checkbox",
+      "value": true
+    },
+    {
+      "key": "verified",
+      "label": "Exigir evidência antes de concluir",
+      "type": "checkbox",
+      "value": true
+    }
+  ],
+  "steps": [
+    {
+      "title": "As cinco peças",
+      "view": "pieces",
+      "explanation": "Um agente reúne modelo, ferramentas, loop, objetivo e critério de parada. A demonstração substitui o modelo por um roteiro para expor essas peças sem depender de rede.",
+      "action": "Selecione o fluxo normal e identifique as cinco peças no desenho.",
+      "board": "agente = modelo + ferramentas + loop + objetivo + parada",
+      "speech": "Dar um nome ao agente não explica sua arquitetura. Quero localizar cada peça em uma responsabilidade concreta. Se não existe condição de parada, o desenho ainda está incompleto.",
+      "question": "Uma chamada isolada de modelo já constitui o loop desta aula?",
+      "answer": "Não. O que estudamos é um sistema que decide ações sucessivas usando observações e um critério explícito de término.",
+      "focus": 0
+    },
+    {
+      "title": "O objetivo exige duas fontes de trabalho",
+      "view": "goal",
+      "explanation": "A tarefa pede o prazo do regulamento e a soma desse prazo a uma data de referência. Busca fornece a regra; cálculo transforma a regra em uma resposta verificável.",
+      "action": "Observe os dois subproblemas e diga qual ferramenta fornece cada evidência.",
+      "board": "buscar prazo → somar dias → citar artigo",
+      "speech": "Uma ferramenta não resolve o objetivo inteiro. A busca devolve um fato e a calculadora aplica uma transformação. A resposta precisa preservar a origem do fato utilizado.",
+      "question": "Uma calculadora pode confirmar que o prazo recuperado é o correto?",
+      "answer": "Não. Ela verifica a transformação numérica, mas depende da informação fornecida pela busca.",
+      "focus": 0
+    },
+    {
+      "title": "Observar, planejar, agir, refletir",
+      "view": "cycle",
+      "explanation": "A observação altera o estado disponível ao próximo passo. Planejar escolhe uma ação; refletir compara o retorno com o objetivo antes de continuar.",
+      "action": "Mude para correção de argumento e localize onde a observação de erro altera o plano.",
+      "board": "estado → decisão → ação → observação → novo estado",
+      "speech": "O ciclo só aprende algo quando a observação retorna. Aqui o erro de argumento vira informação para corrigir a chamada. Sem esse retorno, repetição não é adaptação.",
+      "question": "Qual evento diferencia o segundo plano do primeiro?",
+      "answer": "A nova observação que descreve o erro ou o resultado da ferramenta anterior.",
+      "focus": 1
+    },
+    {
+      "title": "O plano antes e depois da ação",
+      "view": "plan",
+      "explanation": "Um plano antecipado organiza dependências, enquanto um plano emergente é revisto a cada observação. Nesta tarefa, calcular antes de recuperar o prazo deixa um argumento sem fundamento.",
+      "action": "Compare os cenários normal e correção de argumento e observe o passo adicional.",
+      "board": "dependência: prazo conhecido antes de somar",
+      "speech": "Podemos antecipar a sequência geral. Isso não significa prever todas as falhas. Um plano útil mantém a ordem das dependências e permite revisar a ação quando chega um erro.",
+      "question": "Por que paralelizar busca e cálculo seria incorreto neste caso?",
+      "answer": "Porque o cálculo depende do prazo que a busca ainda precisa fornecer.",
+      "focus": 1
+    },
+    {
+      "title": "Ação não é observação",
+      "view": "action",
+      "explanation": "O roteiro propõe nomes e argumentos; a ferramenta produz o resultado. Separar as duas mensagens impede tratar um resultado inventado pelo modelo como execução real.",
+      "action": "Selecione parada precoce e compare a ausência de ferramenta com o caminho normal.",
+      "board": "proposta do modelo ≠ resultado da ferramenta",
+      "speech": "Olhem quem escreveu cada linha. Uma frase dizendo calculei não demonstra execução. O host precisa anexar a observação obtida de fato da função.",
+      "question": "Quem está autorizado a preencher a observação?",
+      "answer": "O host com o retorno da ferramenta, não o texto proposto pelo modelo.",
+      "focus": 2
+    },
+    {
+      "title": "Memória de curto prazo",
+      "view": "memory",
+      "explanation": "O histórico guarda as observações desta sessão. Ao retirar a observação, o roteiro deixa de encontrar o prazo e repete a busca até o limite.",
+      "action": "Desmarque anexar observações e acompanhe a repetição.",
+      "board": "memória curta = histórico visível nesta execução",
+      "speech": "A ferramenta pode ter funcionado perfeitamente e ainda assim o sistema falhar. Se o retorno não entra no próximo contexto, o modelo não o vê. Esse defeito está na gestão de estado do host.",
+      "question": "Por que aumentar o limite não corrige a memória ausente?",
+      "answer": "Porque as novas voltas continuam sem receber a informação necessária; apenas repetem o mesmo defeito.",
+      "focus": 2
+    },
+    {
+      "title": "Memória que sobrevive à sessão",
+      "view": "persistent",
+      "explanation": "Uma memória persistente precisa de origem, data e política de atualização. Reutilizar um prazo antigo como se fosse a regra vigente produz uma resposta consistente com um dado obsoleto.",
+      "action": "Compare o histórico de sessão com o registro persistente ilustrado.",
+      "board": "memória longa = dado + fonte + versão + validade",
+      "speech": "Salvar texto em um banco não o transforma em verdade. O registro precisa dizer de onde veio e quando deixa de valer. Uma nova sessão deve recuperar e conferir essa informação.",
+      "question": "Persistir toda a conversa é suficiente para uma boa memória?",
+      "answer": "Não. É preciso selecionar, recuperar, atualizar e controlar acesso aos registros relevantes.",
+      "focus": 3
+    },
+    {
+      "title": "Verificação e autocorreção",
+      "view": "verify",
+      "explanation": "Um verificador compara uma condição observável com o objetivo. O cenário de correção usa um erro explícito da ferramenta; não pressupõe que repetir uma opinião torne o resultado verdadeiro.",
+      "action": "Selecione correção de argumento e acompanhe rejeição, ajuste e execução.",
+      "board": "erro detectável → nova ação → nova verificação",
+      "speech": "Refletir é útil quando há algo externo a conferir. O erro de tipo é um sinal objetivo. Pedir ao modelo que pense de novo sem evidência não garante melhora.",
+      "question": "Qual verificador é barato nesta tarefa?",
+      "answer": "Validar os argumentos, conferir a soma e exigir a referência ao artigo recuperado.",
+      "focus": 3
+    },
+    {
+      "title": "Quando um pipeline basta",
+      "view": "decision",
+      "explanation": "Uma sequência fixa e verificável pode ser implementada como workflow determinístico. Um agente se justifica quando decisões intermediárias dependem de observações não conhecidas antecipadamente.",
+      "action": "Compare os caminhos normal e correção; identifique quais decisões poderiam ser código fixo.",
+      "board": "caminho fixo? verificador disponível?",
+      "speech": "Não vamos premiar complexidade por si só. Se a ordem sempre é buscar e somar, um pipeline pode resolver. O loop faz sentido quando precisamos escolher e revisar ações conforme o ambiente responde.",
+      "question": "Uma tarefa com três ferramentas exige três agentes?",
+      "answer": "Não. Quantidade de ferramentas não determina quantidade de agentes nem necessidade de autonomia.",
+      "focus": 4
+    },
+    {
+      "title": "O custo acumulado da trajetória",
+      "view": "cost",
+      "explanation": "A chamada k carrega o prefixo e as observações anteriores. Sem truncamento nem cache, o total de entrada cresce como uma soma aritmética.",
+      "action": "Aumente passos e tokens por volta; compare custo marginal e acumulado.",
+      "board": "T(n) = n·600 + d·n(n−1)/2",
+      "speech": "Contem quantas vezes a primeira observação reaparece. Ela custa em todas as chamadas seguintes. O gráfico separa comprimento do próximo prompt e total enviado até ali.",
+      "question": "Por que número de chamadas não basta para estimar tokens?",
+      "answer": "Porque chamadas posteriores podem carregar contextos maiores que as primeiras.",
+      "focus": 4
+    },
+    {
+      "title": "Dois defeitos de parada",
+      "view": "stop",
+      "explanation": "Parada precoce responde sem evidência; repetição sem progresso consome o orçamento. O host deve distinguir sucesso, rejeição por falta de evidência e esgotamento.",
+      "action": "Alterne parada precoce e repetição; marque e desmarque exigir evidência.",
+      "board": "terminar ≠ concluir com sucesso",
+      "speech": "Um loop que terminou não necessariamente resolveu a tarefa. O motivo da parada faz parte do resultado. Exigir evidência reduz um tipo de erro, enquanto o teto evita execução interminável.",
+      "question": "O teto de passos prova que a resposta está correta?",
+      "answer": "Não. Ele limita recursos; a correção depende de evidência e verificadores apropriados.",
+      "focus": 5
+    },
+    {
+      "title": "Trajetória de um coding agent",
+      "view": "coding",
+      "explanation": "Num agente de programação, testes, diff e leitura de arquivos são observações concretas. A decisão de concluir precisa considerar o pedido, o escopo alterado e a evidência produzida.",
+      "action": "Compare o ciclo de busca com localizar, editar e testar no diagrama.",
+      "board": "hipótese → alteração → teste → leitura da falha",
+      "speech": "Um teste que falhou pode ser mais informativo que outra reflexão livre. Ele localiza uma hipótese que precisa mudar. Mesmo testes passando, ainda precisamos conferir se cobrem o comportamento solicitado.",
+      "question": "Passar uma suíte garante que toda mudança está correta?",
+      "answer": "Não. A suíte fornece evidência dentro de sua cobertura, junto com revisão do diff e dos requisitos.",
+      "focus": 5
+    }
+  ]
+}

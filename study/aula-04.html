@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aula 4 · Laboratório 1</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="assets/study.css">
+<style>
+  .plot { max-width: 22rem; width: 100%; height: auto; }
+  .plot .frame { fill: none; stroke: var(--line); }
+  .plot .a { fill: var(--accent); }
+  .plot .b { fill: var(--warn); }
+  .plot .link { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .plot .pick { stroke: var(--ink); stroke-width: 2; }
+</style>
+</head>
+<body data-lesson="aula-04">
+<main class="page">
+
+<header class="masthead">
+  <div class="chips"><a href="index.html">caderno</a><span>aula</span><span>04</span><span>lab 1</span><span>AV1 · casos 2 e 4</span></div>
+  <h1>Laboratório 1: o que cada medição autoriza concluir</h1>
+  <p class="lede">As Aulas 2 e 3 viram código: quatro tokenizadores no mesmo texto, a razão de tokens entre português e inglês, um Word2Vec treinado por você, e dois gráficos dos vetores. O conteúdo que fica do laboratório é saber ler cada resultado sem dizer mais do que ele mostra.</p>
+  <p class="meta">leitura: 25 min · fontes: <a href="../labs/01/lab-01-tokenizadores-embeddings.ipynb">enunciado do Lab 1</a>, <a href="../labs/01/brlla_lab_01_tokenizadores_embeddings.ipynb">seu notebook executado</a> e o <a href="../reference/portal_gml_262/docs/aula-04/index.html">guia de estudo do portal</a> · esta aula não tem deck de slides em <span class="mono">class/slides/</span></p>
+  <ul class="toc">
+    <li><a href="#resumo">Resumo</a></li>
+    <li><a href="#cp1">CP1: tokenizadores</a></li>
+    <li><a href="#cp2">CP2: razão PT/EN</a></li>
+    <li><a href="#cp3">CP3: Word2Vec</a></li>
+    <li><a href="#cp4">CP4: PCA e t-SNE</a></li>
+    <li><a href="#analogias">Analogias</a></li>
+    <li><a href="#autoteste">Autoteste</a></li>
+    <li><a href="#av1">Ponte para a AV1</a></li>
+  </ul>
+</header>
+
+<section class="block" id="resumo">
+  <h2>A aula em um minuto</h2>
+  <ul>
+    <li>Fertilidade se mede em uma <strong>matriz</strong> tokenizador × texto: 4 tokenizadores e 3 textos dão 12 números, e não 4.</li>
+    <li>Existem duas razões PT/EN e elas dão valores diferentes. A da fatura é a <strong>razão dos totais</strong>.</li>
+    <li><code>min_count</code> parece ajuste de desempenho e é decisão semântica: define quais palavras existem no mapa.</li>
+    <li>Em uma <strong>PCA</strong>, pontos longe estão longe de verdade; pontos perto podem não estar.</li>
+    <li>Em um <strong>t-SNE</strong>, pertencer a um aglomerado significa algo; a distância entre aglomerados e o tamanho deles não significam nada.</li>
+    <li>Analogia que deu “não” e analogia “fora do vocabulário” são resultados diferentes. No corpus do laboratório, a maioria falha, e a razão é estrutural.</li>
+  </ul>
+  <p class="keyidea">Distância em um t-SNE não significa nada. Aglomerado significa.</p>
+  <p><span class="src">Aula 4 · guia do portal, slide 9</span></p>
+</section>
+
+<section class="block" id="cp1">
+  <h2>Checkpoint 1: quatro tokenizadores, três textos</h2>
+  <p>Os quatro tokenizadores cobrem as famílias da Aula 2. <span class="src">Aula 4 · Lab 1, Checkpoint 1</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Modelo</th><th>Algoritmo</th><th>Vocabulário aprendido em</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">gpt2</td><td>BPE byte-level</td><td>majoritariamente inglês</td></tr>
+        <tr><td class="mono">bert-base-uncased</td><td>WordPiece</td><td>inglês</td></tr>
+        <tr><td class="mono">neuralmind/bert-base-portuguese-cased</td><td>WordPiece</td><td>português</td></tr>
+        <tr><td class="mono">xlm-roberta-base</td><td>Unigram sobre SentencePiece</td><td>multilíngue</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Os três textos são um parágrafo técnico em português, o mesmo parágrafo em inglês e um trecho de código com indentação. O resultado esperado é uma tabela de <strong>doze linhas</strong> com a coluna de fertilidade preenchida. Sem essa coluna, o que se tem é uma lista de contagens que não compara nada, porque os três textos têm tamanhos diferentes.</p>
+  <p>A parte mais reveladora é quebrar uma palavra longa do português e olhar as peças em cada vocabulário.</p>
+  <p class="keyidea">Um tokenizador treinado em português quebra “inconstitucionalmente” em pedaços que são morfemas. Um treinado em inglês quebra em pedaços que não são nada.</p>
+  <p><span class="src">Aula 4 · guia do portal, slide 6</span> O mecanismo por trás disso está na <a href="aula-02.html#bpe">Aula 2</a>: a lista de fusões vem do corpus de treino.</p>
+</section>
+
+<section class="block" id="cp2">
+  <h2>Checkpoint 2: a razão PT/EN e as duas médias</h2>
+  <p>O laboratório mede a razão de tokens entre português e inglês em 20 pares de frases paralelas, por tokenizador, e projeta custo e ocupação de uma janela de 8.192 tokens. <span class="src">Aula 4 · Lab 1, Checkpoint 2</span></p>
+  <p>O notebook imprime <strong>duas médias diferentes</strong>, e essa é a armadilha deliberada do checkpoint. <span class="src">Aula 4 · guia do portal, slide 7</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Média</th><th>Como se calcula</th><th>Para que serve</th></tr></thead>
+      <tbody>
+        <tr><td>Média das razões</td><td>Divide PT por EN em cada par, depois tira a média das 20 divisões</td><td>Caracterizar o tokenizador, com o desvio e o número de pares ao lado</td></tr>
+        <tr><td>Razão dos totais</td><td>Soma todos os tokens PT, soma todos os EN, divide os totais</td><td>Custo: a conta de API é proporcional ao total de tokens</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>O contraexemplo do professor usa dois pares. Um tem 10 tokens em português e 5 em inglês (razão 2,0). O outro tem 30 e 30 (razão 1,0).</p>
+  <div class="formula">média das razões  = (2,0 + 1,0) / 2      = 1,50
+razão dos totais  = (10 + 30) / (5 + 30)  = 40 / 35 ≈ 1,14</div>
+  <p>Os mesmos dados, dois números. A razão dos totais é a média das razões <em>ponderada pelo comprimento</em>: pares longos pesam mais. Quem reporta 1,50 como “quanto o português custa a mais” está reportando um número que não é o da fatura.</p>
+  <p>O entregável do checkpoint é um parágrafo de três linhas, e a terceira é a que vale nota: <strong>o que estes números não permitem concluir</strong>. Vinte pares, de um tipo de texto, em quatro tokenizadores, não descrevem “o português”.</p>
+</section>
+
+<section class="block" id="cp3">
+  <h2>Checkpoint 3: seu próprio Word2Vec</h2>
+  <p>Aqui você para de usar o modelo de outra pessoa e treina o seu com <code>gensim</code>, em um corpus pequeno em português. A chamada tem seis parâmetros, todos discutidos na Aula 3: 100 dimensões, janela 5, <code>min_count</code> 5, 10 amostras negativas, 5 épocas, skip-gram. <span class="src">Aula 4 · guia do portal, slide 8</span></p>
+  <p>O tempo de treino, de segundos, materializa uma frase da Aula 3: embedding é subproduto barato.</p>
+  <h3>min_count é decisão semântica</h3>
+  <p>Ele decide quais palavras <strong>existem</strong> no mapa. A aritmética é a lei de Zipf: subir o <code>min_count</code> corta muitos tipos de palavra e poucas ocorrências, porque a maior parte das palavras distintas de qualquer corpus aparece pouquíssimas vezes. Os vetores que sobram ficam mais bem estimados. As palavras de domínio e os nomes próprios desaparecem. É uma troca, e não um ajuste.</p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Confiar que <code>seed=42</code> garante o mesmo resultado. Com <code>workers=4</code> o gensim treina em várias threads sem sincronizar a ordem das atualizações. Duas execuções idênticas produzem vetores diferentes. Vizinhanças que mudam de uma execução para outra são um sinal de quão frágil é o que foi aprendido.</p>
+  </div>
+</section>
+
+<section class="block" id="cp4">
+  <h2>Checkpoint 4: PCA e t-SNE</h2>
+  <p>Os vetores têm 100 dimensões e você enxerga 2. Nenhuma das duas projeções é “o espaço”. Elas mostram coisas diferentes, e a diferença muda o que se pode ler. <span class="src">Aula 4 · Lab 1, Checkpoint 4</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Método</th><th>O que é</th><th>O que preserva</th><th>Como se lê</th></tr></thead>
+      <tbody>
+        <tr><td>PCA</td><td>Projeção linear nos eixos de maior variância</td><td>Variância global</td><td>A distância no gráfico nunca é maior que a verdadeira</td></tr>
+        <tr><td>t-SNE</td><td>Método não linear que otimiza a preservação de vizinhança</td><td>Vizinhança local</td><td>Aglomerados; a distância entre grupos não significa nada</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>PCA: longe é longe, perto pode não ser</h3>
+  <p>Uma projeção só encurta distâncias. Se dois pontos aparecem longe em uma PCA, eles estão longe. O contrário não vale: dois pontos podem estar colados na tela e separados nas 98 dimensões que a projeção descartou. <span class="src">Aula 4 · guia do portal, slide 9</span></p>
+
+  <div class="demo" id="proj-demo">
+    <h3>Gire a projeção e compare as distâncias</h3>
+    <label for="proj-angle">Ângulo de onde se olha: <output id="proj-angle-out" for="proj-angle"></output>
+      <input type="range" id="proj-angle" min="0" max="180" step="1" value="45"></label>
+    <svg class="plot" viewBox="0 0 260 200" role="img" aria-label="Dois grupos de pontos em três dimensões projetados em duas">
+      <rect class="frame" x="1" y="1" width="258" height="198"></rect>
+      <line class="link" id="proj-link" x1="0" y1="0" x2="0" y2="0"></line>
+      <g id="proj-points"></g>
+    </svg>
+    <div class="grid">
+      <div class="stat">distância verdadeira (3D) <b id="proj-true"></b></div>
+      <div class="stat">distância no gráfico (2D) <b id="proj-seen"></b></div>
+    </div>
+    <p class="verdict" id="proj-verdict"></p>
+  </div>
+  <p class="meta">Dez pontos em 3 dimensões, vistos em 2. Os dois pontos contornados estão ligados pela linha tracejada. A distância verdadeira entre eles não muda quando você gira.</p>
+
+  <h3>t-SNE: aglomerado significa, distância não</h3>
+  <p>O t-SNE é o oposto. A função que ele minimiza pune muito <em>quebrar</em> uma vizinhança verdadeira e quase não pune <em>inventar</em> uma vizinhança falsa. Quebrar vizinhança é caro e inventar vizinhança é de graça. O resultado: o que é local é confiável, o que é global não.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Afirmação sobre o gráfico</th><th>PCA</th><th>t-SNE</th></tr></thead>
+      <tbody>
+        <tr><td>“Estes dois pontos estão longe, então são diferentes”</td><td>Autoriza</td><td>Não autoriza</td></tr>
+        <tr><td>“Estes dois pontos estão perto, então são parecidos”</td><td>Não autoriza</td><td>Indício de vizinhança local, a confirmar no espaço original</td></tr>
+        <tr><td>“Este grupo está mais perto daquele do que do outro”</td><td>Leitura possível, com perda</td><td>Não autoriza</td></tr>
+        <tr><td>“Este grupo é mais espalhado que aquele”</td><td>Leitura possível, com perda</td><td>Não autoriza</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="meta">As linhas 1 e 3 e a regra do tamanho de aglomerado estão no guia do professor (slide 9). A redação das demais células é leitura minha das mesmas regras; a tabela oficial de cinco afirmações está no Apêndice A.4 do deck da Aula 4, que não está em <span class="mono">class/slides/</span>.</p>
+  <div class="callout trap">
+    <strong>O erro mais caro do checkpoint</strong>
+    <p>Medir distância em um gráfico de t-SNE. Só a pertinência ao grupo significa algo. O parâmetro <code>perplexity</code> regula quantos vizinhos o método tenta preservar, e o gráfico muda com ele.</p>
+  </div>
+</section>
+
+<section class="block" id="analogias">
+  <h2>Analogias no corpus pequeno</h2>
+  <p>O laboratório pede de quatro a seis analogias com o resultado <strong>real</strong> de cada uma. A promessa da Aula 3 se cumpre: a maioria falha. <span class="src">Aula 4 · Lab 1, Checkpoint 4</span></p>
+  <p>Dois resultados parecidos que não são a mesma coisa:</p>
+  <ul>
+    <li><strong>“não”:</strong> a analogia rodou e o modelo errou.</li>
+    <li><strong>“fora do vocab”:</strong> o teste <em>não rodou</em>. Uma das palavras não tem vetor, porque o <code>min_count</code> a cortou.</li>
+  </ul>
+  <p>O guia registra que confundir os dois é o erro mais descontado na correção. E dá a ordem de diagnóstico: primeiro disponibilidade (a palavra tem vetor?), depois contagem (quantas ocorrências?), depois otimização (épocas), e só então uma conclusão sobre o método. <span class="src">Aula 4 · guia do portal, slide 9</span></p>
+  <p>As causas estruturais listadas no enunciado: cauda esparsa do corpus, <code>min_count</code> cortando termos, poucas épocas e corpus de domínio estreito (um romance de 1899, com a grafia da época: <em>pae</em>, <em>aquelles</em>). O argumento geral é de sinal contra ruído: o vetor estimado é o verdadeiro mais um erro; o erro cresce quando as contagens caem, e a magnitude da relação não cresce com o corpus. São 10⁹ palavras no artigo original contra cerca de 10⁶ no laboratório.</p>
+  <div class="callout">
+    <strong>Regra de bolso</strong>
+    <p>“Uma tabela com quatro analogias em que três falham vale mais do que uma que deu certo.” Refazer o treino até a analogia funcionar e mostrar só o caso bonito é o oposto do que se pede. A analogia também não é evidência de raciocínio: é regularidade linear induzida por coocorrência.</p>
+  </div>
+</section>
+
+<section class="block" id="autoteste">
+  <h2>Autoteste</h2>
+  <p>Responda antes de abrir. <span class="meta" data-quiz-progress></span></p>
+  <details class="q" id="q1">
+    <summary>Por que a tabela do Checkpoint 1 tem 12 linhas de fertilidade, e não 4?</summary>
+    <div class="answer"><p>Porque fertilidade é propriedade do par tokenizador e texto. Quatro tokenizadores em três textos dão doze medições diferentes.</p><p><span class="src">Aula 4 · guia do portal, slide 6</span></p></div>
+  </details>
+  <details class="q" id="q2">
+    <summary>Dois pares: 10 tokens PT e 5 EN; 30 PT e 30 EN. Calcule a média das razões e a razão dos totais. Qual vai para a fatura?</summary>
+    <div class="answer"><p>Média das razões: (2,0 + 1,0)/2 = 1,50. Razão dos totais: 40/35 ≈ 1,14. A fatura soma tokens, então é a razão dos totais.</p><p><span class="src">Aula 4 · guia do portal, apêndice, item 1</span></p></div>
+  </details>
+  <details class="q" id="q3">
+    <summary>O que acontece com o vocabulário quando o min_count sobe? Por que isso é uma decisão semântica?</summary>
+    <div class="answer"><p>Muitos tipos de palavra são cortados e poucas ocorrências se perdem (Zipf). As palavras cortadas deixam de existir no modelo: não têm vetor. Os vetores restantes ficam mais bem estimados, mas nomes próprios e termos de domínio somem.</p><p><span class="src">Aula 4 · guia do portal, slide 8</span></p></div>
+  </details>
+  <details class="q" id="q4">
+    <summary>Em uma PCA, dois pontos aparecem colados. Posso afirmar que os vetores são parecidos?</summary>
+    <div class="answer"><p>Não. Projeção só encurta distâncias: eles podem estar separados nas dimensões descartadas. O que a PCA garante é o inverso: se aparecem longe, estão longe.</p><p><span class="src">Aula 4 · guia do portal, slide 9</span></p></div>
+  </details>
+  <details class="q" id="q5">
+    <summary>Em um t-SNE, o grupo A aparece ao lado do grupo B e longe do grupo C. O que isso diz sobre A, B e C?</summary>
+    <div class="answer"><p>Nada. A distância entre aglomerados em um t-SNE é artefato da projeção. Só a pertinência de cada ponto ao seu aglomerado tem significado.</p><p><span class="src">Aula 4 · Lab 1, Checkpoint 4</span></p></div>
+  </details>
+  <details class="q" id="q6">
+    <summary>Por que o t-SNE distorce a escala global?</summary>
+    <div class="answer"><p>Porque a função que ele minimiza pune muito separar vizinhos verdadeiros e quase não pune aproximar pontos que eram distantes. Inventar vizinhança sai de graça.</p><p><span class="src">Aula 4 · guia do portal, apêndice, item 4</span></p></div>
+  </details>
+  <details class="q" id="q7">
+    <summary>Uma analogia retornou “fora do vocab”. O modelo errou a analogia?</summary>
+    <div class="answer"><p>Não: o teste nem rodou. Uma palavra da entrada não tem vetor porque foi cortada pelo min_count. É um problema de disponibilidade, a primeira coisa a verificar no diagnóstico.</p><p><span class="src">Aula 4 · guia do portal, slide 9</span></p></div>
+  </details>
+  <details class="q" id="q8">
+    <summary>Por que as analogias funcionam no modelo baixado e falham no modelo treinado no laboratório?</summary>
+    <div class="answer"><p>Sinal contra ruído. Com cerca de 10⁶ palavras em vez de 10⁹, cada vetor é uma estimativa ruidosa, e o ruído fica da ordem da direção que representa a relação. Somam-se o corte de palavras raras e o domínio estreito do corpus.</p><p><span class="src">Aula 4 · guia do portal, apêndice, item 5</span></p></div>
+  </details>
+</section>
+
+<section class="block" id="av1">
+  <h2>Ponte para a AV1: Casos 4 e 2</h2>
+  <h3>Caso 4 · O gráfico convenceu a equipe</h3>
+  <p>Uma equipe treinou embeddings em um corpus pequeno, viu palavras próximas em um t-SNE e concluiu: “o modelo compreendeu os significados e funcionará bem em qualquer domínio”. É o Checkpoint 4 visto de fora.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pergunta do caso</th><th>Conceito testado</th><th>Onde estudar</th></tr></thead>
+      <tbody>
+        <tr><td>1. Duas limitações da conclusão: visualização e dados</td><td>O que um t-SNE autoriza ler; o que um corpus pequeno e de domínio estreito sustenta</td><td><a href="#cp4">PCA e t-SNE</a>, <a href="#analogias">Analogias no corpus pequeno</a>, <a href="aula-03.html#distribucional">premissa de corpus representativo</a></td></tr>
+        <tr><td>2. Uma verificação adicional</td><td>Medir no espaço original em vez de ler o gráfico; ordem de diagnóstico</td><td><a href="#cp4">CP4</a>, <a href="#cp3">CP3</a> (repetir o treino), <a href="aula-03.html#analogias">protocolo das analogias</a></td></tr>
+        <tr><td>3. Que observação apoiaria, e o que ainda não se concluiria</td><td>O que uma evidência prova e não prova</td><td><a href="aula-03.html#analogias">Aula 3, tabela “prova / não prova”</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Perguntas-guia para o Caso 4</h3>
+  <ol>
+    <li>“Aparecem próximas” em um t-SNE: isso é uma afirmação sobre vizinhança local ou sobre distância? O gráfico seria o mesmo com outro valor de <code>perplexity</code> ou em outra execução?</li>
+    <li>A conclusão da equipe tem duas partes: “compreendeu os significados” e “funcionará em qualquer domínio”. Que evidência cada parte exigiria, e o corpus usado fornece alguma delas?</li>
+    <li>O que acontece com palavras de outro domínio em um modelo treinado em corpus pequeno? Elas têm vetor?</li>
+    <li>Das verificações que você fez no laboratório (vizinhos por cosseno, analogias com resultado real, PCA ao lado, treinar duas vezes), qual atacaria melhor a dúvida que você levantou?</li>
+    <li>Suponha que a verificação dê certo. Do que você ainda <em>não</em> teria evidência?</li>
+  </ol>
+  <h3>Caso 2 · a parte de medição</h3>
+  <p>A terceira pergunta do Caso 2 pede uma “comparação mais representativa”. O Checkpoint 2 é o protocolo que você já executou: vários pares paralelos, mais de um tokenizador, duas médias com desvio, e a linha obrigatória sobre o que os números não permitem concluir. Veja <a href="#cp2">as duas médias</a> e a <a href="aula-02.html#av1">ponte da Aula 2</a>.</p>
+  <div class="callout exam">
+    <strong>O que a rubrica paga</strong>
+    <p>O Caso 4 é sobre limites de evidência, o critério de “aplicação e limites” vale em todas as três perguntas. Você pode citar o que mediu no seu próprio notebook, porque é um experimento que você executou. O enunciado proíbe apresentar experimentos inexistentes e pede que a verificação proposta <em>não</em> seja executada nem tenha resultado inventado.</p>
+  </div>
+  <p><strong>Como citar:</strong> “Aula 4 — Laboratório 1, Checkpoint 4 (PCA e t-SNE)”, “Aula 4 — Laboratório 1, Checkpoint 2 (razão PT/EN)”, “Aula 3 — Apêndice A.5”.</p>
+</section>
+
+<section class="block" id="glossario">
+  <h2>Glossário</h2>
+  <dl>
+    <dt>Corpus paralelo</dt><dd>Conjunto de pares de textos com o mesmo conteúdo em duas línguas.</dd>
+    <dt>Média das razões</dt><dd>Média das razões calculadas par a par. Caracteriza o tokenizador.</dd>
+    <dt>Razão dos totais</dt><dd>Total de tokens de um lado dividido pelo total do outro. É a do custo.</dd>
+    <dt>gensim</dt><dd>Biblioteca usada no laboratório para treinar o Word2Vec.</dd>
+    <dt>min_count</dt><dd>Frequência mínima para a palavra entrar no vocabulário do modelo.</dd>
+    <dt>PCA</dt><dd>Projeção linear nos eixos de maior variância. Só encurta distâncias.</dd>
+    <dt>t-SNE</dt><dd>Projeção não linear que preserva vizinhança local e distorce a escala global.</dd>
+    <dt>perplexity (t-SNE)</dt><dd>Parâmetro que regula quantos vizinhos o t-SNE tenta preservar. Sem relação com a perplexidade da Aula 1.</dd>
+    <dt>Fora do vocabulário</dt><dd>Palavra sem vetor no modelo. Um teste com ela não roda.</dd>
+  </dl>
+</section>
+
+<footer class="note">
+  As etiquetas “Aula N · …” marcam o que está no material do professor e pode ser citado. O restante é explicação escrita com apoio de IA: confira no material antes de usar em uma avaliação.
+</footer>
+
+</main>
+<script src="assets/study.js"></script>
+<script>
+// Orthogonal projection can only shrink distances: far on screen means far, near means nothing.
+(function () {
+  const A = [[-1, 0.3, -1], [-1.2, -0.2, -0.8], [-0.8, 0.1, -1.2], [-1.1, -0.4, -1.1], [-0.9, 0.5, -0.9]];
+  const B = [[1, 0.2, 1], [1.2, -0.3, 0.8], [0.8, 0.4, 1.2], [1.1, -0.1, 1.1], [0.9, -0.5, 0.9]];
+  const CENTER = { x: 130, y: 100 }, SCALE = 60, NS = "http://www.w3.org/2000/svg";
+  const $ = (id) => document.getElementById(id);
+  const slider = $("proj-angle"), group = $("proj-points"), link = $("proj-link");
+  const fmt = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const dots = A.concat(B).map((point, index) => {
+    const circle = document.createElementNS(NS, "circle");
+    const picked = index === 0 || index === A.length;
+    circle.setAttribute("r", picked ? 6 : 4);
+    circle.setAttribute("class", (index < A.length ? "a" : "b") + (picked ? " pick" : ""));
+    group.appendChild(circle);
+    return { point, circle };
+  });
+  const trueDistance = Math.hypot(A[0][0] - B[0][0], A[0][1] - B[0][1], A[0][2] - B[0][2]);
+
+  function project(point, rad) {
+    return { x: point[0] * Math.cos(rad) - point[2] * Math.sin(rad), y: point[1] };
+  }
+
+  function update() {
+    const rad = slider.value * Math.PI / 180;
+    dots.forEach(({ point, circle }) => {
+      const p = project(point, rad);
+      circle.setAttribute("cx", CENTER.x + p.x * SCALE);
+      circle.setAttribute("cy", CENTER.y - p.y * SCALE);
+    });
+    const p = project(A[0], rad), q = project(B[0], rad);
+    link.setAttribute("x1", CENTER.x + p.x * SCALE);
+    link.setAttribute("y1", CENTER.y - p.y * SCALE);
+    link.setAttribute("x2", CENTER.x + q.x * SCALE);
+    link.setAttribute("y2", CENTER.y - q.y * SCALE);
+    const seen = Math.hypot(p.x - q.x, p.y - q.y);
+    $("proj-angle-out").textContent = slider.value + "°";
+    $("proj-true").textContent = fmt(trueDistance);
+    $("proj-seen").textContent = fmt(seen);
+    $("proj-verdict").textContent = seen < trueDistance * 0.25
+      ? "Os dois grupos parecem um só. Os pontos continuam a " + fmt(trueDistance) + " de distância: a separação está na dimensão que esta vista descartou."
+      : "Os grupos aparecem separados, e essa separação é real: a distância no gráfico (" + fmt(seen) + ") nunca passa da verdadeira (" + fmt(trueDistance) + ").";
+  }
+
+  slider.addEventListener("input", update);
+  update();
+})();
+</script>
+</body>
+</html>

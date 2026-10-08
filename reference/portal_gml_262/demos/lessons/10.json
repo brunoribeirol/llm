@@ -1,0 +1,267 @@
+{
+  "id": 10,
+  "title": "Do Transformer ao LLM: capacidade, escolha e contexto",
+  "subtitle": "Orçamento de treino, especialistas, decodificação e diagnóstico do serving",
+  "nodes": [
+    "Escala",
+    "Especialistas",
+    "Logits",
+    "Seleção",
+    "Prompt",
+    "Serving"
+  ],
+  "controls": [
+    {
+      "key": "params",
+      "label": "Parâmetros compartilhados (bilhões)",
+      "type": "range",
+      "min": 1,
+      "max": 20,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "tokens",
+      "label": "Tokens de treino (bilhões)",
+      "type": "range",
+      "min": 10,
+      "max": 500,
+      "step": 10,
+      "value": 100
+    },
+    {
+      "key": "experts",
+      "label": "Quantidade de especialistas",
+      "type": "range",
+      "min": 2,
+      "max": 8,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "active",
+      "label": "Especialistas ativos por token",
+      "type": "range",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "temperature",
+      "label": "Temperatura",
+      "type": "range",
+      "min": 0.1,
+      "max": 2,
+      "step": 0.1,
+      "value": 1
+    },
+    {
+      "key": "topk",
+      "label": "Top-k",
+      "type": "range",
+      "min": 1,
+      "max": 6,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "topp",
+      "label": "Top-p",
+      "type": "range",
+      "min": 0.1,
+      "max": 1,
+      "step": 0.05,
+      "value": 0.9
+    },
+    {
+      "key": "draw",
+      "label": "Sorteio determinístico u",
+      "type": "range",
+      "min": 0.01,
+      "max": 0.99,
+      "step": 0.01,
+      "value": 0.42
+    },
+    {
+      "key": "prompt",
+      "label": "Estrutura do prompt",
+      "type": "select",
+      "value": "instruction",
+      "options": [
+        {
+          "value": "bare",
+          "label": "Pedido vago"
+        },
+        {
+          "value": "instruction",
+          "label": "Instrução e formato"
+        },
+        {
+          "value": "examples",
+          "label": "Instrução + exemplos"
+        },
+        {
+          "value": "evidence",
+          "label": "Instrução + documento"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "title": "Quatro chamados, quatro perguntas",
+      "view": "tickets",
+      "explanation": "Custo inesperado, repetição, saídas diferentes e informação ignorada podem surgir sem defeito de implementação. Localizar o mecanismo evita trocar pesos para resolver uma decisão de inferência.",
+      "action": "Altere Temperatura e Especialistas ativos; identifique qual chamado cada controle pode afetar.",
+      "board": "Capacidade; decodificação; contexto; execução",
+      "question": "Todo comportamento indesejado pede fine-tuning?",
+      "answer": "Não; orçamento, algoritmo de seleção, formato da entrada ou serving podem explicar o sintoma.",
+      "focus": 0,
+      "speech": "Custo inesperado, repetição, saídas diferentes e informação ignorada podem surgir sem defeito de implementação. Localizar o mecanismo evita trocar pesos para resolver uma decisão de inferência. Altere Temperatura e Especialistas ativos; identifique qual chamado cada controle pode afetar. Pergunto à turma: “Todo comportamento indesejado pede fine-tuning?” Não; orçamento, algoritmo de seleção, formato da entrada ou serving podem explicar o sintoma."
+    },
+    {
+      "title": "Calcule um orçamento de treino",
+      "view": "compute",
+      "explanation": "Uma aproximação comum para treino de Transformers densos é C≈6ND, onde N é parâmetros e D é tokens. A conta é uma estimativa de operações, não uma previsão de tempo nem uma lei de qualidade.",
+      "action": "Dobre Parâmetros mantendo Tokens e observe os FLOPs aproximados.",
+      "board": "C ≈ 6 × N × D",
+      "question": "Dobrar o orçamento garante a mesma melhora em toda tarefa?",
+      "answer": "Não; o resultado depende de dados, regime de treino, arquitetura e avaliação.",
+      "focus": 0,
+      "speech": "Uma aproximação comum para treino de Transformers densos é C≈6ND, onde N é parâmetros e D é tokens. A conta é uma estimativa de operações, não uma previsão de tempo nem uma lei de qualidade. Dobre Parâmetros mantendo Tokens e observe os FLOPs aproximados. Pergunto à turma: “Dobrar o orçamento garante a mesma melhora em toda tarefa?” Não; o resultado depende de dados, regime de treino, arquitetura e avaliação."
+    },
+    {
+      "title": "Separe parâmetros totais de ativos",
+      "view": "moe",
+      "explanation": "Uma camada MoE possui vários especialistas, mas encaminha cada token a apenas alguns. A miniatura atribui um bilhão de parâmetros a cada especialista e separa a parte compartilhada.",
+      "action": "Compare Especialistas=8, Ativos=2 com Ativos=4; veja memória de pesos e trabalho ativo.",
+      "board": "N_total=N_comp+E·N_exp; N_ativo=N_comp+k·N_exp",
+      "question": "O modelo precisa armazenar apenas os especialistas ativados por um token?",
+      "answer": "Não em geral; o conjunto de pesos precisa estar disponível no sistema, embora cada token use uma parte.",
+      "focus": 1,
+      "speech": "Uma camada MoE possui vários especialistas, mas encaminha cada token a apenas alguns. A miniatura atribui um bilhão de parâmetros a cada especialista e separa a parte compartilhada. Compare Especialistas=8, Ativos=2 com Ativos=4; veja memória de pesos e trabalho ativo. Pergunto à turma: “O modelo precisa armazenar apenas os especialistas ativados por um token?” Não em geral; o conjunto de pesos precisa estar disponível no sistema, embora cada token use uma parte."
+    },
+    {
+      "title": "Acompanhe o roteamento top-k",
+      "view": "router",
+      "explanation": "O roteador produz scores para os especialistas e escolhe k deles por token. A matriz calculada usa scores determinísticos didáticos e expõe quais especialistas recebem cada token.",
+      "action": "Aumente Ativos e compare a matriz de despacho e a contagem por especialista.",
+      "board": "token → scores do roteador → top-k → especialistas → combinação",
+      "question": "Escolher especialistas equivale a escolher palavras do vocabulário?",
+      "answer": "Não; roteamento seleciona computação interna, enquanto decodificação seleciona a saída.",
+      "focus": 1,
+      "speech": "O roteador produz scores para os especialistas e escolhe k deles por token. A matriz calculada usa scores determinísticos didáticos e expõe quais especialistas recebem cada token. Aumente Ativos e compare a matriz de despacho e a contagem por especialista. Pergunto à turma: “Escolher especialistas equivale a escolher palavras do vocabulário?” Não; roteamento seleciona computação interna, enquanto decodificação seleciona a saída."
+    },
+    {
+      "title": "Procure desequilíbrio de carga",
+      "view": "balance",
+      "explanation": "Um roteador pode concentrar tokens em poucos especialistas, deixando capacidade ociosa e filas desiguais. A tela mede a distribuição do despacho da miniatura e não simula treinamento do roteador.",
+      "action": "Mude Quantidade de especialistas e observe máximo, média e cargas por especialista.",
+      "board": "Carga por especialista; razão máximo/média",
+      "question": "Especialistas iguais em tamanho garantem carga igual?",
+      "answer": "Não; a distribuição das escolhas do roteador pode ser desigual, exigindo mecanismos e métricas de balanceamento.",
+      "focus": 1,
+      "speech": "Um roteador pode concentrar tokens em poucos especialistas, deixando capacidade ociosa e filas desiguais. A tela mede a distribuição do despacho da miniatura e não simula treinamento do roteador. Mude Quantidade de especialistas e observe máximo, média e cargas por especialista. Pergunto à turma: “Especialistas iguais em tamanho garantem carga igual?” Não; a distribuição das escolhas do roteador pode ser desigual, exigindo mecanismos e métricas de balanceamento."
+    },
+    {
+      "title": "O treino terminou: logits não escolhem sozinhos",
+      "view": "logits",
+      "explanation": "O modelo fornece scores para próximos tokens e o algoritmo de decodificação decide como usá-los. Os seis logits desta demonstração são fixos e públicos.",
+      "action": "Observe os logits e ajuste Temperatura sem mudar nenhum peso.",
+      "board": "logits → transformação → distribuição → seleção",
+      "question": "Mudar temperatura altera os pesos do modelo?",
+      "answer": "Não; altera como os mesmos scores são convertidos em probabilidades.",
+      "focus": 2,
+      "speech": "O modelo fornece scores para próximos tokens e o algoritmo de decodificação decide como usá-los. Os seis logits desta demonstração são fixos e públicos. Observe os logits e ajuste Temperatura sem mudar nenhum peso. Pergunto à turma: “Mudar temperatura altera os pesos do modelo?” Não; altera como os mesmos scores são convertidos em probabilidades."
+    },
+    {
+      "title": "Greedy e beam otimizam objetivos específicos",
+      "view": "greedy",
+      "explanation": "Greedy escolhe o maior score em cada passo e pode perder a sequência de maior probabilidade global. O pequeno grafo com dois passos mostra um caso em que ampliar a busca muda o resultado.",
+      "action": "Compare o caminho que começa com 0,55 com aquele que começa com 0,45 e calcule os produtos.",
+      "board": "P(sequência)=produto das probabilidades condicionais",
+      "question": "A sequência mais provável é necessariamente a melhor resposta?",
+      "answer": "Não; probabilidade do modelo e qualidade da aplicação são objetivos diferentes.",
+      "focus": 3,
+      "speech": "Greedy escolhe o maior score em cada passo e pode perder a sequência de maior probabilidade global. O pequeno grafo com dois passos mostra um caso em que ampliar a busca muda o resultado. Compare o caminho que começa com 0,55 com aquele que começa com 0,45 e calcule os produtos. Pergunto à turma: “A sequência mais provável é necessariamente a melhor resposta?” Não; probabilidade do modelo e qualidade da aplicação são objetivos diferentes."
+    },
+    {
+      "title": "Temperatura controla concentração",
+      "view": "temperature",
+      "explanation": "Dividir logits por uma temperatura positiva altera o contraste antes do softmax. Temperaturas menores concentram massa, e temperaturas maiores a distribuem.",
+      "action": "Compare T=0,2 e T=2 e leia a entropia calculada.",
+      "board": "pᵢ=softmax(logitᵢ/T); H=−soma pᵢ ln pᵢ",
+      "question": "Temperatura zero é usada diretamente nesta fórmula?",
+      "answer": "Não; o limite se relaciona ao máximo, mas dividir por zero é indefinido, por isso o controle usa T positivo.",
+      "focus": 3,
+      "speech": "Dividir logits por uma temperatura positiva altera o contraste antes do softmax. Temperaturas menores concentram massa, e temperaturas maiores a distribuem. Compare T=0,2 e T=2 e leia a entropia calculada. Pergunto à turma: “Temperatura zero é usada diretamente nesta fórmula?” Não; o limite se relaciona ao máximo, mas dividir por zero é indefinido, por isso o controle usa T positivo."
+    },
+    {
+      "title": "Top-k fixa quantidade, top-p fixa massa",
+      "view": "filter",
+      "explanation": "Top-k conserva k candidatos e top-p conserva o menor prefixo ordenado cuja massa atinge p. Ambos renormalizam a distribuição após remover candidatos.",
+      "action": "Ajuste Top-k e Top-p e compare quais palavras permanecem em cada método.",
+      "board": "Top-k: k itens; top-p: massa acumulada ≥ p",
+      "question": "Top-p=0,9 mantém sempre 90% das palavras?",
+      "answer": "Não; mantém candidatos suficientes para cobrir pelo menos 90% da massa de probabilidade.",
+      "focus": 3,
+      "speech": "Top-k conserva k candidatos e top-p conserva o menor prefixo ordenado cuja massa atinge p. Ambos renormalizam a distribuição após remover candidatos. Ajuste Top-k e Top-p e compare quais palavras permanecem em cada método. Pergunto à turma: “Top-p=0,9 mantém sempre 90% das palavras?” Não; mantém candidatos suficientes para cobrir pelo menos 90% da massa de probabilidade."
+    },
+    {
+      "title": "Amostre de forma verificável",
+      "view": "sample",
+      "explanation": "Um número u entre zero e um seleciona o intervalo correspondente na distribuição acumulada. O controle permite repetir exatamente o sorteio e separar distribuição de aleatoriedade.",
+      "action": "Mova Sorteio determinístico u e compare escolhas sob distribuição completa, top-k e top-p.",
+      "board": "Escolher menor j com somaᵢ≤ⱼ pᵢ ≥ u",
+      "question": "Duas execuções com os mesmos logits podem produzir tokens diferentes?",
+      "answer": "Sim se usarem sorteios diferentes; a política de amostragem e a semente precisam ser registradas.",
+      "focus": 3,
+      "speech": "Um número u entre zero e um seleciona o intervalo correspondente na distribuição acumulada. O controle permite repetir exatamente o sorteio e separar distribuição de aleatoriedade. Mova Sorteio determinístico u e compare escolhas sob distribuição completa, top-k e top-p. Pergunto à turma: “Duas execuções com os mesmos logits podem produzir tokens diferentes?” Sim se usarem sorteios diferentes; a política de amostragem e a semente precisam ser registradas."
+    },
+    {
+      "title": "O prompt fornece uma tarefa em contexto",
+      "view": "prompt",
+      "explanation": "Instrução, formato, exemplos e evidência alteram a entrada usada para prever a continuação. Os cartões mostram modelos de prompt, sem chamar um LLM nem prometer respostas específicas.",
+      "action": "Alterne as quatro estruturas e identifique qual informação foi acrescentada.",
+      "board": "Pedido + restrições + exemplos + evidência + formato",
+      "question": "Few-shot atualiza pesos durante a chamada?",
+      "answer": "No uso usual de aprendizado em contexto, não; exemplos entram no prefixo que condiciona a previsão.",
+      "focus": 4,
+      "speech": "Instrução, formato, exemplos e evidência alteram a entrada usada para prever a continuação. Os cartões mostram modelos de prompt, sem chamar um LLM nem prometer respostas específicas. Alterne as quatro estruturas e identifique qual informação foi acrescentada. Pergunto à turma: “Few-shot atualiza pesos durante a chamada?” No uso usual de aprendizado em contexto, não; exemplos entram no prefixo que condiciona a previsão."
+    },
+    {
+      "title": "Caber na janela não garante uso da evidência",
+      "view": "context",
+      "explanation": "A janela limita a entrada, mas não mede se o modelo recuperou a informação relevante. A inspeção deve testar posição da evidência, instrução e necessidade de recuperação.",
+      "action": "Selecione Prompt com documento e examine onde ficam tarefa, evidência e resposta esperada.",
+      "board": "Cabe na janela ≠ informação usada corretamente",
+      "question": "Como investigar um fato presente no documento que foi ignorado?",
+      "answer": "Teste perguntas verificáveis, posição da evidência e formatos de contexto, mantendo os demais fatores controlados.",
+      "focus": 4,
+      "speech": "A janela limita a entrada, mas não mede se o modelo recuperou a informação relevante. A inspeção deve testar posição da evidência, instrução e necessidade de recuperação. Selecione Prompt com documento e examine onde ficam tarefa, evidência e resposta esperada. Pergunto à turma: “Como investigar um fato presente no documento que foi ignorado?” Teste perguntas verificáveis, posição da evidência e formatos de contexto, mantendo os demais fatores controlados."
+    },
+    {
+      "title": "Diferencie os gargalos do serving",
+      "view": "serving",
+      "explanation": "Prefill processa o prefixo e decode produz tokens sucessivos; ambos usam recursos de forma diferente. MoE, cache e batching afetam a execução, mas o navegador exibe apenas contas de capacidade e fluxo.",
+      "action": "Altere Parâmetros e Ativos; compare pesos totais, ativos e fases do atendimento.",
+      "board": "Prefill → primeiro token → decode; latência ≠ throughput",
+      "question": "Reduzir parâmetros ativos garante menor latência ponta a ponta?",
+      "answer": "Não; comunicação, leitura de memória, tamanho do lote e implementação também entram no tempo total.",
+      "focus": 5,
+      "speech": "Prefill processa o prefixo e decode produz tokens sucessivos; ambos usam recursos de forma diferente. MoE, cache e batching afetam a execução, mas o navegador exibe apenas contas de capacidade e fluxo. Altere Parâmetros e Ativos; compare pesos totais, ativos e fases do atendimento. Pergunto à turma: “Reduzir parâmetros ativos garante menor latência ponta a ponta?” Não; comunicação, leitura de memória, tamanho do lote e implementação também entram no tempo total."
+    },
+    {
+      "title": "Feche cada chamado com uma evidência",
+      "view": "diagnosis",
+      "explanation": "Uma intervenção útil vem acompanhada de uma previsão mensurável. A síntese liga orçamento, roteamento, decodificação e contexto aos números produzidos ao longo da demonstração.",
+      "action": "Escolha um dos quatro chamados e defenda uma mudança usando uma medida da tela.",
+      "board": "Sintoma → hipótese → controle alterado → medida → conclusão",
+      "question": "O que torna o diagnóstico melhor que apenas tentar configurações?",
+      "answer": "Uma hipótese prevê qual medida deve mudar e permite rejeitar a explicação quando o resultado não acompanha essa previsão.",
+      "focus": 5,
+      "speech": "Uma intervenção útil vem acompanhada de uma previsão mensurável. A síntese liga orçamento, roteamento, decodificação e contexto aos números produzidos ao longo da demonstração. Escolha um dos quatro chamados e defenda uma mudança usando uma medida da tela. Pergunto à turma: “O que torna o diagnóstico melhor que apenas tentar configurações?” Uma hipótese prevê qual medida deve mudar e permite rejeitar a explicação quando o resultado não acompanha essa previsão."
+    }
+  ]
+}

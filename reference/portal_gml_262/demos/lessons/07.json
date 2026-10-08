@@ -1,0 +1,228 @@
+{
+  "id": 7,
+  "title": "O bloco moderno: posição, normalização e caminhos residuais",
+  "subtitle": "Do código de posição ao RoPE, com vetores e contas inspecionáveis",
+  "nodes": [
+    "Ordem",
+    "Posição",
+    "Rotação",
+    "Residual",
+    "Norma",
+    "FFN"
+  ],
+  "controls": [
+    {
+      "key": "position",
+      "label": "Posição da query m",
+      "type": "range",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "distance",
+      "label": "Distância n − m",
+      "type": "range",
+      "min": 0,
+      "max": 20,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "frequency",
+      "label": "Frequência angular θ",
+      "type": "range",
+      "min": 0.05,
+      "max": 1,
+      "step": 0.05,
+      "value": 0.25
+    },
+    {
+      "key": "depth",
+      "label": "Profundidade da cadeia",
+      "type": "range",
+      "min": 1,
+      "max": 60,
+      "step": 1,
+      "value": 20
+    },
+    {
+      "key": "gain",
+      "label": "Ganho da transformação por camada",
+      "type": "range",
+      "min": 0.05,
+      "max": 0.95,
+      "step": 0.05,
+      "value": 0.8
+    },
+    {
+      "key": "offset",
+      "label": "Deslocamento comum do vetor",
+      "type": "range",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "value": 0
+    },
+    {
+      "key": "width",
+      "label": "Dimensão d do modelo",
+      "type": "range",
+      "min": 8,
+      "max": 128,
+      "step": 8,
+      "value": 32
+    },
+    {
+      "key": "norm",
+      "label": "Normalização",
+      "type": "select",
+      "value": "layer",
+      "options": [
+        {
+          "value": "layer",
+          "label": "LayerNorm"
+        },
+        {
+          "value": "rms",
+          "label": "RMSNorm"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "title": "Sem posição, o conjunto troca de ordem",
+      "view": "permutation",
+      "explanation": "Self-attention sem informação posicional é equivariante a permutações: reordenar entradas reordena as saídas. A máscara causal restringe acesso, mas não é um código explícito de distância ou posição.",
+      "action": "Mova Posição e observe que os vetores de conteúdo sem posição permanecem idênticos.",
+      "board": "Sem posição: Attention(PX) = P Attention(X), com máscara também compatível",
+      "question": "A máscara triangular equivale a adicionar um vetor posicional?",
+      "answer": "Não; ela define acessibilidade, enquanto uma codificação posicional fornece informação adicional sobre posição ou distância.",
+      "focus": 0,
+      "speech": "Self-attention sem informação posicional é equivariante a permutações: reordenar entradas reordena as saídas. A máscara causal restringe acesso, mas não é um código explícito de distância ou posição. Mova Posição e observe que os vetores de conteúdo sem posição permanecem idênticos. Pergunto à turma: “A máscara triangular equivale a adicionar um vetor posicional?” Não; ela define acessibilidade, enquanto uma codificação posicional fornece informação adicional sobre posição ou distância."
+    },
+    {
+      "title": "Some um código senoidal",
+      "view": "sinusoidal",
+      "explanation": "Canais alternam seno e cosseno com frequências diferentes. A demonstração calcula quatro canais para comparar posições sem depender de uma tabela aprendida.",
+      "action": "Mova Posição e observe o código de quatro números e o vetor de entrada após a soma.",
+      "board": "PE(pos,2i)=sin(pos/10000^(2i/d)); PE(pos,2i+1)=cos(...)",
+      "question": "O código é aprendido por gradiente?",
+      "answer": "Na versão senoidal original, ele é calculado por fórmula; os demais parâmetros aprendem a usá-lo.",
+      "focus": 1,
+      "speech": "Canais alternam seno e cosseno com frequências diferentes. A demonstração calcula quatro canais para comparar posições sem depender de uma tabela aprendida. Mova Posição e observe o código de quatro números e o vetor de entrada após a soma. Pergunto à turma: “O código é aprendido por gradiente?” Na versão senoidal original, ele é calculado por fórmula; os demais parâmetros aprendem a usá-lo."
+    },
+    {
+      "title": "Uma tabela aprendida tem um domínio",
+      "view": "learned",
+      "explanation": "Posições aprendidas são entradas de uma tabela ajustada no treino. A miniatura fixa oito posições para tornar visível o caso de índice além da tabela, sem fingir que esses números foram treinados.",
+      "action": "Mova Posição de 7 para 8 e identifique a ausência de uma entrada definida.",
+      "board": "Tabela P ∈ R^(L×d); acessar posição ≥ L requer uma estratégia",
+      "question": "Qual diferença prática aparece fora do comprimento da tabela?",
+      "answer": "A consulta direta deixa de estar definida; ampliar ou adaptar o método requer uma decisão adicional.",
+      "focus": 1,
+      "speech": "Posições aprendidas são entradas de uma tabela ajustada no treino. A miniatura fixa oito posições para tornar visível o caso de índice além da tabela, sem fingir que esses números foram treinados. Mova Posição de 7 para 8 e identifique a ausência de uma entrada definida. Pergunto à turma: “Qual diferença prática aparece fora do comprimento da tabela?” A consulta direta deixa de estar definida; ampliar ou adaptar o método requer uma decisão adicional."
+    },
+    {
+      "title": "Gire query e key em pares",
+      "view": "rope",
+      "explanation": "RoPE aplica rotações a pares de coordenadas de queries e keys. Cada par pode usar uma frequência diferente; esta miniatura isola um único par 2D.",
+      "action": "Mova Posição e Frequência e observe os vetores rotacionados.",
+      "board": "q′=R(mθ)q; k′=R(nθ)k",
+      "question": "RoPE gira os IDs dos tokens?",
+      "answer": "Não; atua nas representações projetadas de query e key usadas para calcular scores.",
+      "focus": 2,
+      "speech": "RoPE aplica rotações a pares de coordenadas de queries e keys. Cada par pode usar uma frequência diferente; esta miniatura isola um único par 2D. Mova Posição e Frequência e observe os vetores rotacionados. Pergunto à turma: “RoPE gira os IDs dos tokens?” Não; atua nas representações projetadas de query e key usadas para calcular scores."
+    },
+    {
+      "title": "Meça a dependência da distância relativa",
+      "view": "relative",
+      "explanation": "O produto interno entre os vetores rotacionados depende da diferença entre os ângulos. Mantendo os vetores de conteúdo e a distância, deslocar ambas as posições preserva o score nesta miniatura.",
+      "action": "Mantenha Distância=2 e altere Posição de 3 a 20; confira o score constante.",
+      "board": "R(mθ)q · R(nθ)k = q · R((n−m)θ)k",
+      "question": "O score deve mudar ao deslocar as duas posições igualmente?",
+      "answer": "Não neste par com o mesmo conteúdo e frequência; a rotação comum preserva o produto interno.",
+      "focus": 2,
+      "speech": "O produto interno entre os vetores rotacionados depende da diferença entre os ângulos. Mantendo os vetores de conteúdo e a distância, deslocar ambas as posições preserva o score nesta miniatura. Mantenha Distância=2 e altere Posição de 3 a 20; confira o score constante. Pergunto à turma: “O score deve mudar ao deslocar as duas posições igualmente?” Não neste par com o mesmo conteúdo e frequência; a rotação comum preserva o produto interno."
+    },
+    {
+      "title": "Não confunda fórmula com extrapolação garantida",
+      "view": "extrapolation",
+      "explanation": "Uma fórmula definida para posições longas não garante qualidade fora do treino. Frequências, distribuição de distâncias e comportamento aprendido continuam relevantes.",
+      "action": "Aumente Distância e observe a oscilação do score; compare distâncias diferentes com scores parecidos.",
+      "board": "Definido numericamente ≠ validado empiricamente",
+      "question": "RoPE elimina a necessidade de avaliar contextos longos?",
+      "answer": "Não; a generalização depende do modelo e dos dados, e precisa ser medida.",
+      "focus": 2,
+      "speech": "Uma fórmula definida para posições longas não garante qualidade fora do treino. Frequências, distribuição de distâncias e comportamento aprendido continuam relevantes. Aumente Distância e observe a oscilação do score; compare distâncias diferentes com scores parecidos. Pergunto à turma: “RoPE elimina a necessidade de avaliar contextos longos?” Não; a generalização depende do modelo e dos dados, e precisa ser medida."
+    },
+    {
+      "title": "Abra o caminho residual",
+      "view": "residual",
+      "explanation": "O residual soma a entrada à transformação do bloco. A conta escalar compara uma cadeia de ganhos com uma cadeia que inclui um caminho identidade, sem prometer estabilidade de uma rede inteira.",
+      "action": "Varie Profundidade e Ganho; compare g^L e (1+g)^L em escala logarítmica.",
+      "board": "x′=x+F(x); Jacobiano = I+J_F",
+      "question": "Ter residual significa que gradientes nunca explodem?",
+      "answer": "Não; ele cria um caminho direto, mas o produto total ainda pode crescer ou sofrer cancelamentos.",
+      "focus": 3,
+      "speech": "O residual soma a entrada à transformação do bloco. A conta escalar compara uma cadeia de ganhos com uma cadeia que inclui um caminho identidade, sem prometer estabilidade de uma rede inteira. Varie Profundidade e Ganho; compare g^L e (1+g)^L em escala logarítmica. Pergunto à turma: “Ter residual significa que gradientes nunca explodem?” Não; ele cria um caminho direto, mas o produto total ainda pode crescer ou sofrer cancelamentos."
+    },
+    {
+      "title": "LayerNorm centraliza e escala",
+      "view": "layernorm",
+      "explanation": "LayerNorm subtrai a média e divide pelo desvio padrão de cada vetor. A miniatura omite parâmetros afins aprendidos para destacar o mecanismo.",
+      "action": "Aumente Deslocamento comum e observe que os valores normalizados permanecem praticamente iguais.",
+      "board": "LN(x)=(x−média)/sqrt(variância+ε)",
+      "question": "Adicionar a mesma constante a todos os canais muda esta LayerNorm sem affine?",
+      "answer": "Não, salvo arredondamentos e epsilon; a centralização remove esse deslocamento.",
+      "focus": 4,
+      "speech": "LayerNorm subtrai a média e divide pelo desvio padrão de cada vetor. A miniatura omite parâmetros afins aprendidos para destacar o mecanismo. Aumente Deslocamento comum e observe que os valores normalizados permanecem praticamente iguais. Pergunto à turma: “Adicionar a mesma constante a todos os canais muda esta LayerNorm sem affine?” Não, salvo arredondamentos e epsilon; a centralização remove esse deslocamento."
+    },
+    {
+      "title": "RMSNorm remove a centralização",
+      "view": "rmsnorm",
+      "explanation": "RMSNorm divide pela raiz da média dos quadrados e não subtrai a média. Por isso deslocar todos os canais muda a direção normalizada de forma diferente de LayerNorm.",
+      "action": "Alterne Normalização e aumente Deslocamento comum; compare média e RMS da saída.",
+      "board": "RMSNorm(x)=x/sqrt(média(x²)+ε)",
+      "question": "RMSNorm obriga a média da saída a ser zero?",
+      "answer": "Não; controla escala pela RMS, preservando componentes de média que LayerNorm retiraria.",
+      "focus": 4,
+      "speech": "RMSNorm divide pela raiz da média dos quadrados e não subtrai a média. Por isso deslocar todos os canais muda a direção normalizada de forma diferente de LayerNorm. Alterne Normalização e aumente Deslocamento comum; compare média e RMS da saída. Pergunto à turma: “RMSNorm obriga a média da saída a ser zero?” Não; controla escala pela RMS, preservando componentes de média que LayerNorm retiraria."
+    },
+    {
+      "title": "Posicione a norma no bloco",
+      "view": "prenorm",
+      "explanation": "No pré-norm, a normalização fica dentro da transformação residual; no pós-norm, normaliza-se o resultado da soma. Isso altera o caminho de propagação e o comportamento de otimização.",
+      "action": "Compare os dois diagramas e a mesma transformação escalar sob os dois arranjos.",
+      "board": "Pré: x+F(Norm(x)); pós: Norm(x+F(x))",
+      "question": "Trocar a posição da norma é apenas reorganizar a escrita?",
+      "answer": "Não; normalização é uma operação não linear e a ordem de composição muda a função calculada.",
+      "focus": 4,
+      "speech": "No pré-norm, a normalização fica dentro da transformação residual; no pós-norm, normaliza-se o resultado da soma. Isso altera o caminho de propagação e o comportamento de otimização. Compare os dois diagramas e a mesma transformação escalar sob os dois arranjos. Pergunto à turma: “Trocar a posição da norma é apenas reorganizar a escrita?” Não; normalização é uma operação não linear e a ordem de composição muda a função calculada."
+    },
+    {
+      "title": "Conte os pesos da FFN",
+      "view": "ffn",
+      "explanation": "Uma FFN com expansão 4d possui aproximadamente 8d² pesos nas duas projeções, sem biases. Uma FFN com gate possui três projeções e pode usar dimensão intermediária próxima de 8d/3 para orçamento semelhante.",
+      "action": "Dobre Dimensão e compare a contagem quadrática dos pesos.",
+      "board": "FFN: 2dm; gated FFN: 3dm; m≈8d/3 para 8d²",
+      "question": "Dobrar d dobra a quantidade de pesos da FFN?",
+      "answer": "Com a expansão proporcional a d, a quantidade cresce quatro vezes.",
+      "focus": 5,
+      "speech": "Uma FFN com expansão 4d possui aproximadamente 8d² pesos nas duas projeções, sem biases. Uma FFN com gate possui três projeções e pode usar dimensão intermediária próxima de 8d/3 para orçamento semelhante. Dobre Dimensão e compare a contagem quadrática dos pesos. Pergunto à turma: “Dobrar d dobra a quantidade de pesos da FFN?” Com a expansão proporcional a d, a quantidade cresce quatro vezes."
+    },
+    {
+      "title": "Reconstrua um bloco moderno",
+      "view": "block",
+      "explanation": "Posição, normalização, atenção, residual e FFN respondem a funções distintas. O diagrama reúne escolhas comuns sem afirmar que todo modelo moderno usa a mesma combinação.",
+      "action": "Escolha a norma, ajuste dimensão e siga os dois caminhos residuais até a saída.",
+      "board": "x → norma → atenção → soma → norma → FFN → soma",
+      "question": "Qual componente troca informação entre posições e qual transforma canais em cada posição?",
+      "answer": "A atenção mistura posições; a FFN aplica a mesma transformação de canais separadamente em cada posição.",
+      "focus": 5,
+      "speech": "Posição, normalização, atenção, residual e FFN respondem a funções distintas. O diagrama reúne escolhas comuns sem afirmar que todo modelo moderno usa a mesma combinação. Escolha a norma, ajuste dimensão e siga os dois caminhos residuais até a saída. Pergunto à turma: “Qual componente troca informação entre posições e qual transforma canais em cada posição?” A atenção mistura posições; a FFN aplica a mesma transformação de canais separadamente em cada posição."
+    }
+  ]
+}

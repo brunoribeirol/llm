@@ -1,0 +1,205 @@
+{
+  "id": 26,
+  "title": "Segurança de agentes: a trajetória que muda de rumo",
+  "subtitle": "Compare duas execuções de uma injeção inócua em documentos fictícios. A mitigação é um comportamento roteirizado, nunca uma garantia de proteção de um LLM.",
+  "nodes": [
+    "Entrada",
+    "Recuperação",
+    "Fronteira",
+    "Permissão",
+    "Auditoria",
+    "Avaliação"
+  ],
+  "controls": [
+    {
+      "key": "poison",
+      "label": "Incluir documento com instrução injetada",
+      "type": "checkbox",
+      "value": true
+    },
+    {
+      "key": "delimit",
+      "label": "Separar conteúdo recuperado como dado",
+      "type": "checkbox",
+      "value": false
+    },
+    {
+      "key": "permission",
+      "label": "Permitir apenas leitura",
+      "type": "checkbox",
+      "value": true
+    },
+    {
+      "key": "channel",
+      "label": "Origem do conteúdo",
+      "type": "select",
+      "value": "document",
+      "options": [
+        {
+          "value": "document",
+          "label": "Documento recuperado"
+        },
+        {
+          "value": "tool",
+          "label": "Resultado de ferramenta"
+        },
+        {
+          "value": "web",
+          "label": "Página externa fictícia"
+        }
+      ]
+    },
+    {
+      "key": "cases",
+      "label": "Casos do lote sintético",
+      "type": "range",
+      "min": 4,
+      "max": 20,
+      "step": 1,
+      "value": 12
+    },
+    {
+      "key": "faults",
+      "label": "Casos com falha de interpretação",
+      "type": "range",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "value": 2
+    }
+  ],
+  "steps": [
+    {
+      "title": "A tarefa legítima e a entrada externa",
+      "view": "task",
+      "explanation": "A pergunta pede o prazo de trancamento em um regulamento fictício. A resposta correta é dez dias segundo o artigo 2; a demonstração usa texto inteiramente local.",
+      "action": "Desative o documento injetado e observe a execução de referência.",
+      "board": "objetivo autorizado: responder com fonte",
+      "speech": "Começamos pelo comportamento esperado. Sem referência, não saberíamos reconhecer o desvio. O que vamos alterar é uma fonte recuperada, mantendo a mesma pergunta legítima.",
+      "question": "Qual é a tarefa que deve permanecer estável?",
+      "answer": "Responder o prazo com a fonte correspondente, sem trocar o objetivo por instruções do documento.",
+      "focus": 0
+    },
+    {
+      "title": "Três canais, a mesma fronteira",
+      "view": "channels",
+      "explanation": "Documentos, páginas e resultados de ferramentas podem carregar texto de terceiros. A origem muda, mas todos precisam ser tratados como dados sujeitos a confiança limitada.",
+      "action": "Alterne a origem do conteúdo e localize o ponto em que ele entra no contexto.",
+      "board": "canal externo → conteúdo não confiável → contexto",
+      "speech": "Não é preciso falar diretamente com o agente para influenciar seu contexto. Um texto recuperado já entra na execução. Isso torna a proveniência dos dados parte do desenho do sistema.",
+      "question": "Um retorno de ferramenta é automaticamente uma instrução autorizada?",
+      "answer": "Não. A ferramenta pode transportar texto de terceiros; sucesso da chamada não legitima comandos contidos nele.",
+      "focus": 0
+    },
+    {
+      "title": "O documento de demonstração",
+      "view": "payload",
+      "explanation": "O documento adicional contém uma instrução marcada para substituir a resposta por DEMONSTRAÇÃO INJETADA. O exemplo é inócuo e não contém coleta de dados nem execução de ações.",
+      "action": "Ative o documento injetado e compare seu corpo com o artigo legítimo.",
+      "board": "dado citado ≠ comando para o host",
+      "speech": "O formato do documento é parecido com os demais. O que muda é a intenção de uma linha dentro dele. A linha pede uma mudança de tarefa, e essa é a fronteira que queremos tornar visível.",
+      "question": "Por que metadados plausíveis não bastam para confiar no conteúdo?",
+      "answer": "Porque o corpo pode conter instruções incompatíveis com o objetivo, independentemente da aparência do documento.",
+      "focus": 1
+    },
+    {
+      "title": "Recuperar não é obedecer",
+      "view": "retrieval",
+      "explanation": "O retriever pode trazer o documento relevante e o documento injetado juntos. Separar conteúdo como dado não impede a recuperação; altera como o material será interpretado no roteiro.",
+      "action": "Marque e desmarque separar conteúdo e confira que os documentos recuperados continuam iguais.",
+      "board": "mesma recuperação; interpretação diferente",
+      "speech": "Esta comparação é importante para localizar a mitigação. Ela não consertou o ranking. Ela mudou o tratamento do que chegou depois da busca.",
+      "question": "A mitigação desta demo remove o documento do acervo?",
+      "answer": "Não. O documento continua recuperável; a mudança ilustrada ocorre na interpretação do contexto.",
+      "focus": 1
+    },
+    {
+      "title": "O primeiro passo de divergência",
+      "view": "trace",
+      "explanation": "As execuções compartilham a busca inicial e divergem ao interpretar o texto. O cenário vulnerável roteirizado troca a resposta, enquanto o cenário delimitado preserva a tarefa.",
+      "action": "Compare as duas trajetórias e aponte a primeira linha diferente.",
+      "board": "busca igual → interpretação oposta → resposta diferente",
+      "speech": "A resposta final mostra o sintoma. A trajetória mostra onde o sintoma nasceu. É essa localização que permite corrigir a camada adequada.",
+      "question": "Qual evidência mostra que a falha não está no parsing da chamada?",
+      "answer": "A mesma busca foi chamada corretamente em ambos os cenários; a divergência aparece após o retorno.",
+      "focus": 2
+    },
+    {
+      "title": "Delimitação é uma mitigação",
+      "view": "boundary",
+      "explanation": "Delimitadores e instruções explícitas ajudam a representar a fronteira entre dado e comando. A simulação implementa essa decisão por código e não mede resistência de um modelo a ataques adaptativos.",
+      "action": "Alterne separar conteúdo e leia a observação sobre o alcance do experimento.",
+      "board": "delimitar reduz ambiguidade; não prova imunidade",
+      "speech": "O botão sempre funciona aqui porque escrevemos o roteiro assim. Essa propriedade pertence ao simulador. Num modelo real, a eficácia precisa ser medida com casos adversariais e contexto de uso.",
+      "question": "Por que cem por cento de sucesso nesta página não seria uma taxa de segurança?",
+      "answer": "Porque o resultado foi programado; não é amostra de comportamento de um modelo sob ataque.",
+      "focus": 2
+    },
+    {
+      "title": "Permissões limitam consequências",
+      "view": "permissions",
+      "explanation": "Permitir somente leitura impede o host de executar operações de escrita no exemplo. Uma barreira de autorização opera fora do texto do modelo e deve ser aplicada antes do despacho.",
+      "action": "Alterne permitir apenas leitura e observe quais operações o host aceitaria.",
+      "board": "proposta de ação → autorização → execução",
+      "speech": "Mesmo que a interpretação falhe, o host não precisa oferecer todo poder disponível. A lista permitida restringe consequências. Esse controle deve ser aplicado por código, não só descrito no prompt.",
+      "question": "O prompt pode conceder uma permissão que o host negou?",
+      "answer": "Não deveria. A autorização do host é a fronteira executável que decide quais ações podem ocorrer.",
+      "focus": 3
+    },
+    {
+      "title": "Reversibilidade e revisão humana",
+      "view": "reversibility",
+      "explanation": "Ler um documento e enviar uma comunicação têm consequências diferentes. A revisão humana deve receber ação, argumentos e efeitos concretos para avaliar decisões que exigem consentimento.",
+      "action": "Compare as três operações e seu grau de reversibilidade no quadro.",
+      "board": "ação + efeito + reversibilidade → política",
+      "speech": "Uma pergunta vaga de autorização não ajuda quem decide. Precisamos mostrar o que será feito e sobre quais dados. O nível de controle depende da consequência concreta da ferramenta.",
+      "question": "Toda ferramenta precisa da mesma política de autorização?",
+      "answer": "Não. Leitura, alteração reversível e ação externa irreversível exigem políticas proporcionais às consequências.",
+      "focus": 3
+    },
+    {
+      "title": "Cinco lugares onde um agente falha",
+      "view": "layers",
+      "explanation": "Percepção, seleção, argumentos, interpretação e parada podem falhar com respostas finais igualmente fluentes. A menor camada que explica o defeito orienta o conserto e a métrica.",
+      "action": "Altere os casos com falha de interpretação e compare sua participação no lote.",
+      "board": "percepção → ferramenta → argumentos → observação → parada",
+      "speech": "A taxonomia evita tentar resolver tudo com prompt. Um nome de ferramenta errado é diferente de ignorar uma exceção no artigo certo. Cada defeito precisa de evidência na trajetória.",
+      "question": "Responder certo sem consultar a fonte pode esconder uma falha?",
+      "answer": "Sim. Pode ser uma parada sem evidência que acertou por coincidência e não atende ao contrato do sistema.",
+      "focus": 4
+    },
+    {
+      "title": "Métricas com denominadores",
+      "view": "metrics",
+      "explanation": "O lote sintético possui categorias de falha explicitamente construídas. A taxa exibida divide falhas pelo número total de casos, deixando claro que não é desempenho de produção.",
+      "action": "Aumente o tamanho do lote sem mudar as falhas e observe a taxa.",
+      "board": "taxa = falhas observadas / casos avaliados",
+      "speech": "O denominador muda a interpretação do mesmo número de erros. Também precisamos saber de onde vieram os casos. Um lote artificial é útil para aprender a conta, não para prometer qualidade real.",
+      "question": "Duas falhas em quatro casos equivalem a duas em vinte?",
+      "answer": "Não. As taxas e a incerteza da amostra são diferentes.",
+      "focus": 4
+    },
+    {
+      "title": "Auditar o que realmente aconteceu",
+      "view": "audit",
+      "explanation": "Uma auditoria precisa preservar origem, argumentos, decisões de autorização e motivo da parada. O registro deve permitir localizar o desvio sem expor dados desnecessários.",
+      "action": "Escolha um canal e compare os campos de auditoria do cenário atual.",
+      "board": "evento = origem + ação + decisão + observação",
+      "speech": "O log deve responder quem forneceu o conteúdo e quem autorizou a ação. Não basta guardar a última frase. Ao mesmo tempo, registrar tudo sem seleção pode reter dados que não precisávamos guardar.",
+      "question": "Qual campo falta quando só salvamos resposta e horário?",
+      "answer": "Faltam as transições: origem, chamadas, argumentos, resultados, decisões e motivo da parada.",
+      "focus": 5
+    },
+    {
+      "title": "Checkpoint do projeto",
+      "view": "checkpoint",
+      "explanation": "A entrega intermediária deve mostrar o caminho central funcionando e nomear sua maior fragilidade. O plano de avaliação precisa incluir casos por camada e um lugar para ler trajetórias.",
+      "action": "Monte um diagnóstico: canal de entrada, primeira divergência, barreira e evidência.",
+      "board": "pipeline executado + risco localizado + teste planejado",
+      "speech": "Uma interface pronta não compensa um caminho crítico invisível. Quero uma execução e o lugar onde ela pode falhar. Nomear o problema agora permite corrigir antes da apresentação final.",
+      "question": "O que este simulador permite concluir sobre o seu projeto?",
+      "answer": "Ele oferece um método de inspeção; a segurança e a qualidade do projeto precisam ser testadas na sua implementação.",
+      "focus": 5
+    }
+  ]
+}

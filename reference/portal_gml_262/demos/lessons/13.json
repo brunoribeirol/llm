@@ -1,0 +1,200 @@
+{
+  "id": 13,
+  "title": "SFT, LoRA e QLoRA",
+  "subtitle": "Do comportamento de assistente ao produto de matrizes de um adaptador.",
+  "controls": [
+    {
+      "key": "rank",
+      "label": "Posto do adaptador",
+      "type": "range",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "alpha",
+      "label": "Escala alpha",
+      "type": "range",
+      "min": 0,
+      "max": 8,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "update",
+      "label": "Magnitude do adaptador",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 0.1,
+      "value": 0.4
+    },
+    {
+      "key": "params",
+      "label": "Base (bilhões de parâmetros)",
+      "type": "range",
+      "min": 0.5,
+      "max": 14,
+      "step": 0.5,
+      "value": 7
+    },
+    {
+      "key": "bits",
+      "label": "Bits da quantização uniforme didática",
+      "type": "range",
+      "min": 2,
+      "max": 8,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "template",
+      "label": "Aplicar template de conversa",
+      "type": "checkbox",
+      "value": true
+    }
+  ],
+  "nodes": [
+    "Comportamento",
+    "Dados SFT",
+    "Riscos",
+    "LoRA",
+    "Quantização",
+    "Decisão"
+  ],
+  "steps": [
+    {
+      "title": "Continuação não é diálogo",
+      "view": "behavior",
+      "explanation": "O pré-treino aprende continuações de texto. Responder como assistente depende de exemplos e de uma interface de conversa coerente.",
+      "action": "Ligue e desligue o template e compare as sequências ilustrativas.",
+      "board": "Completar texto ≠ convenção de responder",
+      "speech": "As respostas exibidas são exemplos escritos, não saídas de um modelo em execução. Um completador pode continuar uma lista de perguntas. Isso pode ser coerente com seu objetivo de treino.",
+      "question": "Uma continuação de perguntas prova falta de conhecimento?",
+      "answer": "Não; pode revelar incompatibilidade de tarefa e formato.",
+      "focus": 0
+    },
+    {
+      "title": "O template marca a vez de falar",
+      "view": "template",
+      "explanation": "Tokens de papel delimitam quem falou e onde começa a resposta. O formato na inferência deve ser compatível com o usado no ajuste.",
+      "action": "Alterne template e acompanhe a posição do prefixo assistant.",
+      "board": "system → user → assistant",
+      "speech": "Um modelo recebe tokens, não balões de conversa. Os papéis precisam virar uma sequência. O prefixo final condiciona qual tipo de continuação esperamos.",
+      "question": "Tags escritas por qualquer pessoa garantem compatibilidade?",
+      "answer": "Não; cada modelo espera seu template e seus tokens específicos.",
+      "focus": 0
+    },
+    {
+      "title": "SFT mantém a perda de próximo token",
+      "view": "loss",
+      "explanation": "SFT usa exemplos de instrução e resposta para ajustar comportamento. Neste exemplo, apenas tokens da resposta contribuem para a perda.",
+      "action": "Veja a máscara e compare tokens de contexto e alvo.",
+      "board": "L = −Σ mₜ log p(yₜ|x,y<t) / Σmₜ",
+      "speech": "A fórmula não mudou de família. Mudaram os dados e quais posições supervisionamos. Mascarar o prompt evita cobrar a reprodução da pergunta nesta receita.",
+      "question": "A máscara impede o modelo de ler o prompt?",
+      "answer": "Não; ele continua como contexto, apenas não contribui diretamente para a perda mostrada.",
+      "focus": 1
+    },
+    {
+      "title": "Formato e capacidade devem ser avaliados",
+      "view": "risks",
+      "explanation": "Melhorar uma tarefa pode acompanhar piora em outras. Overfitting e esquecimento precisam de conjuntos de avaliação diferentes.",
+      "action": "Mude a magnitude e observe curvas sintéticas de treino, validação e controle.",
+      "board": "Treino ↓ não implica validação ↓",
+      "speech": "As curvas são cenários, não medições reais. A validação da tarefa detecta ajuste excessivo. O conjunto de controle observa habilidades que queríamos preservar.",
+      "question": "Uma validação só de formato detecta perda em aritmética?",
+      "answer": "Não; é necessário incluir tarefas de controle relevantes.",
+      "focus": 1
+    },
+    {
+      "title": "Por que ajustar todos os pesos é caro",
+      "view": "memory",
+      "explanation": "Estados de otimização dominam parte importante da memória. Congelar a base elimina esses estados para a maioria dos parâmetros.",
+      "action": "Mude o tamanho da base e compare as três receitas.",
+      "board": "Completo ≈ 16N; LoRA ≈ 2N + 16Nₐ bytes",
+      "speech": "Guardar pesos para inferir não equivale a guardar tudo para treinar. Gradientes e momentos também precisam de espaço. Esta conta não inclui ativações nem infraestrutura.",
+      "question": "LoRA elimina o custo do forward da base?",
+      "answer": "Não; a base congelada ainda participa do cálculo.",
+      "focus": 2
+    },
+    {
+      "title": "A atualização passa por um gargalo",
+      "view": "factors",
+      "explanation": "LoRA representa uma atualização como BA. A matriz A reduz para r dimensões e B retorna à dimensão de saída.",
+      "action": "Mude o posto e observe as formas de A e B.",
+      "board": "A: r×d_in; B: d_out×r; ΔW = (α/r)BA",
+      "speech": "Vamos multiplicar matrizes pequenas de verdade. O caminho alternativo atravessa r coordenadas. Essa restrição limita o posto da atualização, não o posto da matriz base.",
+      "question": "Qual é o posto máximo de BA?",
+      "answer": "No máximo r e também limitado pelas dimensões de entrada e saída.",
+      "focus": 2
+    },
+    {
+      "title": "Contar treináveis antes de executar",
+      "view": "count",
+      "explanation": "Um adaptador tem r(d_in+d_out) parâmetros por módulo. Um posto muito alto pode perder a vantagem de economia.",
+      "action": "Varie r e compare adaptador e matriz densa 4×4.",
+      "board": "Nₐ = r(d_in+d_out)",
+      "speech": "Aqui a matriz minúscula torna a contagem verificável. Não extrapolem sua fração diretamente para bilhões de parâmetros. Em modelos reais somamos todos os módulos adaptados.",
+      "question": "Quando o adaptador 4×4 deixa de economizar parâmetros?",
+      "answer": "Com r=2 ele iguala 16 parâmetros; acima disso usa mais que a matriz densa.",
+      "focus": 3
+    },
+    {
+      "title": "Inicializar sem perturbar a base",
+      "view": "initialization",
+      "explanation": "Com B igual a zero, BA começa em zero. A aleatória permite que B receba gradiente e saia desse ponto.",
+      "action": "Leve magnitude a zero e veja a atualização desaparecer.",
+      "board": "B₀ = 0 ⇒ ΔW₀ = 0",
+      "speech": "A saída inicial deve coincidir com a base. Isso não significa que todo gradiente seja zero. Inicializar A e B simultaneamente em zero impediria a aprendizagem desse produto.",
+      "question": "Por que não zerar as duas matrizes?",
+      "answer": "Porque os gradientes de ambas passam pela outra matriz e ficam nulos.",
+      "focus": 3
+    },
+    {
+      "title": "Escala e fusão da atualização",
+      "view": "merge",
+      "explanation": "A contribuição do adaptador é multiplicada por α/r. Em precisão compatível, fundir W₀+(α/r)BA reproduz a soma dos dois caminhos.",
+      "action": "Mude alpha e confira as saídas pelos dois caminhos.",
+      "board": "W'x = W₀x + (α/r)B(Ax)",
+      "speech": "As duas contas usam os mesmos números. A igualdade é algébrica, sujeita a arredondamento numérico. Uma base quantizada exige cuidado adicional ao fundir.",
+      "question": "Alpha zero significa adaptador fraco?",
+      "answer": "Significa contribuição exatamente nula nesta parametrização.",
+      "focus": 4
+    },
+    {
+      "title": "Quantizar cria uma grade",
+      "view": "quantization",
+      "explanation": "Quantização representa valores por um conjunto finito de níveis. Esta demonstração usa grade uniforme simétrica, não implementa NF4.",
+      "action": "Mude bits e compare peso, código e reconstrução.",
+      "board": "q = round(w/s); ŵ = s q; erro = w−ŵ",
+      "speech": "Os valores reconstruídos não são idênticos aos originais. Menos bits engrossam a grade. NF4 usa níveis diferentes desta ilustração uniforme.",
+      "question": "Quantizar e desquantizar recupera sempre o valor exato?",
+      "answer": "Não; em geral existe erro de arredondamento.",
+      "focus": 4
+    },
+    {
+      "title": "QLoRA separa armazenamento e treino",
+      "view": "qlora",
+      "explanation": "QLoRA mantém a base quantizada congelada e treina adaptadores em precisão maior. O cálculo utiliza pesos desquantizados sem atualizar os códigos da base.",
+      "action": "Compare caminhos de forward e gradiente.",
+      "board": "Base 4 bits congelada + adaptador treinável",
+      "speech": "O gradiente precisa atravessar a operação que usa a base. Ele não precisa atualizar o peso congelado. A economia não elimina ativações nem todos os custos computacionais.",
+      "question": "O QLoRA treina diretamente os códigos de 4 bits?",
+      "answer": "Não; a base quantizada permanece congelada e os adaptadores são treinados.",
+      "focus": 5
+    },
+    {
+      "title": "Escolher a intervenção pelo problema",
+      "view": "decision",
+      "explanation": "Prompting controla contexto e instruções, RAG fornece evidência externa e SFT adapta comportamento. Combinações podem ser necessárias, mas nenhuma garante fatos corretos sozinha.",
+      "action": "Compare os três casos e explique a intervenção mínima.",
+      "board": "Formato → prompt/SFT; fatos atuais → recuperação; avaliação sempre",
+      "speech": "Não organizem as técnicas como uma escada de poder. Comecem pelo defeito observável. Uma atualização de documento não deveria exigir treinar novamente um comportamento já correto.",
+      "question": "Qual intervenção é adequada para regulamento que muda semanalmente?",
+      "answer": "Recuperação de fontes atualizadas, com avaliação de recuperação e fundamentação das respostas.",
+      "focus": 5
+    }
+  ]
+}

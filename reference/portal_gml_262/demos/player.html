@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>__DEMO_TITLE__</title><style>__DEMO_CSS__</style></head>
+<body>
+<header>
+  <div class="eyebrow" id="lesson-label"></div>
+  <h1 id="lesson-title"></h1><p class="lead" id="lesson-subtitle"></p>
+  <div class="toolbar"><button id="begin" class="primary">Começar do início</button><button id="presentation" aria-pressed="false">Modo projeção</button><button id="print">Imprimir etapa</button><span class="quiet">Altere → observe → explique</span></div>
+</header>
+<div class="layout">
+  <aside class="sidebar"><div class="eyebrow" id="outline-label"></div><nav id="outline" aria-label="Etapas da demonstração"></nav></aside>
+  <main>
+    <article class="stage">
+      <div class="progress" role="progressbar" aria-label="Percurso da demonstração" aria-valuemin="0" id="progress-track"><div id="progress"></div></div>
+      <section class="stage-head"><div class="eyebrow" id="stage-path"></div><h2 id="title" tabindex="-1"></h2><p id="explanation"></p></section>
+      <div id="process" class="process" aria-label="Mapa do processo"></div>
+      <details class="demo-flow" id="flowchart-box"><summary id="flowchart-label">Fluxograma da explicação</summary><div id="flowchart"></div><details id="overview-box"><summary>Ver o percurso completo da aula</summary><div id="flowchart-overview"></div></details></details>
+      <section class="experiment"><div class="controls-head"><h3>Explore o mecanismo</h3><button id="reset">Restaurar controles</button></div><div class="controls" id="controls"></div><p id="control-hint" class="quiet">Os valores são mantidos entre etapas. Comece pelos controles destacados.</p><div id="visual" aria-live="polite" aria-atomic="true"></div></section>
+      <div class="action"><span class="eyebrow">Faça e observe</span><p id="action"></p></div>
+      <section class="question"><h3 id="question"></h3><details id="answer-box"><summary>Conferir raciocínio</summary><p id="answer"></p></details></section>
+      <nav class="navigation" aria-label="Navegação entre etapas"><span id="counter" aria-live="polite"></span><button id="back">← Voltar</button><button id="next" class="primary">Avançar →</button></nav>
+    </article>
+    <aside id="teacher" class="teacher"><div class="eyebrow">Condução do professor</div><h3>Fala sugerida</h3><p id="speech"></p><details><summary>No quadro branco</summary><p id="board" class="board"></p></details></aside>
+    <details class="notes"><summary>Como interpretar esta demonstração</summary><p>Cálculos pequenos e cenários didáticos executados no navegador. Não há chamadas a modelos externos. Os exemplos não representam resultados de benchmarks ou desempenho de sistemas reais. Quando uma etapa isola um mecanismo, seus números não equivalem a um modelo completo treinado.</p><p>Use as setas ← e → para navegar fora dos campos de edição. O botão Restaurar controles recupera os valores iniciais da aula. Os números exibidos são arredondados.</p><div id="references"></div></details>
+  </main>
+</div>
+<script id="demo-data" type="application/json">__DEMO_DATA__</script>
+<script>__DEMO_HELPERS__</script>
+<script>__DEMO_SIMULATORS__</script>
+<script>__DEMO_PLAYER__</script>
+</body></html>

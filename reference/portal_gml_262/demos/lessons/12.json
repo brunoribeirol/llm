@@ -1,0 +1,214 @@
+{
+  "id": 12,
+  "title": "Pré-treinamento: dados, escala e sistemas",
+  "subtitle": "Distribua orçamento, inspecione memória e acompanhe a fábrica de um completador.",
+  "controls": [
+    {
+      "key": "params",
+      "label": "Parâmetros (bilhões)",
+      "type": "range",
+      "min": 0.5,
+      "max": 20,
+      "step": 0.5,
+      "value": 7
+    },
+    {
+      "key": "tokens",
+      "label": "Tokens de treino (bilhões)",
+      "type": "range",
+      "min": 10,
+      "max": 1000,
+      "step": 10,
+      "value": 140
+    },
+    {
+      "key": "batch",
+      "label": "Lote de sequências",
+      "type": "range",
+      "min": 1,
+      "max": 32,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "context",
+      "label": "Contexto (tokens)",
+      "type": "range",
+      "min": 256,
+      "max": 8192,
+      "step": 256,
+      "value": 2048
+    },
+    {
+      "key": "gpus",
+      "label": "Número de GPUs",
+      "type": "range",
+      "min": 1,
+      "max": 8,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "duplicates",
+      "label": "Duplicatas (%)",
+      "type": "range",
+      "min": 0,
+      "max": 80,
+      "step": 5,
+      "value": 20
+    }
+  ],
+  "nodes": [
+    "Corpus",
+    "Supervisão",
+    "Orçamento",
+    "Memória",
+    "Distribuição",
+    "Modelo"
+  ],
+  "steps": [
+    {
+      "title": "Começar pelos recursos finitos",
+      "view": "budget",
+      "explanation": "Pré-treino combina capacidade, experiência e computação. A aproximação 6ND mostra o custo de aumentar modelo e corpus juntos.",
+      "action": "Dobre N e depois D, comparando o custo.",
+      "board": "C ≈ 6ND FLOPs",
+      "speech": "N representa parâmetros e D tokens processados. Duas duplicações podem quadruplicar trabalho. Esta aproximação não é medição de hardware.",
+      "question": "Se N e D dobram, quanto cresce C?",
+      "answer": "Cresce aproximadamente quatro vezes.",
+      "focus": 0
+    },
+    {
+      "title": "O corpus fornece os rótulos",
+      "view": "shift",
+      "explanation": "Cada posição usa o próximo token como alvo. Uma sequência produz vários exemplos sem anotação humana individual.",
+      "action": "Compare entrada e alvo deslocados.",
+      "board": "entrada: a rede aprende; alvo: rede aprende EOS",
+      "speech": "É o mesmo objetivo de próximo token já estudado. O rótulo existe e vem do texto. Por isso falamos em aprendizado auto-supervisionado.",
+      "question": "Quem escolhe o alvo?",
+      "answer": "O deslocamento da própria sequência de tokens.",
+      "focus": 0
+    },
+    {
+      "title": "Mistura de dados é modelagem",
+      "view": "mixture",
+      "explanation": "Fontes expõem o modelo a padrões diferentes. Repetições consomem orçamento sem oferecer a mesma diversidade de textos novos.",
+      "action": "Aumente duplicatas e compare volume bruto e único.",
+      "board": "D bruto = D único + repetições",
+      "speech": "Uma cópia adicional custa computação. Ela não acrescenta a mesma variedade. O volume único mostrado é uma contabilidade simples, não previsão de qualidade.",
+      "question": "Dobro de tokens significa dobro de informação?",
+      "answer": "Não; diversidade, duplicação e qualidade importam.",
+      "focus": 0
+    },
+    {
+      "title": "Duplicação e contaminação",
+      "view": "dedup",
+      "explanation": "Deduplicar reduz repetições indesejadas. Ausência de vazamento de avaliação ainda exige uma auditoria separada.",
+      "action": "Inspecione grupos repetidos ao variar duplicatas.",
+      "board": "Treino ∩ avaliação deve ser investigado",
+      "speech": "Exemplos frequentes podem ser memorizados. Um benchmark presente no treino deixa de medir apenas generalização. Deduplicação interna e auditoria externa são complementares.",
+      "question": "Deduplicação prova ausência de contaminação?",
+      "answer": "Não; é preciso comparar treino com avaliação.",
+      "focus": 1
+    },
+    {
+      "title": "De onde vem o seis",
+      "view": "flops",
+      "explanation": "A estimativa densa conta cerca de 2N operações por token no forward e 4N no backward. A soma produz 6ND.",
+      "action": "Compare parcelas ao variar o modelo.",
+      "board": "C ≈ (2N + 4N)D",
+      "speech": "Multiplicação e adição contam separadamente. O backward propaga gradientes e calcula gradientes dos pesos. Atenção e detalhes do otimizador ficam fora desta aproximação.",
+      "question": "Por que inferência custa menos por token?",
+      "answer": "Ela não calcula backward; a aproximação é 2N por token.",
+      "focus": 1
+    },
+    {
+      "title": "Um orçamento, vários candidatos",
+      "view": "isoflop",
+      "explanation": "Sob orçamento fixo, aumentar parâmetros reduz tokens disponíveis. A curva usa uma função de perda sintética explicitamente ilustrativa.",
+      "action": "Mude N e D e compare candidatos de mesmo custo.",
+      "board": "D = C/(6N); L = 1,5 + 4/√N + 17,89/√D",
+      "speech": "Nenhum candidato recebe dinheiro extra. O mínimo depende da função assumida. Os coeficientes são didáticos, não um ajuste de modelos reais.",
+      "question": "Modelo maior sempre vence com C fixo?",
+      "answer": "Não; ele pode receber poucos tokens para seu tamanho.",
+      "focus": 2
+    },
+    {
+      "title": "Ler o ótimo com suas premissas",
+      "view": "allocation",
+      "explanation": "D ≈ 20N é uma referência de alocação sob hipóteses históricas. Não é uma constante universal para qualquer modelo e produto.",
+      "action": "Compare o ponto atual com a referência calculada.",
+      "board": "N* ≈ √(C/120); D* ≈ 20N*",
+      "speech": "Vinte entra como hipótese do exercício. Dados e objetivo econômico podem mudar a escolha. Um produto servido muitas vezes pode preferir um modelo menor mais treinado.",
+      "question": "D/N muito maior que vinte está errado?",
+      "answer": "Não; custo de inferência e regime de dados podem justificar outra alocação.",
+      "focus": 2
+    },
+    {
+      "title": "Converter trabalho em tempo",
+      "view": "time",
+      "explanation": "Tempo depende do desempenho útil, não apenas dos FLOPs. A demonstração assume 100 TFLOP/s efetivos por GPU e escalabilidade ideal.",
+      "action": "Aumente GPUs e observe o tempo ideal.",
+      "board": "tempo = C/(GPUs × desempenho útil)",
+      "speech": "A divisão supõe nenhuma sobrecarga. Comunicação e alimentação de dados acrescentam tempo. Este número é uma hipótese, não promessa de prazo.",
+      "question": "Dobrar GPUs sempre reduz tempo pela metade?",
+      "answer": "Não; só no modelo ideal sem gargalos adicionais.",
+      "focus": 3
+    },
+    {
+      "title": "Memória acaba antes da aritmética",
+      "view": "memory",
+      "explanation": "Pesos, gradientes e estados ocupam memória persistente. Ativações acrescentam dependência de lote e contexto.",
+      "action": "Aumente contexto e lote separadamente.",
+      "board": "Estados ≈ 16N bytes + ativações",
+      "speech": "Dezesseis bytes representam uma receita típica de Adam em precisão mista. Outras receitas mudam a conta. As ativações aqui são uma aproximação declarada.",
+      "question": "Reduzir lote reduz estados do Adam?",
+      "answer": "Não; reduz principalmente ativações.",
+      "focus": 3
+    },
+    {
+      "title": "Precisão mista separa funções",
+      "view": "precision",
+      "explanation": "Tipos menores economizam armazenamento e tráfego. Alguns estados e acumulações continuam em precisão maior.",
+      "action": "Compare pesos FP32 e BF16.",
+      "board": "FP32: 4 bytes; BF16: 2 bytes por peso",
+      "speech": "Não convertemos todos os objetos para um tipo único. Cálculo e atualização podem usar precisões diferentes. Dividir toda a memória por dois dá uma estimativa enganosa.",
+      "question": "BF16 corta toda memória pela metade?",
+      "answer": "Não; nem todos os objetos mudam de precisão.",
+      "focus": 4
+    },
+    {
+      "title": "Três formas de distribuir",
+      "view": "parallel",
+      "explanation": "Dados divide exemplos mantendo réplicas. Tensor divide operações e pipeline divide camadas.",
+      "action": "Mude GPUs e compare o objeto dividido.",
+      "board": "Dados: exemplos; tensor: operação; pipeline: camadas",
+      "speech": "Primeiro identifiquem o que foi partido. Depois perguntem qual mensagem atravessa as placas. Memória agregada só ajuda se distribuir o objeto que não cabe.",
+      "question": "Paralelismo de dados puro resolve modelo que não cabe?",
+      "answer": "Não; o modelo continua replicado, sem particionamento adicional de estados.",
+      "focus": 4
+    },
+    {
+      "title": "FlashAttention reorganiza tráfego",
+      "view": "attentionio",
+      "explanation": "Atenção exata ainda relaciona pares de posições. O cálculo em blocos evita materializar a matriz completa na memória global.",
+      "action": "Dobre contexto e acompanhe T².",
+      "board": "Aritmética O(T²); menos tráfego intermediário",
+      "speech": "Eficiência de implementação não altera a definição de atenção. A relação quadrática de pares permanece. O ganho vem do movimento de dados e dos intermediários armazenados.",
+      "question": "FlashAttention torna a aritmética linear?",
+      "answer": "Não; melhora uso de memória mantendo atenção exata quadrática.",
+      "focus": 5
+    },
+    {
+      "title": "A fábrica entrega um completador",
+      "view": "lifecycle",
+      "explanation": "Treino é pago antes do uso, mas inferência custa a cada token. Seguir instruções exige uma adaptação posterior do comportamento.",
+      "action": "Compare custo de treino e custo por token servido.",
+      "board": "C vida ≈ 6ND + 2N × tokens servidos",
+      "speech": "Produzimos uma distribuição de continuação de texto. A próxima aula muda os exemplos que a orientam. Justifiquem agora tamanho, corpus e sistema em conjunto.",
+      "question": "Por que considerar inferência na escolha do modelo?",
+      "answer": "Porque o custo repetido de servir pode dominar o ciclo de vida.",
+      "focus": 5
+    }
+  ]
+}

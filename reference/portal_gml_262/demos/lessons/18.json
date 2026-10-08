@@ -1,0 +1,203 @@
+{
+  "id": 18,
+  "title": "RAG: da fonte ao contexto recuperado",
+  "subtitle": "Construa uma memória externa com chunks, vetores, ranking e citações auditáveis.",
+  "controls": [
+    {
+      "key": "chunk",
+      "label": "Tamanho de chunk (palavras)",
+      "type": "range",
+      "min": 4,
+      "max": 20,
+      "step": 1,
+      "value": 10
+    },
+    {
+      "key": "overlap",
+      "label": "Sobreposição (limitada ao chunk−1)",
+      "type": "range",
+      "min": 0,
+      "max": 8,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "topk",
+      "label": "Documentos recuperados",
+      "type": "range",
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "queryX",
+      "label": "Consulta: eixo prazo",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 0.1,
+      "value": 0.9
+    },
+    {
+      "key": "queryY",
+      "label": "Consulta: eixo matrícula",
+      "type": "range",
+      "min": 0,
+      "max": 1,
+      "step": 0.1,
+      "value": 0.3
+    },
+    {
+      "key": "budget",
+      "label": "Orçamento de contexto (palavras)",
+      "type": "range",
+      "min": 10,
+      "max": 80,
+      "step": 5,
+      "value": 40
+    }
+  ],
+  "nodes": [
+    "Fonte",
+    "Chunks",
+    "Vetores",
+    "Índice",
+    "Busca",
+    "Resposta"
+  ],
+  "steps": [
+    {
+      "title": "Conhecimento nos pesos tem data",
+      "view": "freshness",
+      "explanation": "Um documento externo pode mudar depois do treinamento. RAG recupera evidência atual sem exigir atualização dos pesos a cada revisão.",
+      "action": "Compare a fonte fictícia antiga e a atual.",
+      "board": "Pesos fixos + fonte atual → contexto atualizado",
+      "speech": "O exemplo é uma regra acadêmica inventada para ensino. A atualização acontece no acervo. O gerador ainda pode errar ao usar a informação recuperada.",
+      "question": "RAG atualiza os pesos do modelo?",
+      "answer": "Não; fornece contexto externo durante a inferência.",
+      "focus": 0
+    },
+    {
+      "title": "Escolher entre contexto, treino e recuperação",
+      "view": "choices",
+      "explanation": "Copiar todo o acervo pode exceder a janela e aumentar custo. Recuperar seleciona trechos candidatos para uma consulta específica.",
+      "action": "Mude o orçamento e compare acervo e contexto disponível.",
+      "board": "Fonte extensa → seleção → contexto limitado",
+      "speech": "A memória externa também precisa de manutenção. Um acervo desatualizado produz evidência desatualizada. RAG desloca parte do problema para engenharia de dados e busca.",
+      "question": "Recuperar dispensa verificar a qualidade da fonte?",
+      "answer": "Não; o sistema depende da integridade e atualidade do acervo.",
+      "focus": 0
+    },
+    {
+      "title": "Ingestão preserva a identidade",
+      "view": "ingest",
+      "explanation": "Cada fragmento deve manter documento, seção e versão. Esses metadados sustentam citação, atualização e controle de acesso.",
+      "action": "Inspecione os registros das cinco fontes fictícias.",
+      "board": "Registro = texto + ID + seção + versão",
+      "speech": "Uma frase sem origem é difícil de auditar. Vamos carregar identificadores desde o começo. Adicionar uma citação no final não recupera metadados que foram perdidos.",
+      "question": "Por que guardar versão da fonte?",
+      "answer": "Para saber qual regra foi usada e invalidar conteúdos desatualizados.",
+      "focus": 1
+    },
+    {
+      "title": "Chunking decide a unidade de evidência",
+      "view": "chunks",
+      "explanation": "Fragmentos pequenos podem separar condição e consequência. Fragmentos grandes misturam tópicos e consomem mais contexto.",
+      "action": "Varie tamanho e observe onde a frase foi cortada.",
+      "board": "Granularidade = coerência local × orçamento",
+      "speech": "Leiam os pedaços, não apenas suas contagens. Um corte pode remover a exceção que mudava a resposta. A melhor unidade depende do tipo de documento.",
+      "question": "Existe tamanho de chunk universalmente ótimo?",
+      "answer": "Não; estrutura, tarefa, modelo de embedding e orçamento influenciam a escolha.",
+      "focus": 1
+    },
+    {
+      "title": "Sobreposição compra continuidade",
+      "view": "overlap",
+      "explanation": "Repetir uma faixa nas bordas reduz perdas por corte. Essa redundância aumenta armazenamento e pode duplicar contexto recuperado.",
+      "action": "Aumente overlap e compare número de chunks e palavras processadas.",
+      "board": "Passo = tamanho − sobreposição",
+      "speech": "O simulador limita a sobreposição para manter avanço. Com passo pequeno, produzimos muitos fragmentos parecidos. Continuidade tem custo e precisa ser medida.",
+      "question": "Sobreposição elimina todos os problemas de corte?",
+      "answer": "Não; ajuda nas bordas, mas não garante preservar toda relação relevante.",
+      "focus": 2
+    },
+    {
+      "title": "Embedding representa uma tarefa de busca",
+      "view": "vectors",
+      "explanation": "Os vetores 2D mostrados foram definidos manualmente para ensino. Em sistemas reais um encoder treinado transforma texto em representação apropriada à recuperação.",
+      "action": "Mude os eixos da consulta e veja sua direção.",
+      "board": "Texto → vetor; proximidade depende do espaço aprendido",
+      "speech": "Não estamos executando um modelo de embeddings. Os eixos nomeados tornam a geometria explicável. Em um embedding real, coordenadas individuais geralmente não têm esse significado simples.",
+      "question": "Qualquer estado oculto serve como ótimo embedding de busca?",
+      "answer": "Não; objetivo de treinamento, pooling e avaliação da tarefa importam.",
+      "focus": 2
+    },
+    {
+      "title": "Normalizar separa direção de escala",
+      "view": "normalize",
+      "explanation": "Dividir um vetor por sua norma produz comprimento unitário. Para vetores unitários, produto escalar e cosseno coincidem.",
+      "action": "Mude a consulta e compare norma, vetor e vetor unitário.",
+      "board": "û = u/‖u‖; cos(u,v)=û·v̂",
+      "speech": "A conta usa os mesmos dois eixos. Se o vetor consulta for zero, cosseno não está definido. O painel explicita esse caso em vez de inventar direção.",
+      "question": "Produto escalar sempre é cosseno?",
+      "answer": "Não; a igualdade exige vetores normalizados.",
+      "focus": 3
+    },
+    {
+      "title": "Comparar consulta com candidatos",
+      "view": "similarity",
+      "explanation": "Cada documento recebe um escore de cosseno contra a consulta. Similaridade é um sinal de proximidade, não prova de que o trecho responde à pergunta.",
+      "action": "Mova a consulta e acompanhe as mudanças do ranking.",
+      "board": "score(q,d) = q·d/(‖q‖‖d‖)",
+      "speech": "Agora o índice vira uma lista ordenada. O resultado depende da representação que escolhemos. Um texto parecido pode omitir o detalhe necessário.",
+      "question": "O maior cosseno garante evidência suficiente?",
+      "answer": "Não; precisamos verificar conteúdo e relevância para a pergunta.",
+      "focus": 3
+    },
+    {
+      "title": "O índice troca custo por cobertura",
+      "view": "index",
+      "explanation": "Busca exata compara todos os vetores. Busca aproximada pode examinar menos candidatos, com possível perda de cobertura.",
+      "action": "Compare comparações exatas e a ilustração de candidatos aproximados.",
+      "board": "Exata: todos; aproximada: subconjunto candidato",
+      "speech": "A figura de aproximação é conceitual, não uma implementação de HNSW. A economia precisa ser medida junto com recall. Perder o documento correto aqui limita as etapas seguintes.",
+      "question": "Uma busca aproximada é necessariamente errada?",
+      "answer": "Não; pode recuperar os mesmos melhores itens com menos trabalho, mas não há garantia universal.",
+      "focus": 4
+    },
+    {
+      "title": "Montar contexto é outra seleção",
+      "view": "context",
+      "explanation": "Recuperar top-k não garante que tudo caiba no prompt. O orçamento pode excluir trechos, por isso a seleção final deve ser inspecionada.",
+      "action": "Aumente top-k e reduza orçamento.",
+      "board": "Contexto final ⊆ candidatos recuperados",
+      "speech": "O ranking inicial não é a resposta final. Vamos ver quais fontes chegaram de fato ao contexto. Cortar texto sem cuidado pode descartar justamente a exceção relevante.",
+      "question": "O gerador pode citar uma fonte que não recebeu?",
+      "answer": "Ele pode inventar uma referência, mas isso não constitui citação fundamentada.",
+      "focus": 4
+    },
+    {
+      "title": "Resposta com evidência e abstenção",
+      "view": "answer",
+      "explanation": "A saída demonstrada é montada por regras a partir dos trechos escolhidos, sem LLM. Se a evidência necessária não chegou, o sistema deve expor a limitação.",
+      "action": "Mude a consulta e orçamento e observe a resposta extrativa.",
+      "board": "Afirmação → trecho de apoio → fonte",
+      "speech": "Estamos usando extração para tornar a origem visível. Um gerador real exigiria avaliação de fidelidade. Uma citação existente também pode não sustentar a afirmação.",
+      "question": "Basta uma referência no final para garantir fundamentação?",
+      "answer": "Não; é necessário verificar se ela apoia a afirmação específica.",
+      "focus": 5
+    },
+    {
+      "title": "Desenhar um projeto que possa ser medido",
+      "view": "project",
+      "explanation": "Um projeto RAG precisa de corpus, perguntas, rótulos de relevância e métricas. A avaliação deve separar recuperação de geração.",
+      "action": "Compare critérios de sucesso em cada estágio.",
+      "board": "Corpus → consultas rotuladas → recall → resposta fundamentada",
+      "speech": "Uma demonstração feliz não mede o sistema. Escolham perguntas com sinônimos, identificadores e ausência de resposta. O resultado deve permitir localizar a etapa que falhou.",
+      "question": "Qual métrica ajuda a descobrir se a evidência sequer chegou?",
+      "answer": "Recall sobre os documentos ou trechos relevantes no conjunto recuperado.",
+      "focus": 5
+    }
+  ]
+}

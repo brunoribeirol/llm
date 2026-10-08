@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aula 2 · Tokenização</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="assets/study.css">
+</head>
+<body data-lesson="aula-02">
+<main class="page">
+
+<header class="masthead">
+  <div class="chips"><a href="index.html">caderno</a><span>aula</span><span>02</span><span>token</span><span>iza</span><span>ção</span><span>AV1 · caso 2</span></div>
+  <h1>Tokenização</h1>
+  <p class="lede">Dois times, o mesmo produto, o mesmo modelo, o mesmo prompt. Um atende em inglês, o outro em português, e a fatura do segundo é maior. Ninguém mudou o modelo: alguém decidiu, antes do treino, o que conta como um token.</p>
+  <p class="meta">leitura: 30 min · fontes: slides <a href="../class/slides/aula02-v2.pdf">aula02-v2.pdf</a> (20 p.) e o <a href="../reference/portal_gml_262/docs/aula-02/index.html">guia de estudo do portal</a></p>
+  <ul class="toc">
+    <li><a href="#resumo">Resumo</a></li>
+    <li><a href="#extremos">Palavra e caractere</a></li>
+    <li><a href="#bpe">BPE</a></li>
+    <li><a href="#familia">WordPiece e Unigram</a></li>
+    <li><a href="#bytes">Byte-level</a></li>
+    <li><a href="#fertilidade">Fertilidade</a></li>
+    <li><a href="#custo">Custo</a></li>
+    <li><a href="#autoteste">Autoteste</a></li>
+    <li><a href="#av1">Ponte para a AV1</a></li>
+  </ul>
+</header>
+
+<section class="block" id="resumo">
+  <h2>A aula em um minuto</h2>
+  <ul>
+    <li>O token é uma <strong>decisão de engenharia congelada antes do treino</strong>. Ela define quanto se paga, quanto texto cabe na janela e se a métrica de dois modelos é comparável.</li>
+    <li>Palavra não serve como unidade porque a lista nunca fecha. Caractere serve, mas a sequência fica cerca de cinco vezes mais longa.</li>
+    <li>Subword é o compromisso: palavra frequente vira um token, palavra rara é decomposta em pedaços conhecidos.</li>
+    <li>Um tokenizador BPE treinado é uma <strong>lista ordenada de fusões</strong> aprendida de um corpus. Trocar o corpus troca a lista.</li>
+    <li>Fertilidade é tokens por palavra. Ela é propriedade do par (tokenizador, texto), nunca do tokenizador sozinho.</li>
+    <li>Menos tokens reduz o preço de API de forma linear e o custo da atenção de forma quadrática. São duas curvas diferentes.</li>
+  </ul>
+  <p class="keyidea">O token não é um dado da natureza. É uma decisão de engenharia congelada antes do treino, e ela não muda depois.</p>
+  <p><span class="src">Aula 2 · slide 2</span></p>
+</section>
+
+<section class="block" id="extremos">
+  <h2>Os dois extremos: palavra e caractere</h2>
+  <h3>Por que não usar palavras</h3>
+  <p>Três problemas, todos com a mesma raiz: a lista de palavras nunca fecha. <span class="src">Aula 2 · slide 3</span></p>
+  <ul>
+    <li><strong>Vocabulário aberto:</strong> nome próprio, neologismo, URL, hashtag, identificador de código, erro de digitação.</li>
+    <li><strong>Morfologia:</strong> correr, corri, correríamos, correndo, corrida viram cinco itens sem nenhuma relação declarada entre eles.</li>
+    <li><strong>Zipf:</strong> a cauda de palavras raras é praticamente infinita. O que cai fora do vocabulário vira <code>UNK</code>, e <code>UNK</code> apaga informação de forma irreversível.</li>
+  </ul>
+  <p>Aumentar o vocabulário não resolve: a cauda não termina, e cada item novo custa uma linha de embedding e uma linha no softmax para uma palavra que talvez tenha três exemplos de treino.</p>
+  <h3>Por que não usar caracteres</h3>
+  <p>Com caracteres o vocabulário tem dezenas de símbolos e qualquer string é representável. O preço vem em dois lugares. <span class="src">Aula 2 · slide 4</span></p>
+  <ul>
+    <li><strong>Capacidade:</strong> o modelo gasta camadas aprendendo ortografia antes de chegar à semântica.</li>
+    <li><strong>Computação:</strong> “a inovação começa pelas pessoas” tem 5 palavras e 27 caracteres. A atenção compara cada posição com todas as outras, então esse termo cresce com o quadrado do comprimento.</li>
+  </ul>
+  <p>O professor resume assim: é a diferença entre ler uma frase e ler a mesma frase soletrada. A informação é a mesma, o esforço não. Caractere continua competitivo em correção ortográfica, transliteração e línguas sem espaço.</p>
+  <h3>Subword: vocabulário fechado, cobertura aberta</h3>
+  <p>Palavra frequente vira um token inteiro. Palavra rara é decomposta em pedaços já conhecidos, e no pior caso desce até os símbolos base. O vocabulário fica fixo (entre 30 mil e 128 mil itens) e nada fica de fora. <span class="src">Aula 2 · slide 5</span></p>
+</section>
+
+<section class="block" id="bpe">
+  <h2>BPE: o tokenizador é uma lista ordenada</h2>
+  <p>O algoritmo tem quatro operações. <span class="src">Aula 2 · slide 6</span> <span class="src">Aula 2 · A.1 (slide 15)</span></p>
+  <ol>
+    <li>Comece com cada palavra partida em símbolos base.</li>
+    <li>Conte os pares de símbolos vizinhos, ponderando pela frequência da palavra.</li>
+    <li>Funda o par mais frequente em um símbolo novo e anote essa fusão no fim da lista.</li>
+    <li>Repita até o vocabulário atingir o tamanho desejado.</li>
+  </ol>
+  <p>Há dois momentos distintos. <strong>Treinar</strong> é construir a lista, uma vez. <strong>Codificar</strong> é aplicar a lista, na mesma ordem, a qualquer texto, para sempre.</p>
+  <p>No corpus do slide (casa×5, casas×3, casinha×2, casarão×1), três fusões bastam para “casa” virar um token único, enquanto “casinha” continua em cinco pedaços. A palavra nova “casinhas” sai em 5 tokens e “casas” em 1: mesma raiz, mesmo tokenizador. Não há inteligência nisso, só frequência no corpus de treino.</p>
+
+  <div class="demo" id="bpe-demo">
+    <h3>Treine um mini-BPE e codifique uma palavra nova</h3>
+    <label for="bpe-k">Número de fusões: <output id="bpe-k-out" for="bpe-k"></output>
+      <input type="range" id="bpe-k" min="0" max="8" step="1" value="3"></label>
+    <div class="stack">
+      <p class="meta">Lista de fusões aprendida (a ordem importa)</p>
+      <div class="chips" id="bpe-merges"></div>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Palavra do corpus</th><th class="num">Freq.</th><th>Segmentação</th><th class="num">Tokens</th></tr></thead>
+        <tbody id="bpe-words"></tbody>
+      </table>
+    </div>
+    <label for="bpe-new">Palavra nova para codificar
+      <input type="text" id="bpe-new" value="casinhas"></label>
+    <div class="chips" id="bpe-encoded"></div>
+    <p class="verdict" id="bpe-verdict"></p>
+  </div>
+  <p class="meta">Corpus fixo do slide 6. Em empate, este demo funde o primeiro par que encontrou; implementações reais desempatam por critérios próprios.</p>
+
+  <div class="callout">
+    <strong>Regra de bolso</strong>
+    <p>Trocar o corpus troca a lista de fusões. É essa a variável por trás do “português caro”: se as fusões foram aprendidas em texto majoritariamente inglês, os pedaços frequentes do português não ganharam fusão própria.</p>
+  </div>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Imaginar o tokenizador como um dicionário de palavras. Ele não consulta significado nem morfologia. Empates na contagem são resolvidos de forma diferente por cada implementação, então duas implementações corretas produzem listas diferentes. Por isso o tokenizador viaja junto com o modelo, como arquivo.</p>
+  </div>
+</section>
+
+<section class="block" id="familia">
+  <h2>Três algoritmos, três critérios</h2>
+  <p><span class="src">Aula 2 · slide 7</span> <span class="src">Aula 2 · A.2 e A.3 (slides 16 e 17)</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Algoritmo</th><th>Critério</th><th>Direção</th><th>Marca visível</th></tr></thead>
+      <tbody>
+        <tr><td>BPE</td><td>Funde o par mais frequente</td><td>De baixo para cima</td><td>Sem marcador de fronteira obrigatório</td></tr>
+        <tr><td>WordPiece (BERT)</td><td>Funde o par que mais aumenta a verossimilhança: <span class="mono">freq(AB) / (freq(A)·freq(B))</span></td><td>De baixo para cima</td><td><span class="mono">cas + ##inha</span></td></tr>
+        <tr><td>Unigram</td><td>Começa com vocabulário grande e poda os itens cuja remoção custa menos</td><td>De cima para baixo</td><td>Segmentação probabilística, dá para amostrar</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>A diferença entre BPE e WordPiece aparece em um exemplo do apêndice. O par (d,e) ocorre 4.000 vezes e o par (q,u) ocorre 900. O BPE funde “de”, porque é mais frequente. O WordPiece funde “qu”, porque em português o q quase nunca aparece sem o u: é um par que se atrai, e não um par que só é frequente. Os dois critérios são legítimos e otimizam coisas diferentes.</p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Tratar SentencePiece como um quarto algoritmo. Ele é uma <em>implementação</em>: treina no texto cru, representa o espaço como <code>▁</code>, reverte a tokenização de forma exata, e roda tanto BPE quanto Unigram. Dizer “o modelo usa SentencePiece” não informa qual algoritmo foi usado.</p>
+  </div>
+</section>
+
+<section class="block" id="bytes">
+  <h2>Byte-level: o fim do UNK e o preço do acento</h2>
+  <p>Se os símbolos base forem os 256 bytes, em vez de caracteres Unicode, tudo é representável: emoji, ideograma, byte corrompido. O vocabulário do GPT-2 não tem token <code>UNK</code> porque não precisa. <span class="src">Aula 2 · slide 8</span></p>
+  <p>O preço aparece em UTF-8. Letras ASCII ocupam 1 byte. As letras ç, ã, õ ocupam 2 bytes cada. Então “ção” entra como 5 símbolos base antes de qualquer fusão, enquanto “tion” entra como 4.</p>
+  <p>Se as fusões vieram de um corpus inglês, não existe fusão para “ção”, e a sequência de bytes fica exposta. O ponto que o slide destaca: <strong>o corpus das fusões é a variável, não a técnica</strong>. Um BPE byte-level treinado em português tem fusão para “ção”, “mente”, “ções”.</p>
+</section>
+
+<section class="block" id="fertilidade">
+  <h2>Fertilidade: o número que vira dinheiro e janela</h2>
+  <p>Fertilidade é a quantidade de tokens por palavra. A razão entre a fertilidade em português e em inglês, medida em textos paralelos, fica acima de 1. O valor exato é o que foi medido na demonstração em sala. <span class="src">Aula 2 · slide 12</span></p>
+  <p>O slide lista três causas que se somam:</p>
+  <ul>
+    <li>o corpus das fusões é majoritariamente inglês;</li>
+    <li>acentos custam 2 bytes em tokenizadores byte-level;</li>
+    <li>as palavras do português são mais longas e mais flexionadas.</li>
+  </ul>
+  <p>As duas consequências práticas:</p>
+  <ul>
+    <li><strong>Dinheiro:</strong> a cobrança é por token, na entrada e na saída. O mesmo conteúdo sai mais caro em toda chamada.</li>
+    <li><strong>Janela:</strong> a janela de contexto é medida em tokens, e não em palavras. O documento em português ocupa mais janela que a tradução dele. Na imagem do professor, é a mesma bagagem em uma mala menor.</li>
+  </ul>
+
+  <div class="demo" id="win-demo">
+    <h3>Quanto cabe e quanto custa</h3>
+    <div class="grid">
+      <label for="win-fert">Fertilidade (tokens por palavra): <output id="win-fert-out" for="win-fert"></output>
+        <input type="range" id="win-fert" min="1" max="3" step="0.1" value="1.5"></label>
+      <label for="win-ratio">Razão PT/EN de tokens: <output id="win-ratio-out" for="win-ratio"></output>
+        <input type="range" id="win-ratio" min="1" max="2" step="0.01" value="1.33"></label>
+    </div>
+    <div class="grid">
+      <div class="stat">páginas em 8.192 tokens <b id="win-pages"></b></div>
+      <div class="stat">fatura em PT <b id="win-cost"></b></div>
+      <div class="stat">páginas em PT <b id="win-loss"></b></div>
+    </div>
+    <p class="verdict" id="win-verdict"></p>
+  </div>
+  <p class="meta">Página = 500 palavras, como no Apêndice A.4. Os valores do slide: fertilidade 1,5 dá 10,9 páginas; 2,0 dá 8,2.</p>
+
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Concluir que 33% a mais de tokens tira 33% das páginas. A fatura cresce de forma linear (+33%), mas a quantidade de páginas é inversa: cai 1 − 1/1,33, cerca de 25%.</p>
+  </div>
+
+  <h3>Fertilidade não é do tokenizador sozinho</h3>
+  <p>Não existe “a fertilidade do GPT-2”. Existe a dele em português jornalístico, em código Python, em inglês médico, e elas diferem. A fertilidade é propriedade do par (tokenizador, texto). Reportar o número sem dizer o corpus é reportar meio número. <span class="src">Aula 2 · A.4 (slide 18)</span></p>
+  <p>O apêndice também separa duas médias que parecem a mesma:</p>
+  <ul>
+    <li><strong>Razão dos totais:</strong> soma os tokens de todos os textos e divide. É a que importa para custo, porque a fatura soma tokens.</li>
+    <li><strong>Média das razões:</strong> calcula a razão em cada par de textos e tira a média. Serve para caracterizar o tokenizador, e deve vir com o desvio. Sem o desvio não se sabe se o pior par é 1,4 ou 3,0, e é o pior par que estoura a janela.</li>
+  </ul>
+  <p>Outros cuidados de medição listados no slide: “palavra separada por espaço” é uma convenção que precisa ser declarada; tokens especiais como <code>[CLS]</code> e <code>[SEP]</code> distorcem textos curtos; um corpus paralelo mal alinhado mede a tradução, e não a tokenização. A regra “1 token ≈ 4 caracteres” é uma medição em inglês, e não um teorema.</p>
+  <p>A resposta do professor para “então escrevo tudo em inglês?” é não: há custo de manutenção e de fidelidade ao domínio. A alavanca é escolher modelo e tokenizador adequados à língua e <strong>medir antes de decidir</strong>.</p>
+</section>
+
+<section class="block" id="custo">
+  <h2>Custo: linear na API, quadrático na atenção</h2>
+  <p>O custo de uma camada tem dois termos. Projeções e feed-forward crescem com <code>n·d²</code>. A atenção cresce com <code>n²·d</code>, onde n é o comprimento da sequência e d é a dimensão do modelo. <span class="src">Aula 2 · slide 10</span> <span class="src">Aula 2 · A.5 (slide 19)</span></p>
+  <p>Encurtar a sequência para 70% do tamanho reduz o preço de API e os termos lineares em 30%. O termo de atenção cai para 0,7² = 0,49, ou seja, 51% a menos. Esse ganho quadrático só vale onde a atenção domina, que é quando n é grande em relação a d. Em contexto curto quem domina é o feed-forward, e o ganho é linear.</p>
+  <p>O tamanho do vocabulário é um compromisso: vocabulário grande encurta a sequência e paga em parâmetros de embedding e de softmax; vocabulário pequeno alonga a sequência e paga na atenção.</p>
+  <h3>Efeitos colaterais da frequência</h3>
+  <p><span class="src">Aula 2 · slide 11</span></p>
+  <ul>
+    <li><strong>Números:</strong> “2024” pode virar “20” e “24”, ou outra divisão arbitrária. A aritmética passa a operar sobre pedaços sem sentido numérico.</li>
+    <li><strong>Código:</strong> sequências de espaços de indentação viram tokens. O sintoma é o assistente truncar o arquivo antes do fim.</li>
+    <li><strong>Línguas com poucos recursos:</strong> a mesma mecânica do português, mais severa, com pedaços de um ou dois caracteres.</li>
+  </ul>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Atribuir ao modelo um déficit que é do tokenizador. Esse déficit pode ser diagnosticado antes de treinar e não se corrige com mais dados.</p>
+  </div>
+  <h3>A dívida da Aula 1</h3>
+  <p>A perplexidade é uma média por token. Com tokenizadores diferentes, muda o número de tokens do mesmo texto e muda o conjunto de opções sobre o qual a probabilidade está definida. A comparação fica sem sentido, e não apenas imprecisa. A saída honesta é normalizar por uma unidade que não depende do tokenizador, como bits por caractere ou por byte. <span class="src">Aula 2 · slide 14</span> A conta completa está na <a href="aula-01.html#perplexidade">página da Aula 1</a>.</p>
+</section>
+
+<section class="block" id="pratica">
+  <h2>Pratique: três faturas, três diagnósticos</h2>
+  <p>Para cada sintoma, diga a causa provável e <strong>que conta confirmaria</strong>. A segunda parte é a que vale. <span class="src">Aula 2 · slide 13</span></p>
+  <details class="q" id="p1">
+    <summary>Mesmo produto e mesmo modelo em português e em inglês; a fatura do lado português é maior</summary>
+    <div class="answer">
+      <p>Causa: fertilidade maior em português naquele tokenizador. O guia não registra a conta esperada; a leitura a seguir é minha, confira: tokenizar um conjunto de textos paralelos dos dois lados e comparar a razão dos totais de tokens com a razão das faturas.</p>
+    </div>
+  </details>
+  <details class="q" id="p2">
+    <summary>Uma conversa de 20 turnos custou muito mais que 20 vezes um turno</summary>
+    <div class="answer">
+      <p>Causa: cada turno reenvia todo o histórico como entrada. A conta do professor no quadro é 1 + 2 + … + 20 = 210 unidades de turno, contra as 20 do orçamento ingênuo: mais de dez vezes.</p>
+    </div>
+  </details>
+  <details class="q" id="p3">
+    <summary>Assistente com janela de 8 mil tokens trunca arquivos de código que têm menos palavras que documentos que cabem</summary>
+    <div class="answer">
+      <p>Causa: a janela é medida em tokens, e em código a indentação e os símbolos consomem tokens que não aparecem na contagem de palavras. A conta é leitura minha a partir dos slides 11 e 18, confira: contar os tokens do arquivo e normalizar por linha ou por byte em vez de por palavra.</p>
+    </div>
+  </details>
+</section>
+
+<section class="block" id="autoteste">
+  <h2>Autoteste</h2>
+  <p>Responda antes de abrir. <span class="meta" data-quiz-progress></span></p>
+  <details class="q" id="q1">
+    <summary>Por que aumentar o vocabulário de palavras não resolve o problema do UNK?</summary>
+    <div class="answer"><p>A cauda de Zipf não termina: sempre existem palavras raras fora da lista. E cada item novo custa parâmetros de embedding e de softmax para uma palavra com pouquíssimos exemplos de treino.</p><p><span class="src">Aula 2 · slide 3</span></p></div>
+  </details>
+  <details class="q" id="q2">
+    <summary>O que exatamente é o resultado do treino de um tokenizador BPE?</summary>
+    <div class="answer"><p>Uma lista ordenada de fusões de pares. Codificar um texto é aplicar essa lista, na ordem, aos símbolos base.</p><p><span class="src">Aula 2 · slide 6</span></p></div>
+  </details>
+  <details class="q" id="q3">
+    <summary>No corpus do slide, “casas” vira 1 token e “casinhas” vira 5. O tokenizador entende que as duas têm a mesma raiz?</summary>
+    <div class="answer"><p>Não. Uma estava frequente no corpus e ganhou fusões até virar token único; a outra não. O critério é só frequência de pares.</p><p><span class="src">Aula 2 · A.1 (slide 15)</span></p></div>
+  </details>
+  <details class="q" id="q4">
+    <summary>Por que o GPT-2 não tem token UNK, e qual é o preço disso para o português?</summary>
+    <div class="answer"><p>Os símbolos base são os 256 bytes, então qualquer texto é representável. Em UTF-8, cada letra acentuada ocupa 2 bytes, e sem fusões aprendidas em português essa sequência de bytes fica exposta.</p><p><span class="src">Aula 2 · slide 8</span></p></div>
+  </details>
+  <details class="q" id="q5">
+    <summary>“O problema do português é o byte-level.” Certo ou errado?</summary>
+    <div class="answer"><p>Errado. A variável é o corpus em que as fusões foram aprendidas. Um BPE byte-level treinado em português tem fusão para “ção”, “mente”, “ções”.</p><p><span class="src">Aula 2 · slide 8</span></p></div>
+  </details>
+  <details class="q" id="q6">
+    <summary>Uma razão PT/EN de 1,33 aumenta a fatura em quanto? E reduz as páginas que cabem na janela em quanto?</summary>
+    <div class="answer"><p>Fatura: +33%, porque o custo é linear em tokens. Páginas: −25%, porque a relação é inversa (1 − 1/1,33).</p><p><span class="src">Aula 2 · A.4 (slide 18)</span></p></div>
+  </details>
+  <details class="q" id="q7">
+    <summary>Por que não faz sentido falar em “a fertilidade do tokenizador X”?</summary>
+    <div class="answer"><p>Porque a fertilidade depende também do texto: língua, domínio, tipo de conteúdo. É propriedade do par (tokenizador, texto). O número precisa vir acompanhado do corpus em que foi medido.</p><p><span class="src">Aula 2 · A.4 (slide 18)</span></p></div>
+  </details>
+  <details class="q" id="q8">
+    <summary>Reduzir a sequência em 30% economiza quanto em preço de API e quanto no termo de atenção?</summary>
+    <div class="answer"><p>30% no preço de API, que é linear. 51% no termo de atenção, que é quadrático (0,7² = 0,49). O ganho quadrático só aparece onde a atenção domina o custo.</p><p><span class="src">Aula 2 · slide 10</span></p></div>
+  </details>
+</section>
+
+<section class="block" id="av1">
+  <h2>Ponte para a AV1: Caso 2</h2>
+  <p>O Caso 2 (“Mesmo conteúdo, mais tokens”) é o cenário de abertura desta aula. O enunciado liga o caso às Aulas 2 e 4: o Laboratório 1 é onde você mediu fertilidade com as próprias mãos, veja a <a href="aula-04.html">página da Aula 4</a>.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pergunta do caso</th><th>Conceito testado</th><th>Onde estudar</th></tr></thead>
+      <tbody>
+        <tr><td>1. Como a construção do vocabulário e a segmentação produzem a diferença?</td><td>Fusões aprendidas por frequência em um corpus; palavra rara é decomposta; acento em byte-level</td><td><a href="#bpe">BPE</a> e <a href="#bytes">Byte-level</a> · slides 6, 8, 12, 15</td></tr>
+        <tr><td>2. Consequências para a janela e para a cobrança por token?</td><td>Janela medida em tokens; custo linear; páginas em relação inversa</td><td><a href="#fertilidade">Fertilidade</a> · slides 12 e 18</td></tr>
+        <tr><td>3. Português sempre exige mais tokens? Como comparar melhor?</td><td>Fertilidade como propriedade do par (tokenizador, texto); corpus das fusões como variável; cuidados de medição</td><td><a href="#fertilidade">Fertilidade não é do tokenizador sozinho</a> · slides 8 e 18</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Perguntas-guia para o seu rascunho</h3>
+  <ol>
+    <li>De onde vem a lista de pedaços que o tokenizador conhece? O que acontece com uma palavra cujos pedaços não ganharam fusão?</li>
+    <li>O caso diz “mesmo tokenizador”. O que isso permite afirmar e o que não permite? O que mudaria com um tokenizador treinado em português?</li>
+    <li>Qual das duas consequências (fatura e janela) cresce de forma linear e qual não?</li>
+    <li>O teste do caso usou <em>dois textos</em>. Que características de um par de textos podem distorcer a razão? O que você mediria, em quantos textos, de quais domínios, e que número reportaria?</li>
+  </ol>
+  <div class="callout exam">
+    <strong>O que a rubrica paga</strong>
+    <p>O mecanismo (6 pontos) é explicar <em>como</em> a frequência no corpus de treino vira mais pedaços por palavra. A pergunta 3 é onde moram os 3 pontos de aplicação e limites: o caso pede explicitamente os limites de um resultado obtido com um único par de textos. Responder “sim, sempre” ou “não, nunca” sem condicionar ao tokenizador e ao texto é a generalização que a rubrica penaliza.</p>
+  </div>
+  <p><strong>Como citar:</strong> “Aula 2 — slide 8, byte-level e o preço do acento”, “Aula 2 — Apêndice A.4, fertilidade e as duas médias”, “Aula 4 — Laboratório 1, Checkpoint 1”.</p>
+</section>
+
+<section class="block" id="glossario">
+  <h2>Glossário</h2>
+  <dl>
+    <dt>Token</dt><dd>Unidade em que o texto é cortado antes de entrar no modelo. Definida pelo tokenizador.</dd>
+    <dt>OOV / UNK</dt><dd>Fora do vocabulário. O token UNK substitui o que não está na lista e apaga a informação.</dd>
+    <dt>Subword</dt><dd>Pedaço de palavra. Unidade intermediária entre caractere e palavra.</dd>
+    <dt>BPE</dt><dd>Byte Pair Encoding: funde repetidamente o par de símbolos mais frequente.</dd>
+    <dt>Fusão (merge)</dt><dd>Regra “A + B vira AB”. O tokenizador BPE treinado é a lista ordenada dessas regras.</dd>
+    <dt>WordPiece</dt><dd>Variante que escolhe o par pelo ganho de verossimilhança. Usa o marcador <span class="mono">##</span>.</dd>
+    <dt>Unigram</dt><dd>Parte de um vocabulário grande e poda. Permite amostrar segmentações.</dd>
+    <dt>SentencePiece</dt><dd>Implementação que treina no texto cru e representa o espaço como <span class="mono">▁</span>.</dd>
+    <dt>Byte-level</dt><dd>Símbolos base são os 256 bytes. Não existe texto irrepresentável.</dd>
+    <dt>Fertilidade</dt><dd>Tokens por palavra, para um tokenizador em um texto específico.</dd>
+    <dt>Janela de contexto</dt><dd>Limite de tokens que o modelo processa de uma vez.</dd>
+  </dl>
+</section>
+
+<footer class="note">
+  As etiquetas “Aula N · slide X” marcam o que está no material do professor e pode ser citado. O restante é explicação escrita com apoio de IA: confira no material antes de usar em uma avaliação.
+</footer>
+
+</main>
+<script src="assets/study.js"></script>
+<script>
+// Mini-BPE on the corpus of slide 6: train k merges, show the ordered list, encode a new word.
+(function () {
+  const corpus = [["casa", 5], ["casas", 3], ["casinha", 2], ["casarão", 1]];
+  const SEP = "\u0001";
+  const $ = (id) => document.getElementById(id);
+  const slider = $("bpe-k"), input = $("bpe-new");
+
+  function apply(symbols, a, b) {
+    const out = [];
+    for (let i = 0; i < symbols.length; i++) {
+      if (i < symbols.length - 1 && symbols[i] === a && symbols[i + 1] === b) {
+        out.push(a + b);
+        i++;
+      } else {
+        out.push(symbols[i]);
+      }
+    }
+    return out;
+  }
+
+  function train(k) {
+    const words = corpus.map(([word, freq]) => ({ word, freq, symbols: Array.from(word) }));
+    const merges = [];
+    for (let step = 0; step < k; step++) {
+      const counts = new Map();
+      words.forEach(({ symbols, freq }) => {
+        for (let i = 0; i < symbols.length - 1; i++) {
+          const key = symbols[i] + SEP + symbols[i + 1];
+          counts.set(key, (counts.get(key) || 0) + freq);
+        }
+      });
+      let best = null, bestCount = 0, tie = false;
+      counts.forEach((count, key) => {
+        if (count > bestCount) { best = key; bestCount = count; tie = false; }
+        else if (count === bestCount) { tie = true; }
+      });
+      if (!best) break;
+      const [a, b] = best.split(SEP);
+      merges.push({ a, b, count: bestCount, tie });
+      words.forEach((w) => { w.symbols = apply(w.symbols, a, b); });
+    }
+    return { words, merges };
+  }
+
+  function chips(container, items) {
+    container.textContent = "";
+    items.forEach((text) => {
+      const span = document.createElement("span");
+      span.textContent = text;
+      container.appendChild(span);
+    });
+  }
+
+  function update() {
+    const k = Number(slider.value);
+    const { words, merges } = train(k);
+    $("bpe-k-out").textContent = k;
+    chips($("bpe-merges"), merges.length
+      ? merges.map((m, i) => (i + 1) + ". " + m.a + "+" + m.b + " (" + m.count + (m.tie ? ", empate" : "") + ")")
+      : ["nenhuma: só símbolos base"]);
+
+    const body = $("bpe-words");
+    body.textContent = "";
+    words.forEach((w) => {
+      const row = document.createElement("tr");
+      [w.word, "×" + w.freq, w.symbols.join(" │ "), w.symbols.length].forEach((value, i) => {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        if (i !== 0) cell.className = i === 2 ? "mono" : "num";
+        row.appendChild(cell);
+      });
+      body.appendChild(row);
+    });
+
+    const word = input.value.trim().toLowerCase();
+    let symbols = Array.from(word);
+    merges.forEach((m) => { symbols = apply(symbols, m.a, m.b); });
+    chips($("bpe-encoded"), symbols.length ? symbols : ["digite uma palavra"]);
+    $("bpe-verdict").textContent = symbols.length
+      ? "“" + word + "” sai em " + symbols.length + " token(s) com " + merges.length + " fusão(ões). Nenhuma regra nova é criada na codificação: só se aplica a lista."
+      : "";
+  }
+
+  [slider, input].forEach((el) => el.addEventListener("input", update));
+  update();
+})();
+
+// Window and bill: cost is linear in tokens, pages that fit are inversely proportional.
+(function () {
+  const WINDOW = 8192, WORDS_PER_PAGE = 500;
+  const $ = (id) => document.getElementById(id);
+  const fert = $("win-fert"), ratio = $("win-ratio");
+  const fmt = (x, digits) => x.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+  function update() {
+    const f = Number(fert.value), r = Number(ratio.value);
+    const pages = WINDOW / (f * WORDS_PER_PAGE);
+    const extraCost = (r - 1) * 100;
+    const lostPages = (1 - 1 / r) * 100;
+    $("win-fert-out").textContent = fmt(f, 1);
+    $("win-ratio-out").textContent = fmt(r, 2);
+    $("win-pages").textContent = fmt(pages, 1);
+    $("win-cost").textContent = "+" + fmt(extraCost, 0) + "%";
+    $("win-loss").textContent = "−" + fmt(lostPages, 0) + "%";
+    $("win-verdict").textContent = r === 1
+      ? "Com razão 1, as duas línguas custam e ocupam o mesmo."
+      : "O mesmo conteúdo custa " + fmt(extraCost, 0) + "% a mais em português, e cabem " + fmt(lostPages, 0) + "% menos páginas na mesma janela. Os dois números não são iguais porque uma relação é linear e a outra é inversa.";
+  }
+
+  [fert, ratio].forEach((el) => el.addEventListener("input", update));
+  update();
+})();
+</script>
+</body>
+</html>

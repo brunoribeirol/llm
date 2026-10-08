@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Agentes de IA: loops, planejamento e memória · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="23">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 23 / 5 — RAG, Ferramentas e Agentes de IA</p><h1>Agentes de IA: loops, planejamento e memória</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 23" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Enunciar</strong> as cinco peças da definição operacional de agente e <strong>apontá-las</strong> no código de um loop de 40 linhas, nomeando o que falta quando uma delas está ausente.</p></li><li><p><strong>Descrever</strong> o ciclo observar → planejar → agir → refletir e <strong>localizar</strong> cada fase numa trajetória real registrada.</p></li><li><p><strong>Explicar</strong> o que o ReAct (Yao et al., arXiv 2210.03629) intercala e <strong>justificar</strong> por que o raciocínio explícito antes da ação melhora a escolha de ferramenta.</p></li><li><p><strong>Distinguir</strong> memória de curto prazo (a trajetória dentro da janela de contexto) de memória de longo prazo (o que persiste entre sessões) e <strong>decidir</strong> o que promover de uma para a outra.</p></li><li><p><strong>Decidir</strong> entre agente e workflow determinístico aplicando dois testes: o caminho é conhecido? existe verificador para o passo intermediário?</p></li><li><p><strong>Calcular</strong> o custo de um loop em chamadas e tokens em função do número de passos e <strong>diagnosticar</strong> as duas paradas mal projetadas: o loop que não termina e o que termina cedo.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · Abertura: vocês já deram mãos ao modelo · 00:00–00:05</summary><div class="prose"><p>Boa noite, pessoal. Aula passada foi o Lab 6, e eu quero começar recuperando exatamente onde a gente parou, porque hoje é continuação direta.</p>
+<p>No Lab 6 vocês escreveram o host do ciclo de ferramentas na mão: o schema que o modelo lê, a validação antes de despachar, o <code>REGISTRO</code> que amarra nome a função, o resultado voltando como mensagem <code>tool</code>, e a síntese. Depois vocês fizeram a mesma coisa pelo protocolo, com um cliente MCP e um servidor de vocês. E eu recolhi a Entrega 1 do projeto.</p>
+<p>Só que tem uma coisa que o Lab 6 fez de propósito e eu não comentei: no fim do Checkpoint 2 vocês escreveram um <code>while</code>. Um <code>while</code> com orçamento de passos. Aquele laço de cinco linhas é a fronteira entre um programa que chama ferramenta e um agente — e a aula de hoje é sobre aquele laço.</p>
+<blockquote>
+<p>Ideia central: "No Lab 6 vocês deram mãos ao modelo. Hoje a gente dá um loop e um objetivo — e é isso, literalmente isso, que transforma tool calling em agente."</p>
+</blockquote></div></details><details><summary>Slide 2 · A definição operacional · 00:05–00:10</summary><div class="prose"><p>Deixa eu cravar uma definição antes de qualquer coisa, porque "agente" é uma das palavras mais gastas desta área e eu não quero passar duas horas discutindo vocabulário.</p>
+<p>Agente é <strong>modelo mais ferramentas mais loop mais objetivo mais critério de parada</strong>. Cinco peças. Não é uma definição filosófica, é um checklist — e ele funciona pela subtração. Tira o loop: sobra o tool calling da Aula 21, uma ida e uma volta. Tira as ferramentas: sobra um modelo raciocinando sozinho, que é a cadeia de pensamento da Aula 13. Tira o objetivo: sobra um chat, que responde o que vem e não persegue nada. E tira o critério de parada: sobra uma conta de API crescendo enquanto vocês dormem.</p>
+<p>Essa lista vai voltar três vezes hoje. Agora, como definição. No meio da aula, quando eu abrir um arquivo de quarenta linhas e apontar as cinco peças no código com o cursor. E no fim, como checklist que vocês vão aplicar ao projeto de vocês.</p>
+<p>A analogia que eu uso é motor, carro e viagem. O modelo é o motor. As ferramentas são as rodas — sem elas o motor gira e nada anda. O loop é o acelerador. O objetivo é o destino. E o critério de parada é saber que chegou. Sem o último, o carro anda até o tanque acabar, e o tanque aqui é o cartão de crédito de alguém.</p>
+<blockquote>
+<p>Ideia central: "Agente é modelo, ferramentas, loop, objetivo e critério de parada. Cinco peças. Guardem essa lista, porque ela é o único slide que eu vou repetir três vezes hoje."</p>
+</blockquote></div></details><details><summary>Slide 3 · O ciclo: observar, planejar, agir, refletir · 00:10–00:18</summary><div class="prose"><p>Agora o que acontece dentro de uma volta do loop. Quatro momentos, e eu quero que vocês consigam identificar os quatro numa saída de terminal, porque no Lab 7 vocês vão ler exatamente isso.</p>
+<p><strong>Observar</strong> é ler o estado. Na primeira volta, o estado é a pergunta. Na terceira volta, o estado é a pergunta mais tudo o que as ferramentas devolveram até ali. <strong>Planejar</strong> é decidir o próximo passo — e num agente de texto isso é literalmente uma linha começando com "Thought". <strong>Agir</strong> é emitir a ação: nome da ferramenta, argumentos. E <strong>refletir</strong> é julgar o que voltou antes de decidir a próxima volta.</p>
+<p>Essa última é a que a turma costuma achar mística, então deixa eu desmistificar agora. Refletir, em implementação, é uma pergunta a mais no prompt sobre o resultado que acabou de chegar. Não é um módulo novo, não é uma arquitetura nova, é um turno a mais de conversa. E por isso ela custa: cada reflexão é uma chamada de API que alguém paga.</p>
+<p>A analogia mais honesta é o laço de vocês depurando código. Vocês leem o erro, formam uma hipótese, executam um teste, leem o resultado, e decidem se a hipótese sobreviveu. Ninguém chama isso de inteligência artificial quando é vocês fazendo. É o mesmo laço.</p>
+<blockquote>
+<p>Ideia central: "Refletir não é um módulo místico: é um turno a mais de conversa sobre o resultado que acabou de chegar. E turno a mais custa dinheiro."</p>
+</blockquote></div></details><details><summary>Slide 4 · ReAct: intercalar raciocínio e ação · 00:18–00:28</summary><div class="prose"><p>A leitura de hoje é um artigo de 2022 do Yao e colegas, o ReAct, e o achado dele é bonito de simples: raciocinar <strong>e</strong> agir alternadamente vence cada uma das duas coisas isoladamente.</p>
+<p>Pensem no que dá errado em cada extremo. Só raciocinar é a cadeia de pensamento da Aula 13: o modelo produz um encadeamento lindo sobre fatos que ele não tem, e erra com convicção — cada passo do raciocínio é plausível e o conjunto está errado porque a premissa era inventada. Só agir é o oposto: o modelo dispara chamadas de ferramenta sem nunca articular por que aquela ferramenta e com que argumento, e quando o resultado volta ele não sabe o que fazer com ele.</p>
+<p>Intercalando, duas coisas acontecem ao mesmo tempo. O pensamento condiciona a ação seguinte — se eu escrevi "eu preciso do prazo de trancamento, então vou buscar no regulamento", o argumento da busca sai melhor. E a observação corrige o pensamento seguinte — se a busca voltou vazia, o próximo pensamento não pode continuar como se ela tivesse funcionado. O formato é textual e repetitivo: pensamento, ação, entrada da ação, observação; pensamento, ação, entrada da ação, observação; e na última volta, em vez de ação, resposta final.</p>
+<p>Agora eu preciso separar duas coisas que a turma junta, e essa separação é ponto de prova. ReAct <strong>não</strong> é o tool calling da Aula 21. São camadas diferentes. ReAct é o padrão de interação: raciocínio explícito intercalado com ação. Tool calling é o mecanismo de transporte da ação: o campo <code>tool_calls</code> no JSON da resposta. Dá para fazer ReAct em texto puro, com um modelo que não tem suporte nenhum a ferramentas, parseando "Action:" com uma expressão regular — e é exatamente isso que vocês vão fazer no Lab 7, de propósito, porque quem entende o padrão consegue implementá-lo em qualquer transporte.</p>
+<blockquote>
+<p>Ideia central: "ReAct é o padrão de interação; tool calling é o transporte. Vocês vão implementar ReAct em texto puro no Lab 7 justamente para essa diferença não virar decoreba."</p>
+</blockquote></div></details><details><summary>Slide 5 · Planejamento e decomposição · 00:28–00:36</summary><div class="prose"><p>Vamos falar de planejamento, porque metade do que se vende como "agente que planeja" é uma escolha entre duas coisas simples.</p>
+<p>Primeira família: <strong>plano antecipado</strong>. O agente escreve a lista de subtarefas antes de agir e depois executa a lista. Isso é ótimo quando a tarefa tem estrutura previsível, e é ruim de um jeito específico: quando o primeiro resultado invalida o plano, o agente continua executando um plano morto. Segunda família: <strong>plano emergente</strong>. Cada passo é decidido com o que já se sabe naquele momento. Isso é robusto a surpresa, e a fraqueza é perder o fio em tarefa longa — na volta nove ele já não lembra por que começou.</p>
+<p>Sistema maduro mistura os dois: um plano grosso no começo, revisado quando uma observação contradiz o plano. Isso é o que vocês fazem quando resolvem uma issue grande — vocês têm um roteiro na cabeça, e refazem o roteiro quando o teste revela outra coisa.</p>
+<p>Mas o ponto que eu quero que fique é sobre decomposição, e ele é o mesmo fio da Aula 16. Decompor bem não é produzir subtarefas elegantes: é produzir subtarefas <strong>verificáveis</strong>. "Achar o artigo que fixa o prazo de trancamento" é verificável — ou o artigo apareceu, ou não. "Entender o regulamento" não é verificável, e por isso não é subtarefa, é desejo. Plano com sete etapas bonitas e nenhuma verificável é pior que três etapas grosseiras com critério de sucesso em cada uma.</p>
+<blockquote>
+<p>Ideia central: "Subtarefa boa não é subtarefa elegante: é subtarefa que dá para conferir se deu certo. O resto é desejo escrito em forma de lista."</p>
+</blockquote></div></details><details><summary>Slide 6 · Memória de curto prazo é a trajetória · 00:36–00:44</summary><div class="prose"><p>Agora memória, que é onde a maioria dos textos de blog erra feio. Existem duas memórias, e a de curto prazo não é um sistema — ela é a trajetória.</p>
+<p>Concretamente: a memória de curto prazo do agente é a lista de mensagens que volta para o modelo a cada passo. Pergunta, pensamento, ação, observação, pensamento, ação, observação. É isso que dá continuidade ao raciocínio, e é isso que faz o agente saber, no passo 5, o que ele descobriu no passo 2.</p>
+<p>E aqui está a consequência que ninguém coloca na conta: o custo por passo <strong>não é constante</strong>. O passo 6 reenvia tudo o que aconteceu nos passos 1 a 5. Se cada volta acrescenta mil tokens, o passo 6 manda cinco mil de histórico mais os novos. A trajetória é a memória e é a fatura.</p>
+<p>Daí as três táticas, e são só três. <strong>Truncar</strong>: descartar observações antigas, o que é barato e perde informação. <strong>Resumir</strong>: comprimir o passado em algumas linhas, o que custa uma chamada a mais e perde detalhe. <strong>Referenciar</strong>: guardar o resultado grande em arquivo e manter no contexto só o caminho — "o resultado da busca está em <code>saida/busca_03.json</code>, com 40 linhas". Essa terceira é a que os agentes de programação usam mais, e é a que a turma menos pensa.</p>
+<p>A analogia é a mesa de trabalho. Cabe muito papel, mas cada papel a mais deixa a mesa mais lenta de ler. E alguns papéis viram um resumo colado na borda.</p>
+<blockquote>
+<p>Ideia central: "A trajetória é a memória de curto prazo, e ela é a fatura. O passo seis não custa como o passo um — ele reenvia os cinco anteriores."</p>
+</blockquote></div></details><details><summary>Slide 7 · Memória de longo prazo · 00:44–00:50</summary><div class="prose"><p>Memória de curto prazo morre quando a trajetória termina. Longo prazo é o que sobrevive — e sobreviver, em engenharia, significa que alguém escreveu num lugar.</p>
+<p>As formas usuais são três. Um arquivo de fatos aprendidos, que é a mais simples e a mais subestimada. Uma tabela de preferências ou de perfil do usuário. E um índice vetorial de episódios anteriores — que é, literalmente, o RAG do Módulo 5 apontado para o próprio histórico do agente em vez de para um acervo de documentos. Vocês já sabem construir isso: é o Lab 5.</p>
+<p>Só que a decisão difícil não é ter memória de longo prazo. É duas outras: <strong>o que promover</strong> para ela, e <strong>como recuperar</strong> só o pedaço relevante depois. Sem critério de promoção, memória de longo prazo vira lixo acumulado que polui todo prompt futuro — e aí o agente fica pior com o tempo, não melhor, o que é um bug particularmente frustrante de diagnosticar.</p>
+<p>E deixa eu marcar uma distinção que volta na Aula 26: gravar a trajetória inteira <strong>não</strong> é memória de longo prazo. Trajetória inteira serve para auditoria, e ela é obrigatória por outro motivo. Memória de longo prazo é o destilado da trajetória: um fato que se confirmou, uma preferência que o usuário expressou, um procedimento que funcionou. Coisa curta.</p>
+<blockquote>
+<p>Ideia central: "A pergunta não é se o agente tem memória de longo prazo. É o que ele promove para ela — porque sem critério de promoção, o agente piora com o tempo."</p>
+</blockquote></div></details><details><summary>Slide 8 · Reflexão e autocorreção — e o limite dela · 00:50–00:55</summary><div class="prose"><p>Último conceito antes do intervalo, e é o que mais me interessa que vocês levem com ressalva.</p>
+<p>Pedir ao modelo que critique o próprio resultado antes de seguir funciona — e funciona <strong>quando existe sinal externo para reagir</strong>. A ferramenta devolveu erro: a autocrítica tem o que morder. O teste falhou com uma mensagem: tem o que morder. A busca voltou vazia: tem o que morder. Nesses casos, a reflexão é o mecanismo que transforma uma trajetória burra em uma trajetória que se corrige.</p>
+<p>Agora, quando não existe sinal externo, a autocrítica tende a ser confirmatória. O modelo defende o que acabou de escrever com a mesma fluência com que defenderia o contrário, ou muda de opinião sem informação nova nenhuma. Isso é o mesmo fio da Aula 16, quando a gente viu que RL com recompensa verificável funciona em matemática e código porque existe professor automático. Verificação automática é o que transforma tentativa em aprendizado — no treino e também aqui, dentro de uma única trajetória.</p>
+<p>Então a regra prática que eu quero cravar: montar uma etapa de "auto-avaliação" sem verificador e acreditar no resultado dela é enganar a si mesmo com passo extra e fatura extra. O agente diz "revisei e está correto" com a mesma fluência com que diria o contrário.</p>
+<blockquote>
+<p>Ideia central: "Autocrítica sem verificador é o modelo defendendo o que acabou de escrever. Com verificador, é o modelo consertando o que acabou de errar."</p>
+</blockquote></div></details><details><summary>Slide 9 · [Demo] O loop em 40 linhas · 01:05–01:18</summary><div class="prose"><p>Voltando. Antes do intervalo eu dei cinco peças e uma porção de conceitos. Agora eu vou abrir um arquivo e mostrar que isso é pequeno.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "O que separa um chat de um agente são umas trinta linhas. Não é uma biblioteca, não é um framework — é um <code>while</code>, um <code>parse</code> e um dicionário de funções."</p>
+</blockquote></div></details><details><summary>Slide 10 · Agente × workflow determinístico · 01:18–01:28</summary><div class="prose"><p>Agora a decisão que vale dinheiro, e eu quero que ela fique como dois testes, nesta ordem.</p>
+<p><strong>Primeiro teste: o caminho é conhecido?</strong> Se a sequência de passos é a mesma sempre — extrair, validar, transformar, gravar — isso é um pipeline. Escrever um agente para executar um pipeline troca código previsível, testável e barato por sorteio caro. E eu vou ser direto: uma parte considerável do que hoje é vendido como agente é um pipeline com um LLM no meio, e ficaria melhor, mais rápido e mais barato escrito como pipeline.</p>
+<p><strong>Segundo teste, e é ele que decide os casos difíceis: existe verificador para o passo intermediário?</strong> Se dá para checar automaticamente se o passo deu certo — o teste passou, o JSON validou, a busca trouxe o dispositivo pedido, a soma fecha — então o loop pode explorar com segurança, porque o erro é detectado e corrigido dentro da própria trajetória. Sem verificador, o loop não explora: ele propaga erro com autoridade, e cada volta empilha convicção sobre uma base errada.</p>
+<p>Isso é o critério da Aula 16 reaparecendo. Lá era treino: recompensa verificável faz o RL funcionar em matemática e código. Aqui é arquitetura: verificador disponível faz o loop valer a pena. É a mesma ideia em duas escalas.</p>
+<p>E o erro de critério mais comum, que eu vejo em proposta de projeto e em post de blog: usar "a tarefa é complexa" como razão para usar agente. Complexidade não pede agente. <strong>Incerteza intermediária com verificação possível</strong> pede agente. Muita tarefa complexa é um pipeline longo, e pipeline longo é um bom lugar para estar.</p>
+<blockquote>
+<p>Ideia central: "Complexidade não pede agente. Incerteza intermediária com verificação possível pede agente. Se não tem verificador, o loop não explora — ele propaga erro com autoridade."</p>
+</blockquote></div></details><details><summary>Slide 11 · Custo e latência do loop · 01:28–01:34</summary><div class="prose"><p>Vou fazer uma conta rápida, porque ela muda como vocês desenham o sistema.</p>
+<p>Uma resposta de chat é uma chamada de API. Um agente de seis passos são sete chamadas: seis voltas mais a síntese. Só que — e isso é o que a demo mostrou na tela — cada chamada reenvia a trajetória acumulada. Se cada volta acrescenta em média <code>d</code> tokens, o total enviado ao longo da trajetória não é <code>n · d</code>, é a soma de <code>k · d</code> para k de 1 a n, que dá aproximadamente <code>d · n² / 2</code>. Cresce com o <strong>quadrado</strong> do número de passos.</p>
+<p>Latência acumula do mesmo jeito, e ela é sequencial por construção: o passo 4 não começa antes de o 3 voltar. Não tem paralelismo para tirar aqui, porque a decisão do passo seguinte depende do resultado do anterior. Se cada volta leva três segundos, seis voltas são dezoito segundos de espera na cara do usuário — e ninguém aceita dezoito segundos numa caixa de busca.</p>
+<p>Por isso eu insisto: <code>max_passos</code> não é defensividade, é <strong>decisão de produto</strong>. Ele fixa o teto de custo por pergunta e o teto de espera do usuário, e essas duas coisas são requisitos, não detalhes. No Lab 6 vocês já escreveram esse teto. No Lab 7 ele volta como item de nota.</p>
+<blockquote>
+<p>Ideia central: "O custo do loop não é linear nos passos, é quadrático — porque cada volta reenvia a trajetória inteira. E a latência é sequencial: não tem paralelismo para salvar."</p>
+</blockquote></div></details><details><summary>Slide 12 · Paradas mal projetadas · 01:34–01:40</summary><div class="prose"><p>Dois defeitos, e eles são os dois lados da mesma peça faltando.</p>
+<p><strong>Lado um, o loop que não termina.</strong> O modelo pede ferramenta indefinidamente: porque a ferramenta falha sempre, porque a observação não responde à pergunta, ou porque o prompt não deixou claro como encerrar. Os sintomas são reconhecíveis: a mesma ação com o mesmo argumento repetida; ou duas ações alternando em ciclo, A, B, A, B. As mitigações são três e são baratas: orçamento de passos, detector de repetição — mesma ação e mesmo argumento duas vezes seguidas, aborta — e uma resposta de fallback declarada, do tipo "não consegui responder, e é isto que eu tentei", que é infinitamente melhor que uma resposta inventada.</p>
+<p><strong>Lado dois, a parada precoce.</strong> O agente responde antes de ter fundamento. Ou porque o formato de parada é fácil de emitir por acidente, ou porque a primeira observação pareceu suficiente. O sintoma é <code>Final Answer</code> no primeiro passo, sem nenhuma ação. A mitigação é exigir que a resposta final cite a observação que a sustenta — se não citou, não terminou.</p>
+<p>E agora o contraste que eu quero cravar. Todo mundo se preocupa com o loop infinito, porque ele dói na fatura e aparece no gráfico de custo. A parada precoce é mais frequente e mais silenciosa: ela produz uma resposta plausível, sem evidência, e ninguém percebe <strong>sem olhar a trajetória</strong>. Guardem essa frase, porque ela é a tese da Aula 26.</p>
+<blockquote>
+<p>Ideia central: "O loop infinito dói na fatura, então todo mundo conserta. A parada precoce entrega resposta plausível sem evidência — e essa só aparece se alguém olhar a trajetória."</p>
+</blockquote></div></details><details><summary>Slide 13 · Estudo de caso: um coding agent numa issue real · 01:40–01:44</summary><div class="prose"><p>Deixa eu fechar o conteúdo com o caso em que as cinco peças aparecem sem esforço nenhum de interpretação: um agente de programação recebendo uma issue de um repositório.</p>
+<p><strong>Objetivo:</strong> o texto da issue. <strong>Ferramentas:</strong> buscar no repositório, ler arquivo, editar arquivo, rodar a suíte de testes, rodar o linter, abrir o diff. <strong>Loop:</strong> localizar o código responsável, formar uma hipótese, editar, rodar o teste, ler a falha, editar de novo. <strong>Memória de curto prazo:</strong> os arquivos lidos e as saídas de teste daquela sessão. <strong>Critério de parada:</strong> a suíte passa.</p>
+<p>E aqui está a lição, que é o resumo executivo da aula inteira. O coding agent funciona bem <strong>não</strong> porque o modelo é especialmente bom em código. Ele funciona porque existe um verificador barato, automático e não negociável: o teste. Cada volta do loop recebe um sinal externo honesto — passou ou não passou. Onde o verificador é caro ou não existe — mudança de experiência de usuário, decisão de arquitetura, redação de política interna — o mesmo modelo, com o mesmo loop, com as mesmas ferramentas, rende muito menos.</p>
+<p>O que transfere de domínio para domínio é a arquitetura. O que não transfere é o verificador. E é por isso que o benchmark que mais pegou nesta área é o SWE-bench, com issues reais de repositórios reais — a gente volta nele na Aula 26.</p>
+<blockquote>
+<p>Ideia central: "O coding agent não é bom porque o modelo é bom em código. Ele é bom porque o teste é um verificador barato que não mente. A arquitetura transfere; o verificador não."</p>
+</blockquote></div></details><details><summary>Slide 14 · [Exercício] Agente ou pipeline? · 01:44–01:50</summary><div class="prose"><p>Seis minutos em dupla, e é o exercício que mais volta na Entrega 2.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Cinco cenários. Para cada um: agente ou pipeline, qual é o verificador — e se não tiver, a palavra 'nenhum' escrita, porque escrever 'nenhum' é o achado."</p>
+</blockquote></div></details><details><summary>Slide 15 · Fechamento: a definição, terceira vez · 01:50–02:00</summary><div class="prose"><p>Terceira e última vez, e agora não como definição nem como código: como checklist de projeto.</p>
+<p>Modelo, ferramentas, loop, objetivo, critério de parada. Para o projeto de vocês, eu quero que cada uma dessas cinco linhas tenha uma resposta escrita. E depois os dois testes: o caminho é conhecido? existe verificador para o passo intermediário? Se a resposta ao segundo teste for "nenhum verificador", isso não é um problema para esconder da Entrega 2 — é um achado para levar à Entrega 2, porque significa que ou vocês constroem um verificador, ou vocês põem um humano no laço, ou vocês reconhecem que aquilo é um pipeline com um LLM dentro e escrevem um pipeline. Qualquer uma das três é uma resposta defensável. Fingir que existe verificador não é.</p>
+<p>Uma frase de honestidade sobre hoje: tudo o que a gente viu foi <strong>um</strong> agente. Um loop, um conjunto de ferramentas, um objetivo. Na próxima aula a gente coloca mais de um na mesa — orquestrador e trabalhadores, pipeline de estágios, debate, painel de especialistas — e eu vou passar boa parte da aula argumentando que a maior parte disso é desnecessária. Sistemas multiagente e orquestração, Aula 24. Eu prometo ser cético, e o ceticismo vai ser conteúdo, não opinião.</p>
+<p>E para a semana, duas coisas: rodar a demo nos quatro modos e escrever qual peça está faltando em cada modo com defeito; e a leitura do ReAct, arXiv 2210.03629, com a pergunta dirigida do slide — qual modo de falha só aparece no raciocínio isolado, e por que a observação de uma ferramenta o elimina. Quem responder isso já entrou no Lab 7.</p>
+<blockquote>
+<p>Ideia central: "Modelo, ferramentas, loop, objetivo, critério de parada. Se uma dessas cinco linhas do projeto de vocês estiver em branco na Aula 26, o problema não é o modelo — é o projeto."</p>
+</blockquote>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p>Treze minutos, terminal e editor, sem rede e sem dependência nenhuma. O script é <code>codigo/demo-loop-agente.py</code>: o modelo é um simulador roteirado determinístico com semente fixa e as ferramentas são locais, então a saída é sempre a mesma e eu posso ensaiar em casa com a certeza de que a sala vê o mesmo. O objetivo é anticlímax deliberado: eu quero que a turma saia com a sensação de que agente é pequeno.</p>
+<p><strong>1.</strong> <strong>[Abro <code>demo-loop-agente.py</code> num editor com fonte grande e rolo o arquivo de cima a baixo em quinze segundos]</strong> Deixa eu começar pelo tamanho. Isso aqui é o arquivo inteiro. O loop do agente é essa parte, menos de uma tela e meia. Todo o resto é ferramenta e é o simulador de modelo, que existe para a gente rodar sem rede.</p>
+<p><strong>2.</strong> <strong>[Aponto com o cursor, na ordem, os cinco trechos: a função que chama o modelo, o dicionário <code>FERRAMENTAS</code>, o <code>while</code>, a constante do objetivo dentro do prompt de sistema, e a condição de <code>Final Answer</code> junto ao <code>max_passos</code>]</strong> Cinco peças, cinco trechos. Modelo: essa função. Ferramentas: esse dicionário — nome para função, o mesmo <code>REGISTRO</code> do Lab 6. Loop: esse <code>while</code>. Objetivo: essa string, dentro do prompt de sistema. Critério de parada: essas duas linhas, a que reconhece a resposta final e o teto de passos. Não tem uma sexta.</p>
+<p><strong>3.</strong> <strong>[Rodo <code>python demo-loop-agente.py --normal</code> com a pergunta que exige duas ferramentas]</strong> Agora rodando. A pergunta é do tipo que precisa de duas ferramentas: primeiro achar o prazo no regulamento, depois fazer uma conta com esse prazo. Olha a saída: cada volta vem rotulada. <code>OBSERVAR</code>, <code>PLANEJAR</code>, <code>AGIR</code>, <code>REFLETIR</code>. É o ciclo do slide 3 impresso no terminal.</p>
+<p><strong>4.</strong> <strong>[Aponto a coluna de tokens acumulados que o script imprime ao lado de cada passo]</strong> Essa coluna aqui é o que eu queria mostrar. É o tamanho acumulado do prompt em tokens aproximados, passo a passo. Repararam que ela não sobe em degraus iguais? Ela acelera. Isso é a conta quadrática de que eu vou falar no slide 11, e é mais convincente vista assim do que como fórmula.</p>
+<p><strong>5.</strong> <strong>[Rodo <code>--sem-parada</code>]</strong> Agora eu tiro uma peça. Nesse modo eu removi a condição de <code>Final Answer</code> e deixei só o orçamento de passos. Olha o que acontece: o agente repete a mesma ação com o mesmo argumento até bater o teto, e para por esgotamento. Nome do sintoma: mesma ação, mesmo argumento, duas vezes seguidas. É o sinal de que ou o critério de parada está mal escrito, ou a ferramenta não está entregando o que o modelo pediu.</p>
+<p><strong>6.</strong> <strong>[Rodo <code>--sem-orcamento</code>]</strong> Nesse eu tirei o teto e deixei um detector de repetição. Ele aborta na terceira repetição e imprime por quê. Sem esse detector, isso seria um laço infinito com fatura — e eu quero que vocês vejam que a proteção que salvou aqui não foi inteligência do modelo, foi uma linha de código minha.</p>
+<p><strong>7.</strong> <strong>[Rodo <code>--parada-precoce</code>]</strong> Último modo, e é o que me interessa mais. Aqui o prompt de sistema permite responder direto, sem obrigar a citar observação. Olha: <code>Final Answer</code> no passo um. Zero ações. E a resposta é <strong>plausível</strong> — se vocês não estivessem vendo a trajetória, vocês aceitariam. Compara com o modo anterior: aquele era feio e caro, esse é bonito e errado. O feio e caro aparece no gráfico de custo; esse só aparece se alguém abrir a trajetória.</p>
+<p><strong>8.</strong> <strong>[Volto ao editor e deixo lado a lado a linha do <code>max_passos</code> e a linha da condição de parada]</strong> Fecho aqui. Duas linhas. Uma protege a fatura, a outra protege a resposta. E as duas são a mesma peça da definição — critério de parada. Voltando para o slide.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>Seis minutos, em dupla, com os cinco cenários projetados. O objetivo não é acertar a classificação — é forçar a pergunta do verificador, que é a que a turma não faz sozinha.</p>
+<p><strong>1.</strong> <strong>[Projeto os cinco cenários e formo as duplas]</strong> Seis minutos em dupla. Cinco cenários no slide. Para cada um eu quero três coisas, e a terceira é a que vale: a letra A de agente ou P de pipeline; qual é o verificador do passo intermediário — e se não existir, a palavra "nenhum" escrita, porque escrever "nenhum" é o achado; e uma frase de justificativa.</p>
+<p>Os cinco cenários:</p>
+<ol>
+<li>Converter quatro mil notas fiscais em PDF numa tabela com sete campos fixos, todos os PDFs com o mesmo layout.</li>
+<li>Responder perguntas de alunos sobre o regulamento citando o dispositivo, sobre o acervo que vocês indexaram no Lab 5.</li>
+<li>Corrigir um bug de teste vermelho num repositório com suíte de testes rápida.</li>
+<li>Escrever a política de privacidade da empresa a partir de seis documentos internos.</li>
+<li>Reconciliar duas planilhas de pagamento e listar as divergências, com a regra de reconciliação já definida no manual.</li>
+</ol>
+<p><em>Como recolher:</em> quatro minutos de dupla, dois de correção. Não corrijo os cinco: peço voluntário para o 1, corrijo o 3 em dez segundos, e gasto o resto no 4. Encerro com a frase que amarra no fechamento: "escrever 'nenhum verificador' não é falhar no exercício — é o achado que vocês levam para a Entrega 2".</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a conta em aula.
+Esta aula tem <strong>um</strong> item de apêndice, então a contingência é curta — e a versão de trinta segundos
+dela eu já faço no slide 11, porque a soma é curta o suficiente para caber no quadro sem virar aula
+de matemática.</p>
+<p><strong>Item 1 — "de onde vem esse <code>n²</code>?" (A.1, Etapas 1 a 3, ~4 min).</strong>
+A pergunta mais provável do Bloco 2, e a que <strong>vale</strong> fazer no quadro, porque são três linhas. Eu
+escrevo os tamanhos das chamadas — <code>p₀</code>, <code>p₀+d</code>, <code>p₀+2d</code>, … — e somo: dá <code>d</code> vezes a soma dos
+primeiros <code>n</code> inteiros, que é <code>d·n(n+1)/2</code>. E fecho com a razão que interessa: a estimativa ingênua
+"custo de uma chamada vezes número de passos" subestima por um fator <code>(n+1)/2</code>, que com seis passos
+é <strong>três vezes e meia</strong>. Se a turma quiser número absoluto, eu uso o <code>d</code> que a demo imprimiu na
+coluna de tokens acumulados, não um número inventado.</p>
+<p><strong>Item 2 — "então quanto eu ponho no <code>max_passos</code>?" (A.1, Etapa 5, ~3 min).</strong>
+A melhor pergunta que esta aula pode gerar, porque ela transforma a conta em decisão. Eu inverto a
+desigualdade no quadro: se o teto de orçamento é <code>B</code> tokens por pergunta, então
+<code>n_max = ⌊√(2B/d)⌋</code>. E leio o efeito da raiz em voz alta: <strong>dobrar o orçamento não dobra os passos</strong>,
+aumenta-os em quarenta por cento — comprar o dobro de exploração custa quatro vezes mais. Dois
+números fecham: cem mil tokens com mil por volta dá quatorze passos; vinte mil dá seis. Se não
+houver tempo, a frase é: "<code>max_passos</code> sai de uma desigualdade, e a desigualdade está em A.1".</p>
+<p><strong>Item 3 — "por que truncar resolve e referenciar não?" (A.1, Etapa 6, ~4 min).</strong>
+Costuma vir no slide 6, e é a discussão mais útil das três. Truncar e resumir mudam a <strong>ordem</strong> de
+crescimento — de quadrática para linear —, porque limitam o tamanho de cada chamada a uma constante.
+Referenciar <strong>não</strong> muda a ordem: continua <code>n²</code>, e ataca a constante <code>d</code>. Nas trajetórias curtas
+desta disciplina, quatro a oito passos, a constante é onde o dinheiro está, e por isso referenciar é
+a tática de melhor retorno aqui — pela Etapa 5, cortar <code>d</code> por dez multiplica <code>n_max</code> por três. Se o
+tempo apertar, eu digo só a conclusão: "as três táticas atacam coisas diferentes da mesma fórmula, e
+a tabela está em A.1".</p>
+<p><strong>Item 4 — "e com janela de um milhão de tokens?" (A.1, casos-limite, ~1 min).</strong>
+Esta vem sempre, e a resposta formal é curta o suficiente para eu dar na hora: a fórmula não muda,
+porque o custo depende do que eu <strong>mando</strong>, não do que caberia. Janela grande adia o erro de limite e
+não toca em <code>T(n)</code>. A segunda metade da resposta — a degradação de achar informação no meio de muito
+texto — é a Aula 10 e não é assunto deste apêndice.</p>
+<hr /></div></details><details><summary>Encerramento · 01:50–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 15 da Parte 1 — a definição operacional pela terceira vez, agora como checklist aplicável ao projeto, os dois testes de decisão, a ponte para a Aula 24 (Sistemas multiagente e orquestração) com o aviso de ceticismo, e as duas tarefas da semana.</p>
+<blockquote>
+<p>Ideia central: "Hoje foi um agente: um loop, um objetivo, uma parada. Semana que vem eu coloco vários na mesa — e passo metade da aula argumentando que vocês provavelmente não precisam deles."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 23 de 30 · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="codigo-student.zip">↓ Notebooks e scripts do aluno</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Agentes de IA: loops, planejamento e memória</h1>
+<h2>Slide 1 · Abertura: vocês já deram mãos ao modelo · 00:00–00:05</h2>
+<p>Boa noite, pessoal. Aula passada foi o Lab 6, e eu quero começar recuperando exatamente onde a gente parou, porque hoje é continuação direta.</p>
+<p>No Lab 6 vocês escreveram o host do ciclo de ferramentas na mão: o schema que o modelo lê, a validação antes de despachar, o <code>REGISTRO</code> que amarra nome a função, o resultado voltando como mensagem <code>tool</code>, e a síntese. Depois vocês fizeram a mesma coisa pelo protocolo, com um cliente MCP e um servidor de vocês. E eu recolhi a Entrega 1 do projeto.</p>
+<p>Só que tem uma coisa que o Lab 6 fez de propósito e eu não comentei: no fim do Checkpoint 2 vocês escreveram um <code>while</code>. Um <code>while</code> com orçamento de passos. Aquele laço de cinco linhas é a fronteira entre um programa que chama ferramenta e um agente — e a aula de hoje é sobre aquele laço.</p>
+<blockquote>
+<p>Ideia central: "No Lab 6 vocês deram mãos ao modelo. Hoje a gente dá um loop e um objetivo — e é isso, literalmente isso, que transforma tool calling em agente."</p>
+</blockquote>
+<h2>Slide 2 · A definição operacional · 00:05–00:10</h2>
+<p>Deixa eu cravar uma definição antes de qualquer coisa, porque "agente" é uma das palavras mais gastas desta área e eu não quero passar duas horas discutindo vocabulário.</p>
+<p>Agente é <strong>modelo mais ferramentas mais loop mais objetivo mais critério de parada</strong>. Cinco peças. Não é uma definição filosófica, é um checklist — e ele funciona pela subtração. Tira o loop: sobra o tool calling da Aula 21, uma ida e uma volta. Tira as ferramentas: sobra um modelo raciocinando sozinho, que é a cadeia de pensamento da Aula 13. Tira o objetivo: sobra um chat, que responde o que vem e não persegue nada. E tira o critério de parada: sobra uma conta de API crescendo enquanto vocês dormem.</p>
+<p>Essa lista vai voltar três vezes hoje. Agora, como definição. No meio da aula, quando eu abrir um arquivo de quarenta linhas e apontar as cinco peças no código com o cursor. E no fim, como checklist que vocês vão aplicar ao projeto de vocês.</p>
+<p>A analogia que eu uso é motor, carro e viagem. O modelo é o motor. As ferramentas são as rodas — sem elas o motor gira e nada anda. O loop é o acelerador. O objetivo é o destino. E o critério de parada é saber que chegou. Sem o último, o carro anda até o tanque acabar, e o tanque aqui é o cartão de crédito de alguém.</p>
+<blockquote>
+<p>Ideia central: "Agente é modelo, ferramentas, loop, objetivo e critério de parada. Cinco peças. Guardem essa lista, porque ela é o único slide que eu vou repetir três vezes hoje."</p>
+</blockquote>
+<h2>Slide 3 · O ciclo: observar, planejar, agir, refletir · 00:10–00:18</h2>
+<p>Agora o que acontece dentro de uma volta do loop. Quatro momentos, e eu quero que vocês consigam identificar os quatro numa saída de terminal, porque no Lab 7 vocês vão ler exatamente isso.</p>
+<p><strong>Observar</strong> é ler o estado. Na primeira volta, o estado é a pergunta. Na terceira volta, o estado é a pergunta mais tudo o que as ferramentas devolveram até ali. <strong>Planejar</strong> é decidir o próximo passo — e num agente de texto isso é literalmente uma linha começando com "Thought". <strong>Agir</strong> é emitir a ação: nome da ferramenta, argumentos. E <strong>refletir</strong> é julgar o que voltou antes de decidir a próxima volta.</p>
+<p>Essa última é a que a turma costuma achar mística, então deixa eu desmistificar agora. Refletir, em implementação, é uma pergunta a mais no prompt sobre o resultado que acabou de chegar. Não é um módulo novo, não é uma arquitetura nova, é um turno a mais de conversa. E por isso ela custa: cada reflexão é uma chamada de API que alguém paga.</p>
+<p>A analogia mais honesta é o laço de vocês depurando código. Vocês leem o erro, formam uma hipótese, executam um teste, leem o resultado, e decidem se a hipótese sobreviveu. Ninguém chama isso de inteligência artificial quando é vocês fazendo. É o mesmo laço.</p>
+<blockquote>
+<p>Ideia central: "Refletir não é um módulo místico: é um turno a mais de conversa sobre o resultado que acabou de chegar. E turno a mais custa dinheiro."</p>
+</blockquote>
+<h2>Slide 4 · ReAct: intercalar raciocínio e ação · 00:18–00:28</h2>
+<p>A leitura de hoje é um artigo de 2022 do Yao e colegas, o ReAct, e o achado dele é bonito de simples: raciocinar <strong>e</strong> agir alternadamente vence cada uma das duas coisas isoladamente.</p>
+<p>Pensem no que dá errado em cada extremo. Só raciocinar é a cadeia de pensamento da Aula 13: o modelo produz um encadeamento lindo sobre fatos que ele não tem, e erra com convicção — cada passo do raciocínio é plausível e o conjunto está errado porque a premissa era inventada. Só agir é o oposto: o modelo dispara chamadas de ferramenta sem nunca articular por que aquela ferramenta e com que argumento, e quando o resultado volta ele não sabe o que fazer com ele.</p>
+<p>Intercalando, duas coisas acontecem ao mesmo tempo. O pensamento condiciona a ação seguinte — se eu escrevi "eu preciso do prazo de trancamento, então vou buscar no regulamento", o argumento da busca sai melhor. E a observação corrige o pensamento seguinte — se a busca voltou vazia, o próximo pensamento não pode continuar como se ela tivesse funcionado. O formato é textual e repetitivo: pensamento, ação, entrada da ação, observação; pensamento, ação, entrada da ação, observação; e na última volta, em vez de ação, resposta final.</p>
+<p>Agora eu preciso separar duas coisas que a turma junta, e essa separação é ponto de prova. ReAct <strong>não</strong> é o tool calling da Aula 21. São camadas diferentes. ReAct é o padrão de interação: raciocínio explícito intercalado com ação. Tool calling é o mecanismo de transporte da ação: o campo <code>tool_calls</code> no JSON da resposta. Dá para fazer ReAct em texto puro, com um modelo que não tem suporte nenhum a ferramentas, parseando "Action:" com uma expressão regular — e é exatamente isso que vocês vão fazer no Lab 7, de propósito, porque quem entende o padrão consegue implementá-lo em qualquer transporte.</p>
+<blockquote>
+<p>Ideia central: "ReAct é o padrão de interação; tool calling é o transporte. Vocês vão implementar ReAct em texto puro no Lab 7 justamente para essa diferença não virar decoreba."</p>
+</blockquote>
+<h2>Slide 5 · Planejamento e decomposição · 00:28–00:36</h2>
+<p>Vamos falar de planejamento, porque metade do que se vende como "agente que planeja" é uma escolha entre duas coisas simples.</p>
+<p>Primeira família: <strong>plano antecipado</strong>. O agente escreve a lista de subtarefas antes de agir e depois executa a lista. Isso é ótimo quando a tarefa tem estrutura previsível, e é ruim de um jeito específico: quando o primeiro resultado invalida o plano, o agente continua executando um plano morto. Segunda família: <strong>plano emergente</strong>. Cada passo é decidido com o que já se sabe naquele momento. Isso é robusto a surpresa, e a fraqueza é perder o fio em tarefa longa — na volta nove ele já não lembra por que começou.</p>
+<p>Sistema maduro mistura os dois: um plano grosso no começo, revisado quando uma observação contradiz o plano. Isso é o que vocês fazem quando resolvem uma issue grande — vocês têm um roteiro na cabeça, e refazem o roteiro quando o teste revela outra coisa.</p>
+<p>Mas o ponto que eu quero que fique é sobre decomposição, e ele é o mesmo fio da Aula 16. Decompor bem não é produzir subtarefas elegantes: é produzir subtarefas <strong>verificáveis</strong>. "Achar o artigo que fixa o prazo de trancamento" é verificável — ou o artigo apareceu, ou não. "Entender o regulamento" não é verificável, e por isso não é subtarefa, é desejo. Plano com sete etapas bonitas e nenhuma verificável é pior que três etapas grosseiras com critério de sucesso em cada uma.</p>
+<blockquote>
+<p>Ideia central: "Subtarefa boa não é subtarefa elegante: é subtarefa que dá para conferir se deu certo. O resto é desejo escrito em forma de lista."</p>
+</blockquote>
+<h2>Slide 6 · Memória de curto prazo é a trajetória · 00:36–00:44</h2>
+<p>Agora memória, que é onde a maioria dos textos de blog erra feio. Existem duas memórias, e a de curto prazo não é um sistema — ela é a trajetória.</p>
+<p>Concretamente: a memória de curto prazo do agente é a lista de mensagens que volta para o modelo a cada passo. Pergunta, pensamento, ação, observação, pensamento, ação, observação. É isso que dá continuidade ao raciocínio, e é isso que faz o agente saber, no passo 5, o que ele descobriu no passo 2.</p>
+<p>E aqui está a consequência que ninguém coloca na conta: o custo por passo <strong>não é constante</strong>. O passo 6 reenvia tudo o que aconteceu nos passos 1 a 5. Se cada volta acrescenta mil tokens, o passo 6 manda cinco mil de histórico mais os novos. A trajetória é a memória e é a fatura.</p>
+<p>Daí as três táticas, e são só três. <strong>Truncar</strong>: descartar observações antigas, o que é barato e perde informação. <strong>Resumir</strong>: comprimir o passado em algumas linhas, o que custa uma chamada a mais e perde detalhe. <strong>Referenciar</strong>: guardar o resultado grande em arquivo e manter no contexto só o caminho — "o resultado da busca está em <code>saida/busca_03.json</code>, com 40 linhas". Essa terceira é a que os agentes de programação usam mais, e é a que a turma menos pensa.</p>
+<p>A analogia é a mesa de trabalho. Cabe muito papel, mas cada papel a mais deixa a mesa mais lenta de ler. E alguns papéis viram um resumo colado na borda.</p>
+<blockquote>
+<p>Ideia central: "A trajetória é a memória de curto prazo, e ela é a fatura. O passo seis não custa como o passo um — ele reenvia os cinco anteriores."</p>
+</blockquote>
+<h2>Slide 7 · Memória de longo prazo · 00:44–00:50</h2>
+<p>Memória de curto prazo morre quando a trajetória termina. Longo prazo é o que sobrevive — e sobreviver, em engenharia, significa que alguém escreveu num lugar.</p>
+<p>As formas usuais são três. Um arquivo de fatos aprendidos, que é a mais simples e a mais subestimada. Uma tabela de preferências ou de perfil do usuário. E um índice vetorial de episódios anteriores — que é, literalmente, o RAG do Módulo 5 apontado para o próprio histórico do agente em vez de para um acervo de documentos. Vocês já sabem construir isso: é o Lab 5.</p>
+<p>Só que a decisão difícil não é ter memória de longo prazo. É duas outras: <strong>o que promover</strong> para ela, e <strong>como recuperar</strong> só o pedaço relevante depois. Sem critério de promoção, memória de longo prazo vira lixo acumulado que polui todo prompt futuro — e aí o agente fica pior com o tempo, não melhor, o que é um bug particularmente frustrante de diagnosticar.</p>
+<p>E deixa eu marcar uma distinção que volta na Aula 26: gravar a trajetória inteira <strong>não</strong> é memória de longo prazo. Trajetória inteira serve para auditoria, e ela é obrigatória por outro motivo. Memória de longo prazo é o destilado da trajetória: um fato que se confirmou, uma preferência que o usuário expressou, um procedimento que funcionou. Coisa curta.</p>
+<blockquote>
+<p>Ideia central: "A pergunta não é se o agente tem memória de longo prazo. É o que ele promove para ela — porque sem critério de promoção, o agente piora com o tempo."</p>
+</blockquote>
+<h2>Slide 8 · Reflexão e autocorreção — e o limite dela · 00:50–00:55</h2>
+<p>Último conceito antes do intervalo, e é o que mais me interessa que vocês levem com ressalva.</p>
+<p>Pedir ao modelo que critique o próprio resultado antes de seguir funciona — e funciona <strong>quando existe sinal externo para reagir</strong>. A ferramenta devolveu erro: a autocrítica tem o que morder. O teste falhou com uma mensagem: tem o que morder. A busca voltou vazia: tem o que morder. Nesses casos, a reflexão é o mecanismo que transforma uma trajetória burra em uma trajetória que se corrige.</p>
+<p>Agora, quando não existe sinal externo, a autocrítica tende a ser confirmatória. O modelo defende o que acabou de escrever com a mesma fluência com que defenderia o contrário, ou muda de opinião sem informação nova nenhuma. Isso é o mesmo fio da Aula 16, quando a gente viu que RL com recompensa verificável funciona em matemática e código porque existe professor automático. Verificação automática é o que transforma tentativa em aprendizado — no treino e também aqui, dentro de uma única trajetória.</p>
+<p>Então a regra prática que eu quero cravar: montar uma etapa de "auto-avaliação" sem verificador e acreditar no resultado dela é enganar a si mesmo com passo extra e fatura extra. O agente diz "revisei e está correto" com a mesma fluência com que diria o contrário.</p>
+<blockquote>
+<p>Ideia central: "Autocrítica sem verificador é o modelo defendendo o que acabou de escrever. Com verificador, é o modelo consertando o que acabou de errar."</p>
+</blockquote>
+<h2>Slide 9 · [Demo] O loop em 40 linhas · 01:05–01:18</h2>
+<p>Voltando. Antes do intervalo eu dei cinco peças e uma porção de conceitos. Agora eu vou abrir um arquivo e mostrar que isso é pequeno.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "O que separa um chat de um agente são umas trinta linhas. Não é uma biblioteca, não é um framework — é um <code>while</code>, um <code>parse</code> e um dicionário de funções."</p>
+</blockquote>
+<h2>Slide 10 · Agente × workflow determinístico · 01:18–01:28</h2>
+<p>Agora a decisão que vale dinheiro, e eu quero que ela fique como dois testes, nesta ordem.</p>
+<p><strong>Primeiro teste: o caminho é conhecido?</strong> Se a sequência de passos é a mesma sempre — extrair, validar, transformar, gravar — isso é um pipeline. Escrever um agente para executar um pipeline troca código previsível, testável e barato por sorteio caro. E eu vou ser direto: uma parte considerável do que hoje é vendido como agente é um pipeline com um LLM no meio, e ficaria melhor, mais rápido e mais barato escrito como pipeline.</p>
+<p><strong>Segundo teste, e é ele que decide os casos difíceis: existe verificador para o passo intermediário?</strong> Se dá para checar automaticamente se o passo deu certo — o teste passou, o JSON validou, a busca trouxe o dispositivo pedido, a soma fecha — então o loop pode explorar com segurança, porque o erro é detectado e corrigido dentro da própria trajetória. Sem verificador, o loop não explora: ele propaga erro com autoridade, e cada volta empilha convicção sobre uma base errada.</p>
+<p>Isso é o critério da Aula 16 reaparecendo. Lá era treino: recompensa verificável faz o RL funcionar em matemática e código. Aqui é arquitetura: verificador disponível faz o loop valer a pena. É a mesma ideia em duas escalas.</p>
+<p>E o erro de critério mais comum, que eu vejo em proposta de projeto e em post de blog: usar "a tarefa é complexa" como razão para usar agente. Complexidade não pede agente. <strong>Incerteza intermediária com verificação possível</strong> pede agente. Muita tarefa complexa é um pipeline longo, e pipeline longo é um bom lugar para estar.</p>
+<blockquote>
+<p>Ideia central: "Complexidade não pede agente. Incerteza intermediária com verificação possível pede agente. Se não tem verificador, o loop não explora — ele propaga erro com autoridade."</p>
+</blockquote>
+<h2>Slide 11 · Custo e latência do loop · 01:28–01:34</h2>
+<p>Vou fazer uma conta rápida, porque ela muda como vocês desenham o sistema.</p>
+<p>Uma resposta de chat é uma chamada de API. Um agente de seis passos são sete chamadas: seis voltas mais a síntese. Só que — e isso é o que a demo mostrou na tela — cada chamada reenvia a trajetória acumulada. Se cada volta acrescenta em média <code>d</code> tokens, o total enviado ao longo da trajetória não é <code>n · d</code>, é a soma de <code>k · d</code> para k de 1 a n, que dá aproximadamente <code>d · n² / 2</code>. Cresce com o <strong>quadrado</strong> do número de passos.</p>
+<p>Latência acumula do mesmo jeito, e ela é sequencial por construção: o passo 4 não começa antes de o 3 voltar. Não tem paralelismo para tirar aqui, porque a decisão do passo seguinte depende do resultado do anterior. Se cada volta leva três segundos, seis voltas são dezoito segundos de espera na cara do usuário — e ninguém aceita dezoito segundos numa caixa de busca.</p>
+<p>Por isso eu insisto: <code>max_passos</code> não é defensividade, é <strong>decisão de produto</strong>. Ele fixa o teto de custo por pergunta e o teto de espera do usuário, e essas duas coisas são requisitos, não detalhes. No Lab 6 vocês já escreveram esse teto. No Lab 7 ele volta como item de nota.</p>
+<blockquote>
+<p>Ideia central: "O custo do loop não é linear nos passos, é quadrático — porque cada volta reenvia a trajetória inteira. E a latência é sequencial: não tem paralelismo para salvar."</p>
+</blockquote>
+<h2>Slide 12 · Paradas mal projetadas · 01:34–01:40</h2>
+<p>Dois defeitos, e eles são os dois lados da mesma peça faltando.</p>
+<p><strong>Lado um, o loop que não termina.</strong> O modelo pede ferramenta indefinidamente: porque a ferramenta falha sempre, porque a observação não responde à pergunta, ou porque o prompt não deixou claro como encerrar. Os sintomas são reconhecíveis: a mesma ação com o mesmo argumento repetida; ou duas ações alternando em ciclo, A, B, A, B. As mitigações são três e são baratas: orçamento de passos, detector de repetição — mesma ação e mesmo argumento duas vezes seguidas, aborta — e uma resposta de fallback declarada, do tipo "não consegui responder, e é isto que eu tentei", que é infinitamente melhor que uma resposta inventada.</p>
+<p><strong>Lado dois, a parada precoce.</strong> O agente responde antes de ter fundamento. Ou porque o formato de parada é fácil de emitir por acidente, ou porque a primeira observação pareceu suficiente. O sintoma é <code>Final Answer</code> no primeiro passo, sem nenhuma ação. A mitigação é exigir que a resposta final cite a observação que a sustenta — se não citou, não terminou.</p>
+<p>E agora o contraste que eu quero cravar. Todo mundo se preocupa com o loop infinito, porque ele dói na fatura e aparece no gráfico de custo. A parada precoce é mais frequente e mais silenciosa: ela produz uma resposta plausível, sem evidência, e ninguém percebe <strong>sem olhar a trajetória</strong>. Guardem essa frase, porque ela é a tese da Aula 26.</p>
+<blockquote>
+<p>Ideia central: "O loop infinito dói na fatura, então todo mundo conserta. A parada precoce entrega resposta plausível sem evidência — e essa só aparece se alguém olhar a trajetória."</p>
+</blockquote>
+<h2>Slide 13 · Estudo de caso: um coding agent numa issue real · 01:40–01:44</h2>
+<p>Deixa eu fechar o conteúdo com o caso em que as cinco peças aparecem sem esforço nenhum de interpretação: um agente de programação recebendo uma issue de um repositório.</p>
+<p><strong>Objetivo:</strong> o texto da issue. <strong>Ferramentas:</strong> buscar no repositório, ler arquivo, editar arquivo, rodar a suíte de testes, rodar o linter, abrir o diff. <strong>Loop:</strong> localizar o código responsável, formar uma hipótese, editar, rodar o teste, ler a falha, editar de novo. <strong>Memória de curto prazo:</strong> os arquivos lidos e as saídas de teste daquela sessão. <strong>Critério de parada:</strong> a suíte passa.</p>
+<p>E aqui está a lição, que é o resumo executivo da aula inteira. O coding agent funciona bem <strong>não</strong> porque o modelo é especialmente bom em código. Ele funciona porque existe um verificador barato, automático e não negociável: o teste. Cada volta do loop recebe um sinal externo honesto — passou ou não passou. Onde o verificador é caro ou não existe — mudança de experiência de usuário, decisão de arquitetura, redação de política interna — o mesmo modelo, com o mesmo loop, com as mesmas ferramentas, rende muito menos.</p>
+<p>O que transfere de domínio para domínio é a arquitetura. O que não transfere é o verificador. E é por isso que o benchmark que mais pegou nesta área é o SWE-bench, com issues reais de repositórios reais — a gente volta nele na Aula 26.</p>
+<blockquote>
+<p>Ideia central: "O coding agent não é bom porque o modelo é bom em código. Ele é bom porque o teste é um verificador barato que não mente. A arquitetura transfere; o verificador não."</p>
+</blockquote>
+<h2>Slide 14 · [Exercício] Agente ou pipeline? · 01:44–01:50</h2>
+<p>Seis minutos em dupla, e é o exercício que mais volta na Entrega 2.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Cinco cenários. Para cada um: agente ou pipeline, qual é o verificador — e se não tiver, a palavra 'nenhum' escrita, porque escrever 'nenhum' é o achado."</p>
+</blockquote>
+<h2>Slide 15 · Fechamento: a definição, terceira vez · 01:50–02:00</h2>
+<p>Terceira e última vez, e agora não como definição nem como código: como checklist de projeto.</p>
+<p>Modelo, ferramentas, loop, objetivo, critério de parada. Para o projeto de vocês, eu quero que cada uma dessas cinco linhas tenha uma resposta escrita. E depois os dois testes: o caminho é conhecido? existe verificador para o passo intermediário? Se a resposta ao segundo teste for "nenhum verificador", isso não é um problema para esconder da Entrega 2 — é um achado para levar à Entrega 2, porque significa que ou vocês constroem um verificador, ou vocês põem um humano no laço, ou vocês reconhecem que aquilo é um pipeline com um LLM dentro e escrevem um pipeline. Qualquer uma das três é uma resposta defensável. Fingir que existe verificador não é.</p>
+<p>Uma frase de honestidade sobre hoje: tudo o que a gente viu foi <strong>um</strong> agente. Um loop, um conjunto de ferramentas, um objetivo. Na próxima aula a gente coloca mais de um na mesa — orquestrador e trabalhadores, pipeline de estágios, debate, painel de especialistas — e eu vou passar boa parte da aula argumentando que a maior parte disso é desnecessária. Sistemas multiagente e orquestração, Aula 24. Eu prometo ser cético, e o ceticismo vai ser conteúdo, não opinião.</p>
+<p>E para a semana, duas coisas: rodar a demo nos quatro modos e escrever qual peça está faltando em cada modo com defeito; e a leitura do ReAct, arXiv 2210.03629, com a pergunta dirigida do slide — qual modo de falha só aparece no raciocínio isolado, e por que a observação de uma ferramenta o elimina. Quem responder isso já entrou no Lab 7.</p>
+<blockquote>
+<p>Ideia central: "Modelo, ferramentas, loop, objetivo, critério de parada. Se uma dessas cinco linhas do projeto de vocês estiver em branco na Aula 26, o problema não é o modelo — é o projeto."</p>
+</blockquote>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p>Treze minutos, terminal e editor, sem rede e sem dependência nenhuma. O script é <code>codigo/demo-loop-agente.py</code>: o modelo é um simulador roteirado determinístico com semente fixa e as ferramentas são locais, então a saída é sempre a mesma e eu posso ensaiar em casa com a certeza de que a sala vê o mesmo. O objetivo é anticlímax deliberado: eu quero que a turma saia com a sensação de que agente é pequeno.</p>
+<p><strong>1.</strong> <strong>[Abro <code>demo-loop-agente.py</code> num editor com fonte grande e rolo o arquivo de cima a baixo em quinze segundos]</strong> Deixa eu começar pelo tamanho. Isso aqui é o arquivo inteiro. O loop do agente é essa parte, menos de uma tela e meia. Todo o resto é ferramenta e é o simulador de modelo, que existe para a gente rodar sem rede.</p>
+<p><strong>2.</strong> <strong>[Aponto com o cursor, na ordem, os cinco trechos: a função que chama o modelo, o dicionário <code>FERRAMENTAS</code>, o <code>while</code>, a constante do objetivo dentro do prompt de sistema, e a condição de <code>Final Answer</code> junto ao <code>max_passos</code>]</strong> Cinco peças, cinco trechos. Modelo: essa função. Ferramentas: esse dicionário — nome para função, o mesmo <code>REGISTRO</code> do Lab 6. Loop: esse <code>while</code>. Objetivo: essa string, dentro do prompt de sistema. Critério de parada: essas duas linhas, a que reconhece a resposta final e o teto de passos. Não tem uma sexta.</p>
+<p><strong>3.</strong> <strong>[Rodo <code>python demo-loop-agente.py --normal</code> com a pergunta que exige duas ferramentas]</strong> Agora rodando. A pergunta é do tipo que precisa de duas ferramentas: primeiro achar o prazo no regulamento, depois fazer uma conta com esse prazo. Olha a saída: cada volta vem rotulada. <code>OBSERVAR</code>, <code>PLANEJAR</code>, <code>AGIR</code>, <code>REFLETIR</code>. É o ciclo do slide 3 impresso no terminal.</p>
+<p><strong>4.</strong> <strong>[Aponto a coluna de tokens acumulados que o script imprime ao lado de cada passo]</strong> Essa coluna aqui é o que eu queria mostrar. É o tamanho acumulado do prompt em tokens aproximados, passo a passo. Repararam que ela não sobe em degraus iguais? Ela acelera. Isso é a conta quadrática de que eu vou falar no slide 11, e é mais convincente vista assim do que como fórmula.</p>
+<p><strong>5.</strong> <strong>[Rodo <code>--sem-parada</code>]</strong> Agora eu tiro uma peça. Nesse modo eu removi a condição de <code>Final Answer</code> e deixei só o orçamento de passos. Olha o que acontece: o agente repete a mesma ação com o mesmo argumento até bater o teto, e para por esgotamento. Nome do sintoma: mesma ação, mesmo argumento, duas vezes seguidas. É o sinal de que ou o critério de parada está mal escrito, ou a ferramenta não está entregando o que o modelo pediu.</p>
+<p><strong>6.</strong> <strong>[Rodo <code>--sem-orcamento</code>]</strong> Nesse eu tirei o teto e deixei um detector de repetição. Ele aborta na terceira repetição e imprime por quê. Sem esse detector, isso seria um laço infinito com fatura — e eu quero que vocês vejam que a proteção que salvou aqui não foi inteligência do modelo, foi uma linha de código minha.</p>
+<p><strong>7.</strong> <strong>[Rodo <code>--parada-precoce</code>]</strong> Último modo, e é o que me interessa mais. Aqui o prompt de sistema permite responder direto, sem obrigar a citar observação. Olha: <code>Final Answer</code> no passo um. Zero ações. E a resposta é <strong>plausível</strong> — se vocês não estivessem vendo a trajetória, vocês aceitariam. Compara com o modo anterior: aquele era feio e caro, esse é bonito e errado. O feio e caro aparece no gráfico de custo; esse só aparece se alguém abrir a trajetória.</p>
+<p><strong>8.</strong> <strong>[Volto ao editor e deixo lado a lado a linha do <code>max_passos</code> e a linha da condição de parada]</strong> Fecho aqui. Duas linhas. Uma protege a fatura, a outra protege a resposta. E as duas são a mesma peça da definição — critério de parada. Voltando para o slide.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>Seis minutos, em dupla, com os cinco cenários projetados. O objetivo não é acertar a classificação — é forçar a pergunta do verificador, que é a que a turma não faz sozinha.</p>
+<p><strong>1.</strong> <strong>[Projeto os cinco cenários e formo as duplas]</strong> Seis minutos em dupla. Cinco cenários no slide. Para cada um eu quero três coisas, e a terceira é a que vale: a letra A de agente ou P de pipeline; qual é o verificador do passo intermediário — e se não existir, a palavra "nenhum" escrita, porque escrever "nenhum" é o achado; e uma frase de justificativa.</p>
+<p>Os cinco cenários:</p>
+<ol>
+<li>Converter quatro mil notas fiscais em PDF numa tabela com sete campos fixos, todos os PDFs com o mesmo layout.</li>
+<li>Responder perguntas de alunos sobre o regulamento citando o dispositivo, sobre o acervo que vocês indexaram no Lab 5.</li>
+<li>Corrigir um bug de teste vermelho num repositório com suíte de testes rápida.</li>
+<li>Escrever a política de privacidade da empresa a partir de seis documentos internos.</li>
+<li>Reconciliar duas planilhas de pagamento e listar as divergências, com a regra de reconciliação já definida no manual.</li>
+</ol>
+<p><em>Como recolher:</em> quatro minutos de dupla, dois de correção. Não corrijo os cinco: peço voluntário para o 1, corrijo o 3 em dez segundos, e gasto o resto no 4. Encerro com a frase que amarra no fechamento: "escrever 'nenhum verificador' não é falhar no exercício — é o achado que vocês levam para a Entrega 2".</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a conta em aula.
+Esta aula tem <strong>um</strong> item de apêndice, então a contingência é curta — e a versão de trinta segundos
+dela eu já faço no slide 11, porque a soma é curta o suficiente para caber no quadro sem virar aula
+de matemática.</p>
+<p><strong>Item 1 — "de onde vem esse <code>n²</code>?" (A.1, Etapas 1 a 3, ~4 min).</strong>
+A pergunta mais provável do Bloco 2, e a que <strong>vale</strong> fazer no quadro, porque são três linhas. Eu
+escrevo os tamanhos das chamadas — <code>p₀</code>, <code>p₀+d</code>, <code>p₀+2d</code>, … — e somo: dá <code>d</code> vezes a soma dos
+primeiros <code>n</code> inteiros, que é <code>d·n(n+1)/2</code>. E fecho com a razão que interessa: a estimativa ingênua
+"custo de uma chamada vezes número de passos" subestima por um fator <code>(n+1)/2</code>, que com seis passos
+é <strong>três vezes e meia</strong>. Se a turma quiser número absoluto, eu uso o <code>d</code> que a demo imprimiu na
+coluna de tokens acumulados, não um número inventado.</p>
+<p><strong>Item 2 — "então quanto eu ponho no <code>max_passos</code>?" (A.1, Etapa 5, ~3 min).</strong>
+A melhor pergunta que esta aula pode gerar, porque ela transforma a conta em decisão. Eu inverto a
+desigualdade no quadro: se o teto de orçamento é <code>B</code> tokens por pergunta, então
+<code>n_max = ⌊√(2B/d)⌋</code>. E leio o efeito da raiz em voz alta: <strong>dobrar o orçamento não dobra os passos</strong>,
+aumenta-os em quarenta por cento — comprar o dobro de exploração custa quatro vezes mais. Dois
+números fecham: cem mil tokens com mil por volta dá quatorze passos; vinte mil dá seis. Se não
+houver tempo, a frase é: "<code>max_passos</code> sai de uma desigualdade, e a desigualdade está em A.1".</p>
+<p><strong>Item 3 — "por que truncar resolve e referenciar não?" (A.1, Etapa 6, ~4 min).</strong>
+Costuma vir no slide 6, e é a discussão mais útil das três. Truncar e resumir mudam a <strong>ordem</strong> de
+crescimento — de quadrática para linear —, porque limitam o tamanho de cada chamada a uma constante.
+Referenciar <strong>não</strong> muda a ordem: continua <code>n²</code>, e ataca a constante <code>d</code>. Nas trajetórias curtas
+desta disciplina, quatro a oito passos, a constante é onde o dinheiro está, e por isso referenciar é
+a tática de melhor retorno aqui — pela Etapa 5, cortar <code>d</code> por dez multiplica <code>n_max</code> por três. Se o
+tempo apertar, eu digo só a conclusão: "as três táticas atacam coisas diferentes da mesma fórmula, e
+a tabela está em A.1".</p>
+<p><strong>Item 4 — "e com janela de um milhão de tokens?" (A.1, casos-limite, ~1 min).</strong>
+Esta vem sempre, e a resposta formal é curta o suficiente para eu dar na hora: a fórmula não muda,
+porque o custo depende do que eu <strong>mando</strong>, não do que caberia. Janela grande adia o erro de limite e
+não toca em <code>T(n)</code>. A segunda metade da resposta — a degradação de achar informação no meio de muito
+texto — é a Aula 10 e não é assunto deste apêndice.</p>
+<hr />
+<h2>Encerramento · 01:50–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 15 da Parte 1 — a definição operacional pela terceira vez, agora como checklist aplicável ao projeto, os dois testes de decisão, a ponte para a Aula 24 (Sistemas multiagente e orquestração) com o aviso de ceticismo, e as duas tarefas da semana.</p>
+<blockquote>
+<p>Ideia central: "Hoje foi um agente: um loop, um objetivo, uma parada. Semana que vem eu coloco vários na mesa — e passo metade da aula argumentando que vocês provavelmente não precisam deles."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 23 de 30 · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-22/index.html">← Aula anterior</a><a class="button" href="../aula-24/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

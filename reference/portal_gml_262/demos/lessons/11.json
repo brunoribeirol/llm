@@ -1,0 +1,203 @@
+{
+  "id": 11,
+  "title": "Decodificação e prompting: laboratório guiado",
+  "subtitle": "Da distribuição de tokens à decisão experimental; cálculos locais, sem chamadas a modelos.",
+  "controls": [
+    {
+      "key": "temperature",
+      "label": "Temperatura",
+      "type": "range",
+      "min": 0.2,
+      "max": 2,
+      "step": 0.1,
+      "value": 1
+    },
+    {
+      "key": "topk",
+      "label": "Top-k",
+      "type": "range",
+      "min": 1,
+      "max": 6,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "topp",
+      "label": "Top-p",
+      "type": "range",
+      "min": 0.1,
+      "max": 1,
+      "step": 0.05,
+      "value": 0.9
+    },
+    {
+      "key": "seed",
+      "label": "Semente da amostragem",
+      "type": "range",
+      "min": 1,
+      "max": 50,
+      "step": 1,
+      "value": 7
+    },
+    {
+      "key": "examples",
+      "label": "Exemplos no prompt",
+      "type": "range",
+      "min": 0,
+      "max": 6,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "sample",
+      "label": "Itens avaliados",
+      "type": "range",
+      "min": 10,
+      "max": 200,
+      "step": 10,
+      "value": 20
+    }
+  ],
+  "nodes": [
+    "Logits",
+    "Temperatura",
+    "Truncamento",
+    "Amostragem",
+    "Prompt",
+    "Medição"
+  ],
+  "steps": [
+    {
+      "title": "O contrato do experimento",
+      "view": "contract",
+      "explanation": "Toda comparação precisa fixar conjunto, configuração e origem dos números. Aqui calculamos distribuições de seis tokens e usamos resultados sintéticos rotulados para praticar análise.",
+      "action": "Mude a semente e observe o registro da configuração.",
+      "board": "Entrada → configuração → saída → métrica → proveniência",
+      "speech": "Vamos começar pelo registro, antes de escolher uma resposta bonita. Estes logits são pequenos para auditar cada conta. Os resultados de classificação são um cenário sintético, não uma avaliação de um LLM.",
+      "question": "Por que registrar o modo offline?",
+      "answer": "Porque uma simulação testa o método e a aritmética, mas não mede a qualidade de um modelo real.",
+      "focus": 0
+    },
+    {
+      "title": "Seis candidatos antes da escolha",
+      "view": "logits",
+      "explanation": "Logits são escores sem obrigação de somar um. A normalização softmax os transforma em probabilidades de próximo token.",
+      "action": "Compare o maior logit com a maior probabilidade.",
+      "board": "pᵢ = exp(zᵢ/T) / Σⱼ exp(zⱼ/T)",
+      "speech": "Apontem o token favorito sem chamá-lo de probabilidade. Agora comparem o escore com a coluna normalizada. A ordem coincide, mas a escala e o significado mudaram.",
+      "question": "Um logit negativo proíbe o token?",
+      "answer": "Não; a exponencial é positiva e esse token mantém probabilidade não nula.",
+      "focus": 0
+    },
+    {
+      "title": "Temperatura modifica concentração",
+      "view": "temperature",
+      "explanation": "Dividir logits por uma temperatura positiva preserva o ranking. Diminuir a temperatura concentra a distribuição.",
+      "action": "Leve a temperatura de 0,3 a 1,8 e acompanhe a entropia.",
+      "board": "H(p) = −Σ pᵢ log₂ pᵢ",
+      "speech": "Mantenham a semente parada enquanto mudamos a temperatura. O token favorito continua favorito. O que muda é quanto espaço sobra para os demais.",
+      "question": "Por que dividir probabilidades por T e renormalizar não funciona?",
+      "answer": "O fator comum cancela; a temperatura deve agir nos logits.",
+      "focus": 1
+    },
+    {
+      "title": "Top-k limita candidatos",
+      "view": "topk",
+      "explanation": "Top-k mantém uma quantidade fixa de candidatos. Após o corte, a massa restante precisa ser renormalizada.",
+      "action": "Ajuste top-k para 1 e depois 6.",
+      "board": "p'ᵢ = pᵢ / Σⱼ∈S pⱼ",
+      "speech": "Agora cortamos candidatos, em vez de mudar suas proporções. Um sobrevivente torna a distribuição determinística. Todos os sobreviventes recuperam a distribuição anterior.",
+      "question": "Top-k 1 depende da semente?",
+      "answer": "Não neste exemplo sem empate; a probabilidade restante é 1.",
+      "focus": 1
+    },
+    {
+      "title": "Top-p limita massa",
+      "view": "nucleus",
+      "explanation": "Nucleus mantém o menor prefixo ordenado que atinge o limiar p. O candidato que cruza o limiar também entra.",
+      "action": "Mude top-p de 0,5 a 0,95 e conte sobreviventes.",
+      "board": "Menor m tal que Σᵢ₌₁ᵐ pᵢ ≥ p",
+      "speech": "Sigam a soma acumulada linha a linha. A linha que ultrapassa o limite faz parte do conjunto. Excluí-la impediria atingir a massa solicitada.",
+      "question": "O tamanho do nucleus é fixo?",
+      "answer": "Não; depende do limiar e da concentração.",
+      "focus": 2
+    },
+    {
+      "title": "A ordem dos filtros faz parte do contrato",
+      "view": "combined",
+      "explanation": "Aqui aplicamos temperatura, top-k e depois top-p sobre a distribuição renormalizada. Outra ordem pode mudar o conjunto final.",
+      "action": "Use top-k 2 e top-p 0,9; compare com top-p sozinho.",
+      "board": "T → top-k → renormalizar → top-p → renormalizar",
+      "speech": "Esta escolha costuma ficar escondida na implementação. O segundo limiar se refere à massa que sobrou do primeiro corte. Bibliotecas só são comparáveis quando conhecemos essa ordem.",
+      "question": "O segundo corte retém 90% da massa original?",
+      "answer": "Não necessariamente; retém pelo menos 90% da distribuição condicionada ao top-k.",
+      "focus": 2
+    },
+    {
+      "title": "A semente explica uma realização",
+      "view": "sampling",
+      "explanation": "A amostragem compara um número pseudoaleatório com intervalos acumulados. A mesma configuração e semente repetem o resultado neste simulador.",
+      "action": "Troque a semente e localize u no intervalo escolhido.",
+      "board": "F(i−1) ≤ u < F(i)",
+      "speech": "Vemos uma realização, não a distribuição inteira. Uma semente explica divergências entre execuções. Um sorteio não prova que o vencedor era o token mais provável.",
+      "question": "Amostragem é greedy?",
+      "answer": "Não; greedy usa o máximo, enquanto amostragem pode escolher qualquer candidato de massa positiva.",
+      "focus": 3
+    },
+    {
+      "title": "Few-shot comunica o formato",
+      "view": "prompt",
+      "explanation": "Exemplos mostram entrada, rótulo e formato desejado. Eles aumentam tokens de entrada mesmo quando a resposta é curta.",
+      "action": "Aumente exemplos e leia a estimativa de tokens.",
+      "board": "Instrução + exemplos + consulta → resposta",
+      "speech": "Estes exemplos são contexto de inferência. Não estamos alterando pesos. Precisamos medir se ajudam no conteúdo ou somente no formato.",
+      "question": "Few-shot atualiza parâmetros?",
+      "answer": "Não; condiciona a inferência pelo contexto.",
+      "focus": 3
+    },
+    {
+      "title": "Separar dois tipos de falha",
+      "view": "labels",
+      "explanation": "Erro de classe e saída fora de formato reduzem a acurácia de modos diferentes. A tabela sintética conserva o total entre acertos, erros e inválidos.",
+      "action": "Mude exemplos e confira a soma das categorias.",
+      "board": "n = acertos + erros + inválidos",
+      "speech": "Não vamos esconder prosa livre dentro da classe errada. Corrigir formato pode tornar a interface utilizável. A soma deve permanecer igual ao tamanho do conjunto.",
+      "question": "Por que medir inválidos separadamente?",
+      "answer": "Para identificar falhas de interface que pedem restrição de formato e validação.",
+      "focus": 4
+    },
+    {
+      "title": "Raciocínio tem custo de saída",
+      "view": "cost",
+      "explanation": "Texto intermediário aumenta tokens produzidos. Tokens extras por ponto de acurácia só têm interpretação quando o ganho é positivo.",
+      "action": "Compare as duas estratégias hipotéticas ao alterar exemplos.",
+      "board": "Eficiência = Δ tokens / Δ pontos, se Δ pontos > 0",
+      "speech": "Os preços exibidos são didáticos. Comparem entrada e saída separadamente. Sem ganho de acurácia, a razão não expressa eficiência positiva.",
+      "question": "O que reportar se o ganho for zero?",
+      "answer": "Razão não definida e custo adicional sem ganho observado.",
+      "focus": 4
+    },
+    {
+      "title": "O conjunto limita a resolução",
+      "view": "uncertainty",
+      "explanation": "Cada acerto em n itens muda a acurácia em 100/n pontos. O erro-padrão aproximado diminui com a raiz do tamanho da amostra.",
+      "action": "Compare n igual a 20 e 200.",
+      "board": "Resolução = 100/n; EP ≈ √(p(1−p)/n)",
+      "speech": "Com vinte itens, um exemplo muda cinco pontos. Temperatura baixa não elimina a incerteza do conjunto. A aproximação não substitui uma análise pareada.",
+      "question": "Cinco pontos em vinte itens provam melhoria?",
+      "answer": "Não; representam um único item e exigem examinar incerteza e casos.",
+      "focus": 5
+    },
+    {
+      "title": "Decidir com três eixos",
+      "view": "decision",
+      "explanation": "Qualidade, custo e latência impõem restrições diferentes. Tempos sintéticos repetidos permitem calcular mediana e amplitude.",
+      "action": "Compare os perfis e seus tempos repetidos.",
+      "board": "Decisão = qualidade mínima + custo + latência",
+      "speech": "Não existe vencedor universal. Uma aplicação aceita espera e outra exige resposta imediata. O relatório precisa declarar limites e proveniência.",
+      "question": "O que levar para o projeto?",
+      "answer": "Um protocolo com configuração, origem dos dados, repetições, métricas separadas e decisão sustentada.",
+      "focus": 5
+    }
+  ]
+}

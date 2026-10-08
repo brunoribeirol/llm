@@ -1,0 +1,203 @@
+{
+  "id": 15,
+  "title": "Alinhamento: preferências, RLHF e DPO",
+  "subtitle": "Acompanhe um par de respostas até recompensa, política, regularização e diagnóstico.",
+  "controls": [
+    {
+      "key": "rewardA",
+      "label": "Recompensa de A",
+      "type": "range",
+      "min": -3,
+      "max": 3,
+      "step": 0.1,
+      "value": 1
+    },
+    {
+      "key": "rewardB",
+      "label": "Recompensa de B",
+      "type": "range",
+      "min": -3,
+      "max": 3,
+      "step": 0.1,
+      "value": 0
+    },
+    {
+      "key": "policy",
+      "label": "Probabilidade atual de A",
+      "type": "range",
+      "min": 0.05,
+      "max": 0.95,
+      "step": 0.05,
+      "value": 0.6
+    },
+    {
+      "key": "reference",
+      "label": "Probabilidade de A na referência",
+      "type": "range",
+      "min": 0.05,
+      "max": 0.95,
+      "step": 0.05,
+      "value": 0.5
+    },
+    {
+      "key": "beta",
+      "label": "Peso de regularização / beta",
+      "type": "range",
+      "min": 0.1,
+      "max": 2,
+      "step": 0.1,
+      "value": 0.5
+    },
+    {
+      "key": "samples",
+      "label": "Amostras best-of-N",
+      "type": "range",
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "value": 4
+    }
+  ],
+  "nodes": [
+    "Preferências",
+    "Recompensa",
+    "Política",
+    "Restrição",
+    "Falhas",
+    "DPO"
+  ],
+  "steps": [
+    {
+      "title": "Formato correto ainda pode ser inadequado",
+      "view": "symptom",
+      "explanation": "SFT ensina a imitar respostas, mas não ordena explicitamente alternativas para uma mesma solicitação. Preferências fornecem um sinal comparativo adicional.",
+      "action": "Compare as respostas A e B e escolha um critério de qualidade.",
+      "board": "Imitar resposta ≠ preferir melhor resposta",
+      "speech": "Os dois textos são exemplos didáticos. O problema não é somente cumprir um formato. Precisamos tornar explícito qual comportamento queremos favorecer.",
+      "question": "Uma resposta polida é necessariamente correta?",
+      "answer": "Não; estilo, factualidade e utilidade são dimensões distintas.",
+      "focus": 0
+    },
+    {
+      "title": "O dado passa a ser um par",
+      "view": "pairs",
+      "explanation": "Um exemplo de preferência inclui prompt, resposta escolhida e resposta rejeitada. A escolha expressa um julgamento condicionado à tarefa e aos avaliadores.",
+      "action": "Mude as recompensas e veja qual alternativa é favorecida.",
+      "board": "(x, y escolhida, y rejeitada)",
+      "speech": "Não tratem a rejeitada como impossível. O par diz que uma opção foi preferida à outra naquele contexto. Discordância entre pessoas também faz parte da qualidade do dado.",
+      "question": "O rótulo de preferência é uma verdade universal?",
+      "answer": "Não; depende de critérios, contexto e população de avaliadores.",
+      "focus": 0
+    },
+    {
+      "title": "Bradley-Terry transforma diferença em chance",
+      "view": "bradley",
+      "explanation": "A probabilidade de preferir A é a sigmoide da diferença entre recompensas. Somar a mesma constante às duas recompensas não muda essa probabilidade.",
+      "action": "Iguale as recompensas e depois aumente apenas A.",
+      "board": "P(A ≻ B) = σ(rA−rB)",
+      "speech": "Somente a diferença determina a comparação. Recompensas iguais produzem cinquenta por cento. A escala absoluta não tem interpretação direta de qualidade humana.",
+      "question": "Se rA e rB aumentam ambos em 1, o que muda?",
+      "answer": "Nada na probabilidade Bradley-Terry.",
+      "focus": 1
+    },
+    {
+      "title": "Treinar um proxy de preferência",
+      "view": "rewardloss",
+      "explanation": "A perda do par escolhido é o log negativo da probabilidade atribuída à escolha. O reward model aprende um proxy e pode explorar correlações espúrias.",
+      "action": "Faça A preferida mas com recompensa menor e observe a perda.",
+      "board": "L_RM = −log σ(rA−rB)",
+      "speech": "A perda cresce quando o modelo contradiz o rótulo. Isso só mede consistência com os pares fornecidos. Um proxy pode aprender comprimento ou estilo em vez do critério desejado.",
+      "question": "Perda baixa no treino do RM garante bom julgamento?",
+      "answer": "Não; depende da representatividade e da validade das preferências.",
+      "focus": 1
+    },
+    {
+      "title": "A política distribui probabilidade",
+      "view": "policy",
+      "explanation": "O gerador pode ser visto como política sobre respostas. Neste mundo de apenas duas respostas, a recompensa esperada é uma média ponderada.",
+      "action": "Mude a probabilidade atual de A e acompanhe a média.",
+      "board": "E[r] = p(A)rA + (1−p(A))rB",
+      "speech": "Reduzimos o espaço de linguagem a duas alternativas. A conta é exata neste espaço reduzido. Em texto real a ação é uma sequência de tokens.",
+      "question": "A política precisa escolher sempre o maior reward?",
+      "answer": "Não; regularização e diversidade podem manter massa em outras respostas.",
+      "focus": 2
+    },
+    {
+      "title": "Uma referência ancora o comportamento",
+      "view": "kl",
+      "explanation": "A divergência KL mede afastamento da política atual em relação à referência. O objetivo penalizado equilibra recompensa e mudança de distribuição.",
+      "action": "Iguale política e referência; depois afaste as duas.",
+      "board": "J = E[r] − β KL(π || π_ref)",
+      "speech": "Quando as distribuições coincidem, KL é zero. Aumentar beta torna a mudança mais cara. Isso não prova preservação de toda capacidade, mas limita o afastamento neste objetivo.",
+      "question": "KL zero significa o quê neste exemplo?",
+      "answer": "Que as duas distribuições sobre A e B coincidem.",
+      "focus": 2
+    },
+    {
+      "title": "PPO limita a razão de mudança",
+      "view": "ppo",
+      "explanation": "O clipping de PPO limita o incentivo de alterações grandes na razão de probabilidades. O exemplo usa uma política antiga fixa em 0,5 e faixa didática de 0,8 a 1,2.",
+      "action": "Mude a política e compare objetivo sem corte e com corte.",
+      "board": "min(ρA, clip(ρ,1−ε,1+ε)A)",
+      "speech": "O corte depende do sinal da vantagem. Ele não é simplesmente prender probabilidades numa faixa. O algoritmo real inclui amostragem, várias atualizações e outros termos.",
+      "question": "O clipping proíbe matematicamente qualquer mudança grande?",
+      "answer": "Não; limita o incentivo no objetivo substituto, não impõe uma restrição dura à distribuição.",
+      "focus": 3
+    },
+    {
+      "title": "O sinal final precisa atribuir crédito",
+      "view": "credit",
+      "explanation": "Uma recompensa de sequência chega depois de várias decisões de tokens. Métodos de vantagem tentam distinguir ações melhores que a expectativa.",
+      "action": "Compare a sequência de decisões com o escalar final.",
+      "board": "Tokens → resposta → recompensa; onde atribuir crédito?",
+      "speech": "Uma boa nota final não identifica qual token ajudou. Um modelo de valor pode estimar retorno esperado. Nossa figura explica essa função sem executar PPO completo.",
+      "question": "Por que um reward por resposta não explica cada decisão?",
+      "answer": "Porque agrega o resultado de uma sequência inteira e não fornece causalidade token a token.",
+      "focus": 3
+    },
+    {
+      "title": "Quando o proxy vira o alvo",
+      "view": "hacking",
+      "explanation": "Otimizar intensamente um proxy pode favorecer um atalho que ele recompensa. Uma resposta longa ou bajuladora pode receber nota alta e ser menos útil.",
+      "action": "Aumente a recompensa da resposta estilizada e veja o objetivo favorecê-la.",
+      "board": "Proxy ↑ pode coexistir com utilidade ↓",
+      "speech": "A conta está obedecendo ao objetivo que lhe demos. O defeito pode estar no sinal, não no otimizador. Avaliação externa precisa procurar essas divergências.",
+      "question": "Aumentar a otimização conserta um proxy ruim?",
+      "answer": "Não; pode intensificar a exploração de suas falhas.",
+      "focus": 4
+    },
+    {
+      "title": "Best-of-N muda seleção sem treino",
+      "view": "bestof",
+      "explanation": "Podemos amostrar várias respostas e escolher a de maior reward. A chance de aparecer A ao menos uma vez é 1−(1−pA)^N sob independência.",
+      "action": "Mude N e compare chance de candidato com custo linear.",
+      "board": "P(ao menos uma A) = 1−(1−pA)^N",
+      "speech": "Nenhum peso é alterado. Pagamos por várias gerações e avaliações. Selecionar pelo reward continua sujeito aos erros do proxy.",
+      "question": "Best-of-N garante verdade?",
+      "answer": "Não; só favorece o candidato que o avaliador consegue reconhecer.",
+      "focus": 4
+    },
+    {
+      "title": "DPO usa razões contra a referência",
+      "view": "dpo",
+      "explanation": "DPO usa pares escolhida/rejeitada e razões de probabilidade relativas à referência. A perda logística favorece a escolhida sem treinar um reward model separado nesse procedimento.",
+      "action": "Mude política, referência e beta e acompanhe a margem.",
+      "board": "L_DPO = −log σ(β[log π(A)/πref(A) − log π(B)/πref(B)])",
+      "speech": "A referência continua presente na conta. Neste exemplo A é a escolhida do dataset. Aumentar sua vantagem relativa reduz a perda, sem significar que todo par esteja correto.",
+      "question": "DPO dispensa dados de preferência?",
+      "answer": "Não; os pares são justamente o sinal do ajuste.",
+      "focus": 5
+    },
+    {
+      "title": "Escolher o pipeline pelo sinal disponível",
+      "view": "pipeline",
+      "explanation": "SFT, RM, PPO e DPO usam dados e objetivos distintos. O critério de escolha inclui qualidade dos pares, necessidade de exploração e custo operacional.",
+      "action": "Compare os dois percursos e identifique o componente removido no DPO.",
+      "board": "SFT → pares → RM + RL ou otimização direta de preferência",
+      "speech": "Não vamos transformar a comparação numa competição universal. O dado disponível condiciona o método. Qualquer opção precisa de avaliação independente do sinal de treino.",
+      "question": "Qual é a principal economia estrutural ilustrada pelo DPO?",
+      "answer": "O procedimento direto evita treinar e usar um reward model separado no loop de RL.",
+      "focus": 5
+    }
+  ]
+}

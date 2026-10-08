@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aula 3 · Embeddings</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="assets/study.css">
+<style>
+  .plot { max-width: 20rem; width: 100%; height: auto; }
+  .plot .axis { stroke: var(--line); stroke-width: 1; }
+  .plot .sense { stroke: var(--muted); stroke-width: 2; }
+  .plot .static { stroke: var(--accent); stroke-width: 3; }
+  .plot .ctx { stroke: var(--warn); stroke-width: 3; stroke-dasharray: 5 4; }
+  .plot text { fill: var(--ink); font-family: var(--font-mono); font-size: 10px; }
+  .plot circle.static { fill: var(--accent); stroke: none; }
+  .plot circle.ctx { fill: var(--warn); stroke: none; }
+</style>
+</head>
+<body data-lesson="aula-03">
+<main class="page">
+
+<header class="masthead">
+  <div class="chips"><a href="index.html">caderno</a><span>aula</span><span>03</span><span>embeddings</span><span>AV1 · casos 3 e 4</span></div>
+  <h1>Embeddings e representações vetoriais</h1>
+  <p class="lede">O documento certo está na base e a busca devolve semelhança zero. O sistema não errou a conta: a representação não tinha onde guardar semelhança. A aula troca endereços por posições em um espaço, e termina mostrando o que essa troca ainda não resolve.</p>
+  <p class="meta">leitura: 30 min · fontes: slides <a href="../class/slides/aula03-v2.pdf">aula03-v2.pdf</a> (20 p.) e o <a href="../reference/portal_gml_262/docs/aula-03/index.html">guia de estudo do portal</a></p>
+  <ul class="toc">
+    <li><a href="#resumo">Resumo</a></li>
+    <li><a href="#onehot">One-hot</a></li>
+    <li><a href="#distribucional">Hipótese distribucional</a></li>
+    <li><a href="#cosseno">Cosseno</a></li>
+    <li><a href="#word2vec">Word2Vec</a></li>
+    <li><a href="#analogias">Analogias</a></li>
+    <li><a href="#banco">Um vetor, dois sentidos</a></li>
+    <li><a href="#autoteste">Autoteste</a></li>
+    <li><a href="#av1">Ponte para a AV1</a></li>
+  </ul>
+</header>
+
+<section class="block" id="resumo">
+  <h2>A aula em um minuto</h2>
+  <ul>
+    <li>O ID de um token é um <strong>endereço</strong>, e não uma quantidade. Em one-hot, toda palavra fica à mesma distância de todas as outras.</li>
+    <li>A saída é a hipótese distribucional: palavras que aparecem nos mesmos contextos recebem vetores próximos. É um critério que dá para programar.</li>
+    <li>A régua é o cosseno, que mede direção e descarta o tamanho do vetor. O tamanho carrega frequência, e não sentido.</li>
+    <li>O Word2Vec treina um modelo raso em uma tarefa descartável. O produto é a tabela de embeddings que sobra dentro dele.</li>
+    <li>Analogias funcionam porque uma relação frequente vira uma direção. Elas enfraquecem muito em corpus pequeno.</li>
+    <li>Um embedding estático dá <strong>um vetor por palavra</strong>. Palavra ambígua recebe um vetor de compromisso, porque a frase não entra na conta.</li>
+  </ul>
+  <p class="keyidea">Significado virou posição. Falta virar função da frase.</p>
+  <p><span class="src">Aula 3 · slide 15</span></p>
+</section>
+
+<section class="block" id="onehot">
+  <h2>One-hot: todas as palavras equidistantes</h2>
+  <p>Depois da tokenização, o texto é uma lista de inteiros como <code>[4021, 8977, 312]</code>. O ID 4021 não é parecido com o 4020. Um endereço não se soma nem se compara. <span class="src">Aula 3 · slide 3</span></p>
+  <p>A primeira representação vetorial é o one-hot: um vetor do tamanho do vocabulário com um único 1. Ela tem dois problemas, e o professor separa o chato do fatal. <span class="src">Aula 3 · slide 4</span></p>
+  <ul>
+    <li><strong>Esparsidade (chata):</strong> 50.000 dimensões para carregar um inteiro. Resolve-se com engenharia.</li>
+    <li><strong>Ortogonalidade (fatal):</strong> o produto interno entre duas palavras diferentes é sempre zero, por construção. Ângulo de 90°, cosseno 0, nenhuma semelhança utilizável.</li>
+  </ul>
+  <p>Com isso, “gato” e “gatinho” são tão diferentes entre si quanto “gato” e “parafuso”. E não há generalização: cada palavra tem seu próprio conjunto de parâmetros, então mil frases com “médico” não movem nada em “clínico”. <span class="src">Aula 3 · A.1 (slide 16)</span></p>
+  <div class="callout trap">
+    <strong>Erro comum</strong>
+    <p>Dizer que o problema do one-hot é o desperdício de memória. O problema é que a semelhança de que a busca precisava não existe na representação. Trocar a métrica por distância euclidiana também não ajuda: toda dupla fica à mesma distância (√2). Trocar de régua não cria informação que não está lá.</p>
+  </div>
+</section>
+
+<section class="block" id="distribucional">
+  <h2>A hipótese distribucional</h2>
+  <p>“Uma palavra é conhecida pelas companhias que ela mantém” (Firth, 1957). Operacionalmente: mesmos contextos, vetores próximos. <span class="src">Aula 3 · slide 5</span></p>
+  <p>O teste do glorp mostra que você já faz isso. Sem nunca ter visto a palavra, três frases bastam para saber o que ela é:</p>
+  <ul>
+    <li>O barista serviu um glorp fumegante.</li>
+    <li>Tomei três glorps antes da prova.</li>
+    <li>Ela prefere glorp sem açúcar.</li>
+  </ul>
+  <p>A hipótese tem uma ressalva que a aula faz questão de declarar: ela <strong>não</strong> diz que sinônimos ficam próximos. “Quente” e “frio” aparecem nos mesmos contextos (“a água está ___”) e por isso ficam próximos. A janela de contexto não registra polaridade. Antônimos vizinhos são consequência da hipótese, e mais dados não mudam isso. <span class="src">Aula 3 · A.3 (slide 18)</span></p>
+  <p>O apêndice lista as premissas embutidas: a janela define o que é contexto, a ordem das palavras é ignorada, e o corpus é assumido representativo. “Um corpus esportivo não sabe o que é derivada.”</p>
+  <h3>De 50.000 dimensões binárias para 100 dimensões reais</h3>
+  <p>O vetor denso tem entre 50 e 1024 dimensões com valores reais. Toda posição carrega informação, e perto, longe e direção passam a significar algo. Nenhuma dimensão é interpretável sozinha: não existe “a dimensão da realeza”. As direções com sentido são combinações de dimensões. <span class="src">Aula 3 · slide 6</span></p>
+</section>
+
+<section class="block" id="cosseno">
+  <h2>Cosseno: a régua mede direção</h2>
+  <div class="formula">cos(u, v) = (u · v) / (‖u‖ ‖v‖)        faixa: de −1 a 1</div>
+  <p>O numerador mede alinhamento. O denominador joga fora o comprimento dos dois vetores. O resultado é o cosseno do ângulo entre eles. <span class="src">Aula 3 · slide 7</span></p>
+  <p>Por que não usar distância euclidiana: em um espaço treinado, o comprimento do vetor acompanha a frequência da palavra. Frequência não é o que se quer comparar quando a pergunta é sobre sentido. O contraexemplo do apêndice: <span class="src">Aula 3 · A.2 (slide 17)</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Par</th><th>Vetores</th><th class="num">Cosseno</th><th class="num">Distância euclidiana</th></tr></thead>
+      <tbody>
+        <tr><td>u, v: mesma direção, tamanhos diferentes</td><td class="mono">(8, 0) e (2, 0)</td><td class="num">1,000</td><td class="num">6,000</td></tr>
+        <tr><td>a, b: mesmo tamanho, 60° de diferença</td><td class="mono">(5, 0) e (2,5; 4,33)</td><td class="num">0,500</td><td class="num">5,000</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>As duas réguas discordam: o cosseno considera u e v o par mais parecido, a euclidiana elege a e b. É o caso de “casa” (frequente, vetor longo) e “residência” (rara, vetor curto): direções parecidas, comprimentos diferentes.</p>
+  <div class="callout trap">
+    <strong>Dois erros de leitura</strong>
+    <p>Cosseno não é probabilidade: 0,7 não significa “70% parecido”. E cosseno não é comparável entre espaços diferentes: compara-se a ordenação dentro de um mesmo espaço, e não o valor absoluto. Cosseno negativo também raramente indica antônimo, porque antônimos ficam próximos.</p>
+  </div>
+</section>
+
+<section class="block" id="word2vec">
+  <h2>Word2Vec: o modelo é descartável, a tabela é o produto</h2>
+  <p>O Word2Vec troca contagem por predição. São duas tarefas rasas, que produzem espaços diferentes. <span class="src">Aula 3 · slide 10</span></p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>CBOW</th><th>Skip-gram</th></tr></thead>
+      <tbody>
+        <tr><th>Pergunta</th><td>Que palavra cabe no buraco?</td><td>Que companhias esta palavra tem?</td></tr>
+        <tr><th>Entrada → saída</th><td>média do contexto → palavra central</td><td>palavra central → cada palavra do contexto</td></tr>
+        <tr><th>Exemplos por janela</th><td>um</td><td>vários pares</td></tr>
+        <tr><th>Melhor em</th><td>palavras frequentes; mais rápido</td><td>palavras raras e corpus pequeno; mais lento</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>O tamanho da janela muda a relação que se aprende. Janela pequena (±2) captura <strong>substituibilidade</strong>: o vizinho de Recife é outra cidade. Janela grande (±10) captura <strong>tópico</strong>: o vizinho de Recife é praia, frevo.</p>
+  <h3>Amostragem negativa</h3>
+  <p>O objetivo ingênuo normaliza um softmax sobre todo o vocabulário a cada exemplo: cerca de 100 mil saídas, bilhões de exemplos. Não fecha em nenhum orçamento. A reescrita troca a pergunta: dado um par (palavra, contexto), ele é real ou foi sorteado? Vira classificação binária, com k pares sorteados para cada par real. <span class="src">Aula 3 · slide 11</span></p>
+  <p>Com k = 5 são 6 decisões por exemplo em vez de 100.000, cerca de 17 mil vezes menos. E o slide avisa que isso não é uma aproximação preguiçosa do softmax: é outro objetivo, que produz embeddings melhores para este fim. <span class="src">Aula 3 · A.4 (slide 19)</span></p>
+  <h3>A ideia mais transferível do curso</h3>
+  <p>Ninguém quer um preditor de palavra de contexto. Esse modelo é jogado fora. O que se leva é a matriz de embedding, que em uma visão ingênua seria só um parâmetro interno do treino. <span class="src">Aula 3 · slide 12</span></p>
+  <p>O treino é <strong>auto-supervisionado</strong>: o rótulo vem do próprio texto, e por isso escala para qualquer quantidade de texto que exista. A mesma jogada reaparece em escala maior nos LLMs: prever o próximo token não interessa por si, interessa o que o modelo precisa aprender para conseguir.</p>
+</section>
+
+<section class="block" id="analogias">
+  <h2>Analogias: a relação virou direção</h2>
+  <div class="formula">vec(rei) − vec(homem) + vec(mulher) ≈ vec(rainha)</div>
+  <p>Uma relação frequente virou uma direção no espaço, e a mesma direção vale partindo de vários pontos. Ninguém programou uma regra de gênero. A analogia funciona porque a relação é uma direção, e não porque o modelo sabe o que é um rei. <span class="src">Aula 3 · slide 8</span></p>
+  <p>O apêndice desmonta a operação: o que parece resolver uma equação é maximizar uma soma de três semelhanças (parecido com b, parecido com c, diferente de a). Não há inferência. <span class="src">Aula 3 · A.5 (slide 20)</span></p>
+  <ul>
+    <li><strong>O protocolo exclui as três palavras de entrada</strong> dos candidatos. Sem a exclusão, o vencedor costuma ser uma das próprias entradas. Quem lê “75% de acurácia em analogias” sem saber disso está lendo um número mais forte do que o medido.</li>
+    <li><strong>Categorias inteiras falham.</strong> O método pressupõe uma direção quase constante. Vale para plural, gênero, grau. Falha quando cada par é um fato isolado: Japão→iene não compartilha regularidade com Brasil→real.</li>
+    <li><strong>Em corpus pequeno o efeito enfraquece muito.</strong> Com menos ocorrências o ruído de cada vetor cresce, e a magnitude da relação não. Palavras raras são cortadas pelo <code>min_count</code> e nem têm vetor. O Word2Vec original usou cerca de 10⁹ palavras; o Lab 1 usa cerca de 10⁶. É outro regime.</li>
+  </ul>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Uma analogia que funciona prova</th><th>Não prova</th></tr></thead>
+      <tbody>
+        <tr><td>Que uma relação frequente deixou uma componente linear detectável, sem ninguém escrever regra</td><td>Raciocínio; que o modelo sabe o que é um rei; que a relação é pura (há vieses); acurácia fora do protocolo</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block" id="banco">
+  <h2>A dívida declarada: um vetor, dois sentidos</h2>
+  <p>Banco de dinheiro, de praça, de dados, de areia: um único vetor para todos. Na demonstração em sala, os vizinhos de <em>bank</em> trouxeram <em>credit</em> e <em>river</em> na mesma lista. Isso não é ruído, é o vetor sendo exatamente o que ele é. <span class="src">Aula 3 · slide 13</span></p>
+  <p>O vetor vira um compromisso: cai em uma região que não descreve bem nenhum dos sentidos. O apêndice escreve isso como equação. Para uma palavra ambígua, o que o treino estima é a <strong>mistura</strong> das distribuições de contexto dos sentidos, ponderada pela frequência de cada um. <span class="src">Aula 3 · A.3 (slide 18)</span></p>
+
+  <div class="demo" id="mix-demo">
+    <h3>Onde cai o vetor de “banco”</h3>
+    <label for="mix-alpha">Parte dos contextos de “banco” que falam de finanças: <output id="mix-alpha-out" for="mix-alpha"></output>
+      <input type="range" id="mix-alpha" min="0" max="100" step="1" value="60"></label>
+    <svg class="plot" viewBox="0 0 260 230" role="img" aria-label="Vetor estático de banco entre as direções de finanças e de praça">
+      <line class="axis" x1="40" y1="200" x2="230" y2="200"></line>
+      <line class="axis" x1="40" y1="200" x2="40" y2="20"></line>
+      <line class="sense" x1="40" y1="200" x2="200" y2="200"></line>
+      <line class="sense" x1="40" y1="200" x2="40" y2="40"></line>
+      <text x="170" y="216">finanças</text>
+      <text x="46" y="34">praça</text>
+      <line class="ctx" id="mix-ctx" x1="40" y1="200" x2="40" y2="200" style="display:none"></line>
+      <circle class="ctx" id="mix-ctx-tip" cx="40" cy="200" r="4" style="display:none"></circle>
+      <line class="static" id="mix-line" x1="40" y1="200" x2="40" y2="200"></line>
+      <circle class="static" id="mix-tip" cx="40" cy="200" r="4"></circle>
+    </svg>
+    <div class="grid">
+      <div class="stat">cosseno com finanças <b id="mix-fin"></b></div>
+      <div class="stat">cosseno com praça <b id="mix-sq"></b></div>
+    </div>
+    <p class="meta">Agora compare com uma representação que depende da frase (linha tracejada):</p>
+    <div class="row">
+      <button type="button" data-ctx="80">Ela sentou no banco da praça</button>
+      <button type="button" data-ctx="8">Ela abriu uma conta no banco</button>
+      <button type="button" data-ctx="">esconder</button>
+    </div>
+    <p class="verdict" id="mix-verdict"></p>
+  </div>
+  <p class="meta">Ilustração em duas dimensões. Os sentidos reais não são eixos perpendiculares, e a posição do vetor contextual aqui é um desenho, não uma medição.</p>
+
+  <p>Por que treinar mais ou aumentar a dimensão não resolve: a razão está na <strong>interface</strong>. A operação é uma consulta a uma tabela por ID. Entra o ID de “banco”, sai sempre a mesma linha. A frase não participa da conta. Mais dados só melhoram a estimativa de uma mistura que continua sendo mistura.</p>
+  <div class="callout">
+    <strong>O que vem depois</strong>
+    <p>A Aula 6 troca a tabela por uma função: a representação de cada token passa a ser calculada a partir dos outros tokens da frase, pela atenção. O slide resume em quatro palavras: de tabela para função.</p>
+  </div>
+</section>
+
+<section class="block" id="pratica">
+  <h2>Pratique: o que a geometria prevê</h2>
+  <p>Nenhum dos três itens pede conta. <span class="src">Aula 3 · slide 14</span></p>
+  <details class="q" id="p1">
+    <summary>Ordene por cosseno esperado: médico/enfermeiro, gato/parafuso, quente/frio, Recife/Fortaleza, comer/comida</summary>
+    <div class="answer">
+      <p>O guia do professor vai direto ao par de antônimos, “que é onde a sala aprende”: quente e frio ficam com cosseno <strong>alto</strong>, porque ocupam os mesmos contextos. Gato e parafuso ficam embaixo. A ordenação fina entre os outros pares não está registrada no material; a justificativa de cada par deve vir de “aparecem nos mesmos contextos?”.</p>
+    </div>
+  </details>
+  <details class="q" id="p2">
+    <summary>Janela pequena ou grande: (a) sugerir termos substituíveis em um campo de busca; (b) agrupar documentos por assunto</summary>
+    <div class="answer">
+      <p>(a) Janela pequena, que captura substituibilidade. (b) Janela grande, que captura tópico. É a regra do slide 10 aplicada.</p>
+    </div>
+  </details>
+  <details class="q" id="p3">
+    <summary>As analogias falham quase todas nos embeddings próprios e funcionam no modelo baixado. Duas causas e a evidência que confirma cada uma</summary>
+    <div class="answer">
+      <p>Gabarito do Apêndice A.5. Causa 1: cauda esparsa e <code>min_count</code>; evidência: imprimir o vocabulário e ver quais palavras ficaram fora. Causa 2: o protocolo de exclusão; evidência: rodar sem excluir as três palavras de entrada e ver uma delas vencer.</p>
+    </div>
+  </details>
+</section>
+
+<section class="block" id="autoteste">
+  <h2>Autoteste</h2>
+  <p>Responda antes de abrir. <span class="meta" data-quiz-progress></span></p>
+  <details class="q" id="q1">
+    <summary>Qual é o problema fatal do one-hot, e por que trocar a métrica não resolve?</summary>
+    <div class="answer"><p>Ortogonalidade: o produto interno entre duas palavras distintas é zero por construção, então não há semelhança para medir. Na euclidiana todo par fica a √2. Nenhuma métrica cria informação que a representação não contém.</p><p><span class="src">Aula 3 · slide 4</span> <span class="src">Aula 3 · A.1 (slide 16)</span></p></div>
+  </details>
+  <details class="q" id="q2">
+    <summary>Por que “quente” e “frio” ficam próximos em um espaço de embeddings?</summary>
+    <div class="answer"><p>Porque aparecem nos mesmos contextos, e a hipótese distribucional aproxima palavras com contextos parecidos. A janela não registra polaridade. É consequência do método, e mais dados não corrigem.</p><p><span class="src">Aula 3 · slide 5</span></p></div>
+  </details>
+  <details class="q" id="q3">
+    <summary>O que o cosseno descarta, e por que isso é desejável?</summary>
+    <div class="answer"><p>Descarta o comprimento dos vetores. Em um espaço treinado o comprimento acompanha a frequência da palavra, e a pergunta é sobre sentido.</p><p><span class="src">Aula 3 · slide 7</span></p></div>
+  </details>
+  <details class="q" id="q4">
+    <summary>Um cosseno de 0,7 em um modelo e 0,5 em outro: o primeiro par é mais parecido?</summary>
+    <div class="answer"><p>Não dá para afirmar. Cosseno não é comparável entre espaços diferentes; compara-se a ordenação dentro de um mesmo espaço. E 0,7 não é “70% parecido”.</p><p><span class="src">Aula 3 · A.2 (slide 17)</span></p></div>
+  </details>
+  <details class="q" id="q5">
+    <summary>No Word2Vec, o que é descartado e o que é aproveitado depois do treino?</summary>
+    <div class="answer"><p>O modelo que prevê palavras de contexto é descartado. Aproveita-se a matriz de embedding que ficou dentro dele.</p><p><span class="src">Aula 3 · slide 12</span></p></div>
+  </details>
+  <details class="q" id="q6">
+    <summary>Para sugerir sinônimos em um campo de busca, janela pequena ou grande? Por quê?</summary>
+    <div class="answer"><p>Pequena. Janela pequena captura substituibilidade (o que poderia ocupar o mesmo lugar na frase); janela grande captura tópico.</p><p><span class="src">Aula 3 · slide 10</span></p></div>
+  </details>
+  <details class="q" id="q7">
+    <summary>Uma analogia que funciona prova que o modelo entende a relação?</summary>
+    <div class="answer"><p>Não. Prova que uma relação frequente deixou uma componente linear detectável. A operação é um máximo sobre uma soma de três semelhanças, sem inferência.</p><p><span class="src">Aula 3 · A.5 (slide 20)</span></p></div>
+  </details>
+  <details class="q" id="q8">
+    <summary>Por que aumentar a dimensão do embedding não separa os sentidos de “banco”?</summary>
+    <div class="answer"><p>Porque a limitação é da interface: uma consulta a uma tabela por ID devolve o mesmo vetor em qualquer frase. O que se estima é uma mistura dos contextos de todos os sentidos, e nenhuma dimensão maior muda isso.</p><p><span class="src">Aula 3 · slide 13</span> <span class="src">Aula 3 · A.3 (slide 18)</span></p></div>
+  </details>
+</section>
+
+<section class="block" id="av1">
+  <h2>Ponte para a AV1: Casos 3 e 4</h2>
+  <h3>Caso 3 · Uma palavra, dois contextos</h3>
+  <p>É o slide 13 transformado em pergunta: “banco” em “Ela sentou no banco da praça” e “Ela abriu uma conta no banco”, com um Word2Vec estático.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pergunta do caso</th><th>Conceito testado</th><th>Onde estudar</th></tr></thead>
+      <tbody>
+        <tr><td>1. Por que um único vetor limita a distinção?</td><td>Consulta a tabela por ID; a frase não entra na conta; vetor de compromisso</td><td><a href="#banco">Um vetor, dois sentidos</a> · slide 13</td></tr>
+        <tr><td>2. O que uma representação contextual permite?</td><td>Representação como função da frase, e não como linha de tabela</td><td><a href="#banco">O que vem depois</a> · slides 13 e 15; <a href="aula-06.html">Aula 6</a></td></tr>
+        <tr><td>3. Relação com aprender a partir dos contextos de uso</td><td>Hipótese distribucional; para palavra ambígua, os contextos dos sentidos se misturam</td><td><a href="#distribucional">Hipótese distribucional</a> · slides 5 e 18</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Perguntas-guia para o Caso 3</h3>
+  <ol>
+    <li>O que entra na operação que produz o vetor de “banco” em um embedding estático? O que <em>não</em> entra?</li>
+    <li>Se o vetor foi aprendido a partir de todos os contextos em que “banco” apareceu, o que ele representa quando esses contextos são de dois tipos?</li>
+    <li>O que precisa mudar na operação para que as duas frases produzam vetores diferentes? Isso é mais dado, mais dimensão ou outra coisa?</li>
+    <li>A ideia de aprender pelo contexto está errada no caso da ambiguidade, ou está sendo aplicada em um nível diferente (por palavra do vocabulário, e não por ocorrência)?</li>
+  </ol>
+  <h3>Caso 4 · O gráfico convenceu a equipe</h3>
+  <p>O Caso 4 cruza esta aula com o Laboratório 1. Daqui saem os argumentos sobre <strong>corpus pequeno</strong> e sobre o que uma evidência prova ou não prova (seção <a href="#analogias">Analogias</a>, slide 20) e a premissa de corpus representativo (slide 18). A parte sobre a projeção t-SNE está na <a href="aula-04.html">página da Aula 4</a>.</p>
+  <div class="callout exam">
+    <strong>O que a rubrica paga</strong>
+    <p>No Caso 3, o mecanismo é a interface de tabela. Dizer “Word2Vec não lida com polissemia” nomeia a limitação e não explica por que ela existe. A pergunta 3 pede uma relação entre duas ideias, e a rubrica valoriza exatamente isso: “a relação entre as ideias importa mais que a quantidade de termos técnicos”.</p>
+  </div>
+  <p><strong>Como citar:</strong> “Aula 3 — slide 13, um vetor e dois sentidos”, “Aula 3 — Apêndice A.3, hipótese distribucional e palavra ambígua como mistura”, “Aula 3 — Apêndice A.5, o que as analogias não provam”.</p>
+</section>
+
+<section class="block" id="glossario">
+  <h2>Glossário</h2>
+  <dl>
+    <dt>One-hot</dt><dd>Vetor do tamanho do vocabulário com um único 1. Todas as palavras ficam ortogonais.</dd>
+    <dt>Embedding denso</dt><dd>Vetor de dezenas a centenas de números reais, aprendido, em que proximidade tem significado.</dd>
+    <dt>Hipótese distribucional</dt><dd>Palavras que ocorrem nos mesmos contextos têm representações próximas.</dd>
+    <dt>Cosseno</dt><dd>Medida de alinhamento de direção entre dois vetores, de −1 a 1. Ignora o comprimento.</dd>
+    <dt>CBOW / skip-gram</dt><dd>As duas tarefas do Word2Vec: prever a palavra pelo contexto, ou o contexto pela palavra.</dd>
+    <dt>Janela</dt><dd>Quantas palavras vizinhas contam como contexto. Pequena: substituibilidade. Grande: tópico.</dd>
+    <dt>Amostragem negativa</dt><dd>Treino por perguntas binárias “par real ou sorteado?”, com k pares sorteados por par real.</dd>
+    <dt>Auto-supervisionado</dt><dd>Treino em que o rótulo vem do próprio texto, sem anotação humana.</dd>
+    <dt>Embedding estático</dt><dd>Um vetor fixo por item do vocabulário, igual em qualquer frase.</dd>
+    <dt>Representação contextual</dt><dd>Vetor calculado para cada ocorrência, em função da frase em que ela está.</dd>
+    <dt>min_count</dt><dd>Frequência mínima para uma palavra entrar no vocabulário do treino. Abaixo disso ela não tem vetor.</dd>
+  </dl>
+</section>
+
+<footer class="note">
+  As etiquetas “Aula N · slide X” marcam o que está no material do professor e pode ser citado. O restante é explicação escrita com apoio de IA: confira no material antes de usar em uma avaliação.
+</footer>
+
+</main>
+<script src="assets/study.js"></script>
+<script>
+// A static vector for an ambiguous word is a frequency-weighted mixture of its senses.
+// Two perpendicular unit directions stand in for the two senses.
+(function () {
+  const ORIGIN = { x: 40, y: 200 }, SCALE = 160;
+  const $ = (id) => document.getElementById(id);
+  const slider = $("mix-alpha");
+  const fmt = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let contextAngle = null;
+
+  function place(line, tip, x, y) {
+    const px = ORIGIN.x + x * SCALE, py = ORIGIN.y - y * SCALE;
+    line.setAttribute("x2", px);
+    line.setAttribute("y2", py);
+    tip.setAttribute("cx", px);
+    tip.setAttribute("cy", py);
+  }
+
+  function update() {
+    const alpha = slider.value / 100;
+    const norm = Math.hypot(alpha, 1 - alpha);
+    const fin = alpha / norm, square = (1 - alpha) / norm;
+    place($("mix-line"), $("mix-tip"), fin, square);
+    $("mix-alpha-out").textContent = slider.value + "%";
+    $("mix-fin").textContent = fmt(fin);
+    $("mix-sq").textContent = fmt(square);
+
+    const ctx = $("mix-ctx"), ctxTip = $("mix-ctx-tip");
+    // SVG elements do not honor the HTML hidden attribute, so toggle display directly.
+    ctx.style.display = ctxTip.style.display = contextAngle === null ? "none" : "";
+    let text = "O vetor único fica entre os dois sentidos e é o mesmo em qualquer frase. Mudar a proporção só desloca o compromisso.";
+    if (contextAngle !== null) {
+      const rad = contextAngle * Math.PI / 180;
+      place(ctx, ctxTip, Math.cos(rad), Math.sin(rad));
+      text = "Na representação contextual, a frase participa da conta e o vetor desta ocorrência aponta para o sentido usado. O vetor estático (linha cheia) não se moveu.";
+    }
+    $("mix-verdict").textContent = text;
+  }
+
+  document.querySelectorAll("#mix-demo [data-ctx]").forEach((button) => {
+    button.addEventListener("click", () => {
+      contextAngle = button.dataset.ctx === "" ? null : Number(button.dataset.ctx);
+      update();
+    });
+  });
+  slider.addEventListener("input", update);
+  update();
+})();
+</script>
+</body>
+</html>

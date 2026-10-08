@@ -1,0 +1,161 @@
+{
+  "id": 17,
+  "title": "Oficina de revisão: diagnosticar antes de escolher",
+  "subtitle": "Atividades inéditas de revisão conceitual; não contém prova nem gabarito oficial.",
+  "controls": [
+    {
+      "key": "context",
+      "label": "Comprimento da sequência",
+      "type": "range",
+      "min": 2,
+      "max": 8,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "temperature",
+      "label": "Temperatura",
+      "type": "range",
+      "min": 0.2,
+      "max": 2,
+      "step": 0.1,
+      "value": 1
+    },
+    {
+      "key": "params",
+      "label": "Parâmetros (bilhões)",
+      "type": "range",
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "rank",
+      "label": "Posto LoRA",
+      "type": "range",
+      "min": 1,
+      "max": 16,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "items",
+      "label": "Itens da avaliação",
+      "type": "range",
+      "min": 10,
+      "max": 100,
+      "step": 10,
+      "value": 20
+    }
+  ],
+  "nodes": [
+    "Representar",
+    "Atender",
+    "Gerar",
+    "Treinar",
+    "Adaptar",
+    "Justificar"
+  ],
+  "steps": [
+    {
+      "title": "Um mapa de dependências",
+      "view": "map",
+      "explanation": "Revisar exige ligar uma decisão ao seu efeito observável. Este percurso usa situações novas para recuperar as relações entre representação, atenção e treinamento.",
+      "action": "Siga as setas e identifique a entrada e a saída de cada fase.",
+      "board": "Texto → tokens → estados → logits → distribuição",
+      "speech": "Hoje vamos justificar, não procurar enunciados de uma avaliação. Cada atividade foi criada para esta demonstração. Antes de calcular, digam qual variável explica o sintoma.",
+      "question": "Por que diagnosticar antes de escolher técnica?",
+      "answer": "Porque intervenções diferentes alteram partes diferentes do sistema.",
+      "focus": 0
+    },
+    {
+      "title": "Tokens não são palavras universais",
+      "view": "tokens",
+      "explanation": "O número de posições é definido pelo tokenizer. Uma sequência mais longa aumenta o trabalho de atenção mesmo quando o texto parece pequeno.",
+      "action": "Aumente comprimento e conte posições e pares.",
+      "board": "T posições; T² pares de atenção",
+      "speech": "Usamos rótulos abstratos para focar nas posições. Um token pode ser parte de palavra ou pontuação. O custo depende da sequência efetiva que entra no modelo.",
+      "question": "É seguro estimar contexto contando apenas palavras?",
+      "answer": "Não; a correspondência varia conforme idioma, texto e tokenizer.",
+      "focus": 0
+    },
+    {
+      "title": "A máscara define quem pode ver quem",
+      "view": "mask",
+      "explanation": "Uma máscara causal impede a consulta de acessar posições futuras. A diagonal permanece acessível na convenção de entrada deslocada usada aqui.",
+      "action": "Aumente contexto e compare células permitidas e bloqueadas.",
+      "board": "Permitido(i,j) ⇔ j ≤ i",
+      "speech": "Localizem a linha correspondente à posição atual. As células à direita representam futuro. A máscara muda a informação disponível, não a forma externa da matriz.",
+      "question": "Por que bloquear o futuro durante treino autoregressivo?",
+      "answer": "Para evitar usar o alvo futuro como entrada e alinhar treino com geração.",
+      "focus": 1
+    },
+    {
+      "title": "Logits, temperatura e escolha",
+      "view": "distribution",
+      "explanation": "A temperatura altera concentração antes da amostragem. A ordem dos logits permanece a mesma para temperatura positiva.",
+      "action": "Compare temperaturas 0,3 e 1,8.",
+      "board": "p = softmax(z/T)",
+      "speech": "Primeiro identifiquem o máximo. Depois observem a massa dos candidatos restantes. Não confundam uma distribuição mais espalhada com uma garantia de criatividade útil.",
+      "question": "Temperatura maior troca necessariamente o token mais provável?",
+      "answer": "Não; preserva o ranking dos logits.",
+      "focus": 2
+    },
+    {
+      "title": "Orçamento de treino e memória",
+      "view": "resources",
+      "explanation": "Computação e memória impõem restrições diferentes. Um modelo pode caber para inferir e não caber para ajustar todos os pesos.",
+      "action": "Aumente parâmetros e compare pesos BF16 e estados de treino.",
+      "board": "Pesos ≈ 2N bytes; treino típico ≈ 16N bytes + ativações",
+      "speech": "As duas colunas respondem a perguntas distintas. A primeira armazena pesos. A segunda inclui uma receita de atualização e ainda deixa ativações de fora.",
+      "question": "GPU ociosa elimina risco de falta de memória?",
+      "answer": "Não; utilização aritmética e capacidade de memória são recursos diferentes.",
+      "focus": 2
+    },
+    {
+      "title": "Adaptador exige conta de dimensões",
+      "view": "adapter",
+      "explanation": "Baixo posto restringe a atualização a um produto de matrizes. A quantidade de treináveis cresce linearmente com r.",
+      "action": "Varie posto e calcule os adaptadores de um módulo 512×512.",
+      "board": "Nₐ = r(512+512)",
+      "speech": "Escrevam as formas antes da multiplicação. Isso evita inverter A e B. A base congelada continua computando o caminho principal.",
+      "question": "Dobrar r dobra quantos parâmetros treináveis neste módulo?",
+      "answer": "Dobra de 1024r para 2048r, mantendo dimensões fixas.",
+      "focus": 3
+    },
+    {
+      "title": "O objetivo determina o sinal",
+      "view": "objectives",
+      "explanation": "Próximo token, preferência e verificação supervisionam aspectos diferentes. Uma melhoria em um objetivo não prova melhoria universal.",
+      "action": "Compare as três linhas e escolha o sinal de cada situação.",
+      "board": "Texto → imitação; pares → preferência; programa → verificação",
+      "speech": "Não deem ao método uma capacidade que o dado não mede. Um verificador de formato não verifica fatos. Uma preferência de estilo não prova correção matemática.",
+      "question": "Qual sinal verifica diretamente se uma soma está correta?",
+      "answer": "Uma regra executável de correção para a soma, dentro de sua especificação.",
+      "focus": 4
+    },
+    {
+      "title": "Um número precisa de denominador",
+      "view": "evaluation",
+      "explanation": "A resolução de uma taxa depende do número de itens. Mais casas decimais não criam mais evidência.",
+      "action": "Varie itens e observe quanto vale um único acerto.",
+      "board": "Δ mínimo observado = 100/n pontos",
+      "speech": "Em dez exemplos, um item vale dez pontos. A precisão de exibição não muda esse fato. Também precisamos conhecer a distribuição dos casos.",
+      "question": "Mostrar 0,9000 aumenta a confiança em nove acertos de dez?",
+      "answer": "Não; apenas muda a apresentação do mesmo dado.",
+      "focus": 4
+    },
+    {
+      "title": "Da hipótese ao teste que pode refutá-la",
+      "view": "diagnosis",
+      "explanation": "Uma justificativa forte nomeia causa, intervenção e verificação. O teste deve poder mostrar que a explicação inicial estava errada.",
+      "action": "Leia os cenários e associe uma medição concreta.",
+      "board": "Sintoma → hipótese → intervenção → teste → limite",
+      "speech": "Evitem responder apenas com um nome de técnica. Digam qual resultado esperam se a hipótese estiver correta. Depois definam o que os faria mudar de ideia.",
+      "question": "Como investigar uma saída fora do formato?",
+      "answer": "Controlar template e instrução, medir taxa de inválidos em entradas fixas e separar esse erro da correção do conteúdo.",
+      "focus": 5
+    }
+  ]
+}

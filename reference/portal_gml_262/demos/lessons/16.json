@@ -1,0 +1,214 @@
+{
+  "id": 16,
+  "title": "Raciocínio, verificadores e GRPO",
+  "subtitle": "Da diferença entre tentar e acertar ao sinal de atualização relativo ao grupo.",
+  "controls": [
+    {
+      "key": "n",
+      "label": "Amostras disponíveis n",
+      "type": "range",
+      "min": 4,
+      "max": 20,
+      "step": 1,
+      "value": 10
+    },
+    {
+      "key": "correct",
+      "label": "Acertos observados c (limitado a n)",
+      "type": "range",
+      "min": 0,
+      "max": 20,
+      "step": 1,
+      "value": 3
+    },
+    {
+      "key": "k",
+      "label": "Tentativas escolhidas k (limitado a n)",
+      "type": "range",
+      "min": 1,
+      "max": 20,
+      "step": 1,
+      "value": 5
+    },
+    {
+      "key": "group",
+      "label": "Tamanho do grupo",
+      "type": "range",
+      "min": 2,
+      "max": 8,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "successes",
+      "label": "Sucessos no grupo (limitado ao grupo)",
+      "type": "range",
+      "min": 0,
+      "max": 8,
+      "step": 1,
+      "value": 2
+    },
+    {
+      "key": "length",
+      "label": "Tokens por tentativa",
+      "type": "range",
+      "min": 20,
+      "max": 500,
+      "step": 20,
+      "value": 100
+    }
+  ],
+  "nodes": [
+    "Tentativas",
+    "Métrica",
+    "Seleção",
+    "Verificador",
+    "GRPO",
+    "Limites"
+  ],
+  "steps": [
+    {
+      "title": "A solução pode existir sem ser entregue",
+      "view": "samples",
+      "explanation": "Gerar várias respostas aumenta a chance de incluir uma correta. Entregar essa resposta exige um seletor que saiba identificá-la.",
+      "action": "Mude o número de acertos e inspecione o conjunto de tentativas.",
+      "board": "Existência da resposta correta ≠ seleção da correta",
+      "speech": "Cada cartão representa uma tentativa sintética rotulada. Saber qual cartão está correto é informação de avaliação. Um usuário comum pode não dispor desse oráculo.",
+      "question": "Pass@k alto garante resposta entregue correta?",
+      "answer": "Não; mede a existência de ao menos uma correta entre as tentativas.",
+      "focus": 0
+    },
+    {
+      "title": "Definir o que será verificado",
+      "view": "verifier",
+      "explanation": "Uma checagem automática transforma certos resultados em sinal objetivo. A validade desse sinal depende da cobertura e da especificação do programa.",
+      "action": "Compare verificadores de aritmética, código e formato.",
+      "board": "Verificador = especificação executável parcial",
+      "speech": "Um teste pode verificar saída e ainda ignorar custo ou segurança. Um validador de JSON verifica forma, não verdade. Devemos dizer exatamente o que a recompensa confere.",
+      "question": "JSON válido implica resposta factual correta?",
+      "answer": "Não; o verificador só avaliou a estrutura.",
+      "focus": 0
+    },
+    {
+      "title": "Uma tentativa tem uma taxa própria",
+      "view": "passone",
+      "explanation": "A estimativa observada de pass@1 é c/n. O denominador deve incluir todas as tentativas avaliadas sob o mesmo protocolo.",
+      "action": "Aumente n mantendo c e acompanhe a fração.",
+      "board": "pass@1 estimado = c/n",
+      "speech": "Mais tentativas não significam automaticamente maior taxa por tentativa. Se o número de acertos não cresce, a fração cai. Não confundam quantidade total com probabilidade.",
+      "question": "Se c fica fixo e n cresce, pass@1 aumenta?",
+      "answer": "Não; a taxa observada diminui.",
+      "focus": 0
+    },
+    {
+      "title": "Pass@k conta conjuntos sem acerto",
+      "view": "passk",
+      "explanation": "A estimativa combinatória usa 1−C(n−c,k)/C(n,k). Ela representa a chance de um subconjunto de k tentativas conter sucesso, sem reposição.",
+      "action": "Varie k e confira os extremos c=0 e c=n.",
+      "board": "pass@k = 1 − C(n−c,k)/C(n,k)",
+      "speech": "É mais fácil contar o fracasso: escolher apenas tentativas erradas. Depois subtraímos de um. O cálculo limita k e c ao número disponível, visível na tela.",
+      "question": "Se k>n−c, qual o resultado?",
+      "answer": "É 1, pois não há tentativas erradas suficientes para formar esse subconjunto.",
+      "focus": 1
+    },
+    {
+      "title": "Independência é outra hipótese",
+      "view": "independence",
+      "explanation": "A expressão 1−(1−p)^k usa tentativas independentes com probabilidade p. Ela não é a mesma conta que selecionar sem reposição de n respostas fixas.",
+      "action": "Compare as duas curvas para n pequeno.",
+      "board": "Independente: 1−(1−p)^k; amostra fixa: combinatória",
+      "speech": "As duas fórmulas respondem a experimentos diferentes. Um conjunto pequeno torna a diferença visível. Registrar o protocolo evita trocar uma estimativa pela outra.",
+      "question": "Podemos substituir sempre uma fórmula pela outra?",
+      "answer": "Não; elas assumem processos amostrais diferentes.",
+      "focus": 1
+    },
+    {
+      "title": "Consenso é um seletor, não um oráculo",
+      "view": "consensus",
+      "explanation": "Voto majoritário pode escolher uma resposta errada repetida. O cenário agrupa as tentativas erradas na mesma alternativa para tornar essa falha visível.",
+      "action": "Ajuste acertos para uma minoria e compare existência e maioria.",
+      "board": "Maioria pode amplificar erro correlacionado",
+      "speech": "Aqui todas as respostas erradas concordam entre si por construção. Há uma solução correta no conjunto, mas a maioria pode ignorá-la. Diversidade de trajetórias não garante diversidade de respostas.",
+      "question": "Por que consenso pode ficar abaixo de pass@k?",
+      "answer": "Porque o seletor pode não reconhecer o acerto que existe no conjunto.",
+      "focus": 2
+    },
+    {
+      "title": "A fatura cresce com as tentativas",
+      "view": "cost",
+      "explanation": "Gerar k soluções de comprimento médio L custa aproximadamente kL tokens de saída. Latência depende também de paralelismo e da verificação.",
+      "action": "Mude k e comprimento mantendo a taxa de acerto.",
+      "board": "Tokens ≈ kL; custo não é qualidade",
+      "speech": "Não atribuímos preço comercial aos tokens aqui. A conta já mostra o trade-off básico. Uma solução mais longa precisa justificar o orçamento adicional.",
+      "question": "Dobrar o comprimento garante maior acerto?",
+      "answer": "Não; custo cresce por definição, qualidade precisa ser medida.",
+      "focus": 2
+    },
+    {
+      "title": "Recompensa verificável dá sinal ao treino",
+      "view": "reward",
+      "explanation": "Uma regra pode atribuir recompensa 1 a sucesso e 0 a falha. Isso permite treinar com um programa como avaliador em domínios verificáveis.",
+      "action": "Mude sucessos no grupo e leia os rewards.",
+      "board": "rᵢ ∈ {0,1}",
+      "speech": "Este é um exemplo binário para expor o mecanismo. Critérios reais podem combinar correção e formato. Qualquer composição deve ser auditada para evitar atalhos.",
+      "question": "Toda tarefa tem recompensa verificável confiável?",
+      "answer": "Não; preferências abertas e julgamentos ambíguos exigem outros sinais.",
+      "focus": 3
+    },
+    {
+      "title": "GRPO compara respostas do mesmo grupo",
+      "view": "advantage",
+      "explanation": "A vantagem relativa subtrai a média do grupo e divide pelo desvio-padrão com estabilização numérica. Respostas acima da média recebem sinal positivo.",
+      "action": "Varie sucessos mantendo tamanho do grupo.",
+      "board": "Aᵢ = (rᵢ−média(r))/(desvio(r)+ε)",
+      "speech": "O grupo fornece sua própria linha de base. A soma das vantagens fica aproximadamente zero. O simulador calcula esse termo, não executa todo o treinamento de linguagem.",
+      "question": "Uma resposta correta sempre tem vantagem positiva?",
+      "answer": "Não; se todas forem corretas, a diferença para a média é zero.",
+      "focus": 3
+    },
+    {
+      "title": "Um grupo uniforme não discrimina",
+      "view": "zerosignal",
+      "explanation": "Quando todas as recompensas são iguais, o sinal relativo é nulo. Isso ocorre tanto com todos os acertos quanto com todos os erros.",
+      "action": "Teste zero sucessos e depois sucessos igual ao grupo.",
+      "board": "r₁=…=rG ⇒ vantagens = 0",
+      "speech": "A tarefa pode estar fácil demais ou difícil demais para este grupo. Nos dois casos falta contraste no sinal relativo. O termo estabilizador evita divisão por zero, mas não cria informação.",
+      "question": "Adicionar epsilon cria aprendizagem num grupo sem contraste?",
+      "answer": "Não; mantém estabilidade numérica, enquanto o numerador continua zero.",
+      "focus": 4
+    },
+    {
+      "title": "Comparar GRPO com PPO sem confundir",
+      "view": "architecture",
+      "explanation": "GRPO usa comparação relativa do grupo e dispensa o crítico de valor daquele desenho de PPO. Política, referência e verificação ainda têm funções distintas.",
+      "action": "Compare os componentes dos dois desenhos.",
+      "board": "PPO: crítico de valor; GRPO: baseline do grupo",
+      "speech": "Risquem apenas o componente que deixou de ser necessário. Não apaguem a política nem o sinal de recompensa. A simplificação arquitetural não elimina custo de gerar grupos.",
+      "question": "GRPO elimina a necessidade de recompensa?",
+      "answer": "Não; o grupo precisa de recompensas para definir vantagens.",
+      "focus": 4
+    },
+    {
+      "title": "Uma receita completa tem fases",
+      "view": "pipeline",
+      "explanation": "Receitas de modelos de raciocínio podem combinar dados iniciais, RL verificável, seleção de exemplos e novos ajustes. O percurso ilustra essa organização sem reproduzir um treino publicado.",
+      "action": "Siga as fases e identifique onde entra cada tipo de sinal.",
+      "board": "Exemplos iniciais → RL → seleção/SFT → refinamento",
+      "speech": "Não chamem todo pós-treino de uma única técnica. Cada fase muda a origem do sinal. A demonstração ajuda a perguntar qual capacidade cada fase pretende melhorar.",
+      "question": "Imitação e verificação são o mesmo sinal?",
+      "answer": "Não; uma copia demonstrações e a outra avalia resultados por regras.",
+      "focus": 5
+    },
+    {
+      "title": "Comprimento não é evidência suficiente",
+      "view": "length",
+      "explanation": "Uma cadeia pode crescer sem melhorar os resultados verificados. Avaliar qualidade, tokens e tempo em conjunto evita premiar apenas verbosidade.",
+      "action": "Aumente comprimento sem alterar acertos e compare a fatura.",
+      "board": "Mais tokens ≠ mais acertos",
+      "speech": "Nesta experiência a taxa de acerto permanece controlada separadamente. Isso mostra por que não devemos deduzir qualidade do comprimento. O relatório precisa declarar o que o verificador não observa.",
+      "question": "Qual conclusão o simulador permite sobre raciocínio real?",
+      "answer": "Somente compreender métricas e sinais; não inferir mecanismos cognitivos de modelos nem desempenho real.",
+      "focus": 5
+    }
+  ]
+}

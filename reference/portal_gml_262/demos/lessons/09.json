@@ -1,0 +1,245 @@
+{
+  "id": 9,
+  "title": "Lab 2: mini-GPT, dos shapes à geração",
+  "subtitle": "Atenção causal calculada e uma pequena cabeça treinada no navegador",
+  "nodes": [
+    "Dados",
+    "QKV",
+    "Máscara",
+    "Bloco",
+    "Loss",
+    "Geração"
+  ],
+  "controls": [
+    {
+      "key": "length",
+      "label": "Comprimento T da sequência",
+      "type": "range",
+      "min": 2,
+      "max": 8,
+      "step": 1,
+      "value": 4
+    },
+    {
+      "key": "dim",
+      "label": "Dimensão de embedding",
+      "type": "select",
+      "value": 16,
+      "options": [
+        {
+          "value": 8,
+          "label": "8"
+        },
+        {
+          "value": 16,
+          "label": "16"
+        },
+        {
+          "value": 32,
+          "label": "32"
+        },
+        {
+          "value": 64,
+          "label": "64"
+        }
+      ]
+    },
+    {
+      "key": "heads",
+      "label": "Número de cabeças",
+      "type": "select",
+      "value": 4,
+      "options": [
+        {
+          "value": 1,
+          "label": "1"
+        },
+        {
+          "value": 2,
+          "label": "2"
+        },
+        {
+          "value": 4,
+          "label": "4"
+        },
+        {
+          "value": 8,
+          "label": "8"
+        }
+      ]
+    },
+    {
+      "key": "scaled",
+      "label": "Dividir scores por √d_head",
+      "type": "checkbox",
+      "value": true
+    },
+    {
+      "key": "causal",
+      "label": "Aplicar máscara causal antes do softmax",
+      "type": "checkbox",
+      "value": true
+    },
+    {
+      "key": "updates",
+      "label": "Passos de treino da cabeça didática",
+      "type": "range",
+      "min": 0,
+      "max": 40,
+      "step": 1,
+      "value": 10
+    },
+    {
+      "key": "lr",
+      "label": "Taxa de aprendizado da cabeça",
+      "type": "range",
+      "min": 0.01,
+      "max": 1,
+      "step": 0.01,
+      "value": 0.2
+    },
+    {
+      "key": "temperature",
+      "label": "Temperatura da geração ilustrativa",
+      "type": "range",
+      "min": 0.2,
+      "max": 2,
+      "step": 0.1,
+      "value": 1
+    }
+  ],
+  "steps": [
+    {
+      "title": "Construa entrada e alvo deslocados",
+      "view": "dataset",
+      "explanation": "Uma sequência fornece várias previsões de próximo token: cada entrada aponta para o token seguinte. O exemplo usa caracteres de uma frase fixa e separa o último alvo da entrada.",
+      "action": "Aumente T e confira os pares x e y em cada posição.",
+      "board": "x = texto[0:T]; y = texto[1:T+1]",
+      "question": "Usar o mesmo token como entrada e alvo ensina a prever o próximo?",
+      "answer": "Não; cria uma tarefa de reconstrução trivial diferente do deslocamento causal desejado.",
+      "focus": 0,
+      "speech": "Uma sequência fornece várias previsões de próximo token: cada entrada aponta para o token seguinte. O exemplo usa caracteres de uma frase fixa e separa o último alvo da entrada. Aumente T e confira os pares x e y em cada posição. Pergunto à turma: “Usar o mesmo token como entrada e alvo ensina a prever o próximo?” Não; cria uma tarefa de reconstrução trivial diferente do deslocamento causal desejado."
+    },
+    {
+      "title": "Anote os shapes antes das multiplicações",
+      "view": "shapes",
+      "explanation": "Cada eixo tem um papel: lote, sequência, cabeças e canais. Dimensão do modelo deve ser divisível pelo número de cabeças.",
+      "action": "Altere Dimensão e Cabeças e calcule d_head antes de ver a tabela.",
+      "board": "X:[B,T,d]; Q,K,V:[B,H,T,d/H]",
+      "question": "Dividir em cabeças reduz o total de canais concatenados?",
+      "answer": "Não; H × d_head continua igual à dimensão do modelo.",
+      "focus": 1,
+      "speech": "Cada eixo tem um papel: lote, sequência, cabeças e canais. Dimensão do modelo deve ser divisível pelo número de cabeças. Altere Dimensão e Cabeças e calcule d_head antes de ver a tabela. Pergunto à turma: “Dividir em cabeças reduz o total de canais concatenados?” Não; H × d_head continua igual à dimensão do modelo."
+    },
+    {
+      "title": "Inspecione Q, K e V calculados",
+      "view": "qkv",
+      "explanation": "A miniatura usa entradas e projeções determinísticas para exibir valores reproduzíveis. Ela calcula a primeira cabeça explicitamente, enquanto as outras são representadas pelos shapes.",
+      "action": "Mude d e confira quantas coordenadas entram em cada produto da cabeça.",
+      "board": "Q=XW_Q; K=XW_K; V=XW_V",
+      "question": "Por que Q e K precisam ter a mesma largura na atenção por produto?",
+      "answer": "Porque o produto interno compara coordenadas correspondentes e soma sobre essa dimensão.",
+      "focus": 1,
+      "speech": "A miniatura usa entradas e projeções determinísticas para exibir valores reproduzíveis. Ela calcula a primeira cabeça explicitamente, enquanto as outras são representadas pelos shapes. Mude d e confira quantas coordenadas entram em cada produto da cabeça. Pergunto à turma: “Por que Q e K precisam ter a mesma largura na atenção por produto?” Porque o produto interno compara coordenadas correspondentes e soma sobre essa dimensão."
+    },
+    {
+      "title": "Calcule scores e observe a escala",
+      "view": "scores",
+      "explanation": "O produto QKᵀ gera um score para cada par de posições. Dividir por √d_head controla a escala típica quando coordenadas têm variância comparável.",
+      "action": "Desative a divisão, aumente Dimensão e compare amplitude e distribuição posterior.",
+      "board": "S = QKᵀ/√d_head",
+      "question": "A divisão garante ausência de saturação em qualquer Q e K?",
+      "answer": "Não; é uma normalização de escala motivada estatisticamente, e os valores reais ainda dependem das representações.",
+      "focus": 1,
+      "speech": "O produto QKᵀ gera um score para cada par de posições. Dividir por √d_head controla a escala típica quando coordenadas têm variância comparável. Desative a divisão, aumente Dimensão e compare amplitude e distribuição posterior. Pergunto à turma: “A divisão garante ausência de saturação em qualquer Q e K?” Não; é uma normalização de escala motivada estatisticamente, e os valores reais ainda dependem das representações."
+    },
+    {
+      "title": "Aplique a máscara antes da normalização",
+      "view": "mask",
+      "explanation": "Scores de posições futuras recebem −∞ antes do softmax. Desligar a máscara ilustra vazamento e não representa uma configuração válida de treino causal.",
+      "action": "Desmarque e marque Máscara causal; leia as células acima da diagonal.",
+      "board": "j>i ⇒ score=-∞ ⇒ exp(score)=0",
+      "question": "Zerar pesos futuros depois do softmax conserva a soma igual a um?",
+      "answer": "Não sem renormalizar; por isso a receita padrão mascara os scores antes da normalização.",
+      "focus": 2,
+      "speech": "Scores de posições futuras recebem −∞ antes do softmax. Desligar a máscara ilustra vazamento e não representa uma configuração válida de treino causal. Desmarque e marque Máscara causal; leia as células acima da diagonal. Pergunto à turma: “Zerar pesos futuros depois do softmax conserva a soma igual a um?” Não sem renormalizar; por isso a receita padrão mascara os scores antes da normalização."
+    },
+    {
+      "title": "Confira a soma de cada linha",
+      "view": "weights",
+      "explanation": "Softmax é aplicado sobre as chaves de cada query, e cada linha soma um. A primeira posição causal só pode atender a si mesma.",
+      "action": "Observe a primeira linha com T=4 e causal ligado; depois compare sem máscara.",
+      "board": "Aᵢⱼ = softmax(Sᵢ,: )ⱼ; somaⱼ Aᵢⱼ=1",
+      "question": "A máscara obriga todos os pesos passados a serem iguais?",
+      "answer": "Não; ela remove futuros, enquanto os scores determinam a divisão entre posições permitidas.",
+      "focus": 2,
+      "speech": "Softmax é aplicado sobre as chaves de cada query, e cada linha soma um. A primeira posição causal só pode atender a si mesma. Observe a primeira linha com T=4 e causal ligado; depois compare sem máscara. Pergunto à turma: “A máscara obriga todos os pesos passados a serem iguais?” Não; ela remove futuros, enquanto os scores determinam a divisão entre posições permitidas."
+    },
+    {
+      "title": "Misture os valores e una as cabeças",
+      "view": "values",
+      "explanation": "Multiplicar A por V produz uma combinação ponderada de valores para cada query. Multi-head concatena resultados das cabeças e aplica uma projeção de saída.",
+      "action": "Compare uma linha de pesos com os valores e o resultado AV da primeira cabeça.",
+      "board": "Z=AV; MultiHead=Concat(Z₁,…,Z_H)W_O",
+      "question": "Multi-head exige um laço Python por cabeça?",
+      "answer": "Não; os eixos de lote e cabeça permitem calcular as multiplicações de forma vetorizada.",
+      "focus": 3,
+      "speech": "Multiplicar A por V produz uma combinação ponderada de valores para cada query. Multi-head concatena resultados das cabeças e aplica uma projeção de saída. Compare uma linha de pesos com os valores e o resultado AV da primeira cabeça. Pergunto à turma: “Multi-head exige um laço Python por cabeça?” Não; os eixos de lote e cabeça permitem calcular as multiplicações de forma vetorizada."
+    },
+    {
+      "title": "Monte o bloco com dois residuais",
+      "view": "block",
+      "explanation": "O bloco reúne atenção e FFN com caminhos residuais e normalização. O diagrama destaca pré-norm, enquanto os valores de atenção continuam os da miniatura.",
+      "action": "Siga a entrada pelos dois caminhos de soma e confirme que a largura permanece d.",
+      "board": "x′=x+Attn(Norm(x)); y=x′+FFN(Norm(x′))",
+      "question": "Por que residual exige shapes compatíveis?",
+      "answer": "A soma é elemento a elemento; as duas parcelas precisam representar as mesmas posições e canais.",
+      "focus": 3,
+      "speech": "O bloco reúne atenção e FFN com caminhos residuais e normalização. O diagrama destaca pré-norm, enquanto os valores de atenção continuam os da miniatura. Siga a entrada pelos dois caminhos de soma e confirme que a largura permanece d. Pergunto à turma: “Por que residual exige shapes compatíveis?” A soma é elemento a elemento; as duas parcelas precisam representar as mesmas posições e canais."
+    },
+    {
+      "title": "Calcule a entropia cruzada do alvo",
+      "view": "loss",
+      "explanation": "Uma cabeça de quatro logits aprende a aumentar a probabilidade de um alvo fixo. Essa tarefa isolada permite inspecionar loss e gradiente, mas não equivale ao treino do mini-GPT completo do notebook.",
+      "action": "Coloque Passos=0 e depois 1; compare logits, probabilidade do alvo e −ln(p_alvo).",
+      "board": "L=−log p_alvo; ∂L/∂logitⱼ=pⱼ−1[j=alvo]",
+      "question": "Diminuir a perda desse único exemplo prova generalização?",
+      "answer": "Não; comprova apenas ajuste local, que deve ser separado da avaliação em dados reservados.",
+      "focus": 4,
+      "speech": "Uma cabeça de quatro logits aprende a aumentar a probabilidade de um alvo fixo. Essa tarefa isolada permite inspecionar loss e gradiente, mas não equivale ao treino do mini-GPT completo do notebook. Coloque Passos=0 e depois 1; compare logits, probabilidade do alvo e −ln(p_alvo). Pergunto à turma: “Diminuir a perda desse único exemplo prova generalização?” Não; comprova apenas ajuste local, que deve ser separado da avaliação em dados reservados."
+    },
+    {
+      "title": "Treine e transforme perda em perplexidade",
+      "view": "training",
+      "explanation": "Os valores da curva são recalculados a cada passo de SGD da cabeça, sem resultados de treinamento inventados. Para a mesma unidade de previsão, PPL é a exponencial da perda.",
+      "action": "Altere Passos e Taxa; confira a relação entre perda atual e perplexidade.",
+      "board": "PPL = exp(loss); avaliar em conjunto separado",
+      "question": "Podemos chamar essa perplexidade de resultado do corpus inteiro?",
+      "answer": "Não; ela pertence ao exemplo da miniatura e não substitui a média em um conjunto de validação.",
+      "focus": 4,
+      "speech": "Os valores da curva são recalculados a cada passo de SGD da cabeça, sem resultados de treinamento inventados. Para a mesma unidade de previsão, PPL é a exponencial da perda. Altere Passos e Taxa; confira a relação entre perda atual e perplexidade. Pergunto à turma: “Podemos chamar essa perplexidade de resultado do corpus inteiro?” Não; ela pertence ao exemplo da miniatura e não substitui a média em um conjunto de validação."
+    },
+    {
+      "title": "Avalie sem vazamento e com variabilidade",
+      "view": "evaluation",
+      "explanation": "Uma avaliação adequada desativa efeitos de treino apropriados, usa dados reservados e agrega vários lotes. Os cartões são critérios de execução do notebook, sem inventar métricas de validação no navegador.",
+      "action": "Leia os três controles de validade e associe cada um a uma fonte de erro.",
+      "board": "eval + no_grad; split por dados; média de lotes; sementes registradas",
+      "question": "Uma única semente permite afirmar que uma arquitetura é superior?",
+      "answer": "Não; variação do treino e da amostragem pode explicar a diferença, exigindo repetições e uma comparação controlada.",
+      "focus": 4,
+      "speech": "Uma avaliação adequada desativa efeitos de treino apropriados, usa dados reservados e agrega vários lotes. Os cartões são critérios de execução do notebook, sem inventar métricas de validação no navegador. Leia os três controles de validade e associe cada um a uma fonte de erro. Pergunto à turma: “Uma única semente permite afirmar que uma arquitetura é superior?” Não; variação do treino e da amostragem pode explicar a diferença, exigindo repetições e uma comparação controlada."
+    },
+    {
+      "title": "Feche o laço autorregressivo",
+      "view": "generation",
+      "explanation": "Gerar consulta a distribuição da última posição, escolhe um token, acrescenta-o ao prefixo e repete. A tela mostra uma distribuição didática e o fluxo, sem apresentar texto como saída de um GPT treinado.",
+      "action": "Varie Temperatura e confira como a distribuição do próximo token muda após o treinamento da cabeça.",
+      "board": "prefixo → logits finais → escolha → concatenar → recortar contexto",
+      "question": "Quais erros comuns quebram esse laço?",
+      "answer": "Usar logits de todas as posições como se fossem a última, esquecer o recorte da janela ou não distinguir argmax de amostragem.",
+      "focus": 5,
+      "speech": "Gerar consulta a distribuição da última posição, escolhe um token, acrescenta-o ao prefixo e repete. A tela mostra uma distribuição didática e o fluxo, sem apresentar texto como saída de um GPT treinado. Varie Temperatura e confira como a distribuição do próximo token muda após o treinamento da cabeça. Pergunto à turma: “Quais erros comuns quebram esse laço?” Usar logits de todas as posições como se fossem a última, esquecer o recorte da janela ou não distinguir argmax de amostragem."
+    }
+  ]
+}

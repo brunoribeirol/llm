@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Aula 0 — Recepção: o mapa do curso, os materiais e o ambiente · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="0">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 00 / 0 — Recepção (extra-classe)</p><h1>Aula 0 — Recepção: o mapa do curso, os materiais e o ambiente</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 00" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Descrever</strong> o artefato final da disciplina — um sistema com LLM, defendido em 12 minutos com demo ao vivo e uma tabela de métricas por camada — e dizer o que a pergunta de defesa vai cobrar.</p></li><li><p><strong>Localizar</strong> qualquer uma das sete camadas do curso na pilha, nomeando a aula e o laboratório em que ela é construída.</p></li><li><p><strong>Enunciar</strong> a composição da própria avaliação: a fórmula AV1/AV2, os pesos, os três marcos do projeto com data, e a distribuição da prova em 42/40/8/10.</p></li><li><p><strong>Distinguir</strong> o fluxo do apêndice num material da disciplina, e dizer o que estudar em cada um antes de uma aula e antes da prova.</p></li><li><p><strong>Aplicar</strong> a política de uso de IA: o que a declaração de uso precisa conter, e qual é a régua (defender o que se entrega).</p></li><li><p><strong>Ter</strong> o ambiente funcionando: Colab com GPU habilitada, token do Hugging Face, chave de API testada, repositório criado com <code>.gitignore</code> que exclui chaves.</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · Abertura: o que vocês vão ter construído em dezembro · 00:00–00:04</summary><div class="prose"><p><strong>[Projeto a cena da última aula do semestre antes de dizer bom dia]</strong></p>
+<p>Bom dia. Eu vou começar pelo fim.</p>
+<p>Primeiro de dezembro. Cada equipe desta sala vai ter doze minutos para apresentar um sistema que construiu. Com demo ao vivo — não vídeo gravado, não captura de tela: o sistema rodando, na frente de todos, num caso difícil que a própria equipe escolheu do conjunto de teste dela.</p>
+<p><strong>[Aponto a tabela à direita]</strong></p>
+<p>E ao lado da demo, isto: uma tabela com uma linha por camada do sistema, cada linha com o número que mede aquela camada e com o <code>n</code> daquela medição. Não uma nota global. Uma linha por camada.</p>
+<p>E aí eu vou fazer uma pergunta, para uma camada que eu escolho:</p>
+<blockquote>
+<p>Ideia central: "Por que essa camada existe no sistema, e que número prova que ela funciona?"</p>
+</blockquote>
+<p>Quem não conseguir responder isso perde ponto. E eu já sei qual camada costuma travar: é aquela em que a equipe copiou código de algum lugar e nunca entendeu.</p>
+<p>Esta sessão de hoje é sobre como vocês chegam lá. O conteúdo em si começa na terça.</p>
+<hr /></div></details><details><summary>Slide 2 · Quem está nesta sala · 00:04–00:08</summary><div class="prose"><p>Antes de eu falar do curso, eu preciso saber quem está aqui. Quatro perguntas, mão levantada, e eu vou anotar.</p>
+<p><strong>[Faço as quatro na ordem, anotando a contagem]</strong></p>
+<p>Quem já cursou Aprendizagem de Máquina ou Aprendizagem Profunda? … Quem já chamou um LLM por API, escrevendo código? … Quem já treinou ou ajustou um modelo, de qualquer tamanho? … E quem já colocou alguma coisa em produção, com usuário de verdade do outro lado?</p>
+<p><strong>[Olho os números que anotei]</strong></p>
+<p>Isso muda decisões reais. Se a maioria não fez Aprendizagem de Máquina, os conceitos de perda e de gradiente ganham dois minutos extras quando aparecerem. Se muitos já chamaram API, o Lab 3 sobe o nível. Se ninguém pôs nada em produção, os slides de custo e de latência ganham peso, porque é onde a intuição falta.</p>
+<blockquote>
+<p>Ideia central: "Este curso não pressupõe Aprendizagem de Máquina. Onde ela for necessária, eu explico em duas frases no ponto em que aparece — não numa aula de revisão."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 3 · O mapa: sete camadas, e onde cada uma é construída · 00:08–00:12</summary><div class="prose"><p><strong>[Subo a pilha com o dedo, do rodapé ao topo, enquanto falo]</strong></p>
+<p>Sete camadas. Token e representação, Aulas 2 e 3, e vocês constroem no Lab 1. Atenção e o Transformer, Aulas 5 a 8, Lab 2 — e é no Lab 2 que vocês escrevem a atenção causal à mão. Escala e decodificação, Aulas 10 a 12, Lab 3. Adaptação e alinhamento, 13 a 16, Lab 4. Recuperação, 18 e 19, Lab 5. Ferramentas e agentes, 21 a 26, Labs 6 e 7. Avaliação, Aula 27, Lab 8.</p>
+<p>Agora a propriedade que eu quero que vocês levem daqui:</p>
+<blockquote>
+<p>Ideia central: "Isto não é uma lista de tópicos da moda. É uma pilha — cada camada só faz sentido porque a de baixo existe."</p>
+</blockquote>
+<p>E tem uma consequência prática nisso. O Lab 8, o último, mede exatamente as camadas que os Labs 1 a 7 construíram. Não é um laboratório a mais no fim: é onde tudo o que veio antes ganha número.</p>
+<hr /></div></details><details><summary>Slide 4 · O que este curso não faz · 00:12–00:15</summary><div class="prose"><p>Agora a parte que quase nenhuma primeira aula tem, e que eu acho a mais importante para vocês confiarem no resto: o que este curso <strong>não</strong> faz.</p>
+<p>Pré-treino de verdade em escala: não. O Lab 2 é um mini-GPT num corpus de brinquedo. Vocês vão fazer a conta de um treino de fronteira na Aula 12, e vão entender o orçamento — mas ninguém aqui vai treinar um modelo grande.</p>
+<p>RLHF completo, com modelo de recompensa treinado: não. As Aulas 15 e 16 param na formulação e no DPO.</p>
+<p>Serving em produção, com batching contínuo e autoescala: não.</p>
+<p>Multimodalidade com as mãos: não. É fronteira na Aula 29.</p>
+<p>Segurança adversarial ofensiva, além do que a Aula 26 introduz: não.</p>
+<blockquote>
+<p>Ideia central: "Confundir 'vimos em aula' com 'sei fazer em produção' é a distância exata desta lista."</p>
+</blockquote>
+<p><strong>[Aponto o cartão da Eletiva 1]</strong></p>
+<p>E sobre a outra eletiva: quem cursou ou vai cursar Inteligência Artificial, Aprendizagem Profunda e IA Generativa encontra lá CNNs, GANs e visão computacional, que aqui não aparecem. As duas não se sobrepõem. Podem ser cursadas em qualquer ordem.</p>
+<hr /></div></details><details><summary>Slide 5 · Como vocês são avaliados · 00:15–00:19</summary><div class="prose"><p><strong>[Projeto as duas colunas]</strong></p>
+<p>Média final é a média simples de duas avaliações. Cada uma tem quarenta por cento de prática e sessenta por cento de avaliação individual.</p>
+<p>AV1, que cobre as Aulas 1 a 17: quarenta por cento são os Labs 1 a 4 mais participação, e sessenta por cento é a prova individual escrita — sem consulta e sem IA.</p>
+<p>AV2, Aulas 18 a 30: quarenta por cento são os Labs 5 a 8 mais as duas entregas parciais do projeto, e sessenta por cento é o projeto final — sistema, relatório e defesa oral.</p>
+<p><strong>[Aponto a linha do tempo do projeto]</strong></p>
+<p>Três datas para anotarem agora. Proposta do projeto: vinte e sete de outubro. Checkpoint: dez de novembro. Entrega final e apresentação: primeiro de dezembro.</p>
+<blockquote>
+<p>Ideia central: "O projeto vale mais que a prova, e ele começa na semana nove — não na última."</p>
+</blockquote>
+<p>E duas regras institucionais que valem desde hoje. Trabalho entregue fora do prazo tem nota inicial oito. E falta acima de vinte e cinco por cento da carga reprova, independentemente das notas.</p>
+<hr /></div></details><details><summary>Slide 6 · A prova, em números · 00:19–00:24</summary><div class="prose"><p>Este é o slide mais importante do que eu vou dizer hoje.</p>
+<p><strong>[Projeto as quatro barras]</strong></p>
+<p>A prova da Aula 17 tem cem pontos, e eles estão distribuídos assim. Quarenta e dois pontos de diagnóstico e interpretação: eu dou um sintoma, ou uma tabela de resultados, e vocês identificam a causa — ou dizem o que aqueles dados <strong>não</strong> permitem concluir. Quarenta pontos de justificativa de escolha: eu dou um cenário com restrição real de memória, de orçamento ou de latência, e vocês defendem uma decisão técnica com argumento. Oito pontos de conceito aplicado. E dez pontos de derivação.</p>
+<p><strong>[Aponto a soma]</strong></p>
+<p>Oitenta e dois dos cem pontos são de ler comportamento e defender decisão.</p>
+<p>E agora a consequência, que muda como vocês estudam:</p>
+<blockquote>
+<p>Ideia central: "Decorar derivações rende dez pontos. Entender o que cada derivação autoriza a afirmar rende os outros quarenta."</p>
+</blockquote>
+<p>Por quê? Porque uma defesa de escolha de arquitetura que não invoca o fundamento correto <strong>não é uma justificativa suficiente</strong>. Se eu peço para vocês escolherem entre dois paralelismos e vocês respondem "usaria o de dados" sem a conta que mostra que os estados não cabem numa GPU, isso não fecha a questão.</p>
+<p>Última coisa: as questões de diagnóstico e de justificativa <strong>aceitam hipóteses diferentes da minha</strong>, desde que fundamentadas. O gabarito declara onde isso vale. Um sintoma real quase sempre tem mais de uma causa plausível, e eu não vou penalizar quem raciocinou certo e chegou a outra hipótese defensável.</p>
+<p><strong>[Fico em silêncio por um minuto inteiro, com o slide na tela]</strong></p>
+<hr /></div></details><details><summary>Slide 7 · Os materiais, e a divisão que organiza o semestre · 00:24–00:28</summary><div class="prose"><p><strong>[Abro um deck de verdade — o da Aula 6 — no projetor]</strong></p>
+<p>Cada aula entrega um material com duas partes, e entender essa divisão muda como vocês estudam.</p>
+<p>A Parte 1 é o <strong>fluxo da aula</strong>. Ela abre por um problema real e por um comportamento que se observa. Exemplos do que vocês vão ver: um modelo que treina bem e gera texto sem sentido nenhum. Um texto que custa trinta e três por cento mais em português do que em inglês. Um modelo maior que fica pior. Quando o fundamento matemático é necessário para entender aquele comportamento, ele aparece com a fórmula na tela, lida em português, e com a justificativa de por que ela importa — mais um ponteiro para onde ela é derivada.</p>
+<p><strong>[Rolo o deck até a Parte 2 e abro o item A.2]</strong></p>
+<p>E esta é a Parte 2, o <strong>apêndice</strong>. Olhem o que é: uma página de derivação escrita. Notação declarada, premissas explícitas, nenhuma etapa pulada, casos-limite trabalhados. Isto <strong>não</strong> é projetado em aula — é distribuído com o deck, e existe para ser estudado e consultado.</p>
+<p>Os trinta decks do curso somam cento e onze itens desses.</p>
+<blockquote>
+<p>Ideia central: "A matemática não foi tirada deste curso. Ela foi escrita num lugar onde caberia escrevê-la inteira — o que um quadro de sala de aula não permite."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 8 · Os outros materiais · 00:28–00:31</summary><div class="prose"><p>Quatro coisas mais, e o que fazer com cada uma.</p>
+<p>A <strong>apostila</strong>, cerca de trezentas páginas. É a versão escrita e mais lenta do curso, com exemplos resolvidos até o fim e exercícios com gabarito comentado — o gabarito explica o raciocínio, não só o resultado. Cada capítulo abre pela aplicação e reúne o desenvolvimento formal numa seção ao final, na mesma lógica dos decks.</p>
+<p>Os <strong>notebooks</strong> dos oito laboratórios, com solução de referência liberada depois do prazo de cada checkpoint.</p>
+<p>Os <strong>papers</strong>, um por aula, e cada um vem com uma <strong>pergunta dirigida</strong>. A pergunta é o que transforma a leitura num trabalho de quarenta minutos em vez de quatro horas.</p>
+<p>E os <strong>formulários quinzenais</strong>: seis no semestre, anônimos, e não valem nota — nem para mais, nem para menos. Servem para ajustar o curso enquanto ele está acontecendo. Na aula seguinte a cada um, eu digo o que vai mudar por causa das respostas. E digo também o que <strong>não</strong> vai mudar, e por quê.</p>
+<blockquote>
+<p>Ideia central: "Sobre os formulários: 'não abri o apêndice' é uma resposta legítima, e é a que eu mais preciso saber."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 9 · Política de uso de IA · 00:31–00:35</summary><div class="prose"><p>Sem eufemismo, porque vocês vão perguntar de qualquer jeito.</p>
+<p>Uso de IA nos labs e no projeto é <strong>permitido e incentivado</strong>. É o objeto desta disciplina; seria estranho proibir.</p>
+<p>A condição é uma: cada entrega inclui uma <strong>declaração de uso</strong>. Qual ferramenta, o que vocês pediram, o que vocês entenderam da resposta, a avaliação crítica que fizeram do resultado, e as limitações que vocês viram.</p>
+<p>E a responsabilidade é de vocês por <strong>todo</strong> artefato que incorporarem, independentemente da origem. Qualquer entrega pode virar defesa oral, e o domínio que vocês demonstrarem sobre o que entregaram integra a nota.</p>
+<p>Vedado: usar IA na prova; fabricar dados ou resultados; treinar com dados institucionais sem aprovação. <strong>A prova é individual e sem IA.</strong></p>
+<blockquote>
+<p>Ideia central: "A régua é uma só: você tem de conseguir defender o que entrega. Como você chegou lá é problema seu. Entender o que entregou é obrigação sua."</p>
+</blockquote>
+<p>E tem uma coisa que sai disso: o bloco de uso de IA dos formulários alimenta um <strong>diário de IA</strong> da disciplina — um registro coletivo e anônimo de usos, acertos e falhas ao longo do semestre. Os melhores casos de "a IA errou e eu percebi" voltam como exemplo de aula.</p>
+<hr /></div></details><details><summary>Slide 10 · [Transição] Agora o ambiente · 00:35–00:37</summary><div class="prose"><p><strong>[Projeto o checklist de quatro itens]</strong></p>
+<p>Metade da sessão acabou. Os próximos trinta minutos são de mão na massa, e ninguém sai desta sala sem quatro coisas funcionando.</p>
+<p>Colab com GPU habilitada — sem isso os Labs 2 e 4 não rodam. Conta no Hugging Face com token de leitura — Labs 1, 4 e 5. Uma chave de API de provedor com camada gratuita — Labs 3, 6 e 7. E o repositório da disciplina criado, que é onde tudo é entregue.</p>
+<p>E a razão de fazer isso hoje, e não na Aula 4:</p>
+<blockquote>
+<p>Ideia central: "Download e permissão são o que mais atrasa laboratório. Trinta minutos hoje valem quatro laboratórios."</p>
+</blockquote>
+<p>Quem chega ao Lab 1 sem ambiente perde os primeiros quinze minutos. Quem chega ao Lab 2 sem GPU habilitada perde a aula inteira.</p>
+<hr /></div></details><details><summary>Slide 11 · Como estudar nesta disciplina · 00:37–00:40</summary><div class="prose"><p>Antes de vocês abrirem o Colab, três minutos sobre como usar o material. É a única dica de estudo que eu vou dar no semestre.</p>
+<p>Quatro momentos.</p>
+<p><strong>Antes da aula</strong>, vinte minutos: os objetivos e as caixas de conceito da seção da apostila. Vocês entram na aula com o vocabulário pronto e usam o tempo de sala para perguntar — que é justamente o que não dá para fazer sozinho.</p>
+<p><strong>Depois da aula</strong>: a seção inteira, o exemplo resolvido refeito no papel, e os exercícios do capítulo que já estiverem cobertos. O gabarito é para conferir, não para ler antes.</p>
+<p><strong>Antes do laboratório</strong>: o roteiro de prática. Quem chega sabendo o que cada checkpoint pede gasta o tempo de sala programando, não lendo enunciado.</p>
+<p><strong>Antes da prova</strong>: os objetivos de todas as seções, as caixas de erro comum, os exercícios refeitos sem o gabarito ao lado — e as seções de fundamento. Não para reproduzir derivação de memória, e sim para saber qual resultado sustenta cada decisão que a prova pedir para vocês defenderem.</p>
+<blockquote>
+<p>Ideia central: "Vinte minutos antes da aula rendem mais que duas horas depois. Se eu pudesse dar uma dica só, era essa."</p>
+</blockquote>
+<hr /></div></details><details><summary>Slide 12 · [Referência] O calendário completo · projetado durante o setup</summary><div class="prose"><p><strong>[Projeto durante o trabalho prático, sem falar sobre]</strong></p>
+<hr /></div></details><details><summary>Slide 13 · [Referência] Os oito laboratórios e o que sai de cada um · projetado durante o setup</summary><div class="prose"><p><strong>[Alterno com o slide 12 durante o trabalho prático]</strong></p>
+<hr /></div></details><details><summary>Slide 14 · [Referência] Fechamento e o que levar · 00:57–01:00</summary><div class="prose"><p>A fala deste slide está no <strong>Encerramento</strong>, ao final deste roteiro — ele é o checklist conferido item por item em voz alta, mais o recado sobre o documento de uma página e o gancho da Aula 1.</p>
+<hr /></div></details><details><summary>Parte 3 — Setup de ambiente</summary><div class="prose"><p>Trinta minutos, e é a metade mais importante da sessão. Os slides 12 a 14 ficam projetados alternadamente; a turma consulta enquanto trabalha.</p>
+<p><strong>A regra que eu digo antes de começar:</strong> quem terminar um item ajuda o vizinho. Setup é a única parte deste curso em que copiar a solução do colega é exatamente o comportamento certo.</p>
+<p><strong>1.</strong> <strong>[Lanço o item 1 — Colab com GPU, ~8 min]</strong> Abrir o Colab, criar um notebook novo, e o passo que todo mundo esquece: <code>Ambiente de execução → Alterar o tipo de ambiente de execução → T4 GPU</code>. Depois, rodar uma célula só, com <code>!nvidia-smi</code>, e confirmar que a placa aparece.</p>
+<p><strong>2.</strong> <strong>[Lanço o item 2 — Hugging Face com token, ~7 min]</strong> Criar conta, ir em <code>Settings → Access Tokens</code>, gerar um token de <strong>leitura</strong> — não de escrita — e guardar. Depois, testar no Colab com <code>from huggingface_hub import login</code>.</p>
+<p><strong>3.</strong> <strong>[Lanço o item 3 — chave de API, ~8 min]</strong> Escolher um provedor com camada gratuita, criar a chave, e fazer <strong>uma</strong> chamada de teste — a mais simples possível, pedindo uma frase.</p>
+<p><strong>4.</strong> <strong>[Lanço o item 4 — repositório, ~5 min]</strong> Criar o repositório da disciplina, com a estrutura mínima: uma pasta por laboratório, um <code>README.md</code> e um <code>.gitignore</code> que <strong>exclua arquivos de chave</strong>. Entregar o link no canal da turma.</p>
+<hr /></div></details><details><summary>Parte 4 — Se perguntarem</summary><div class="prose"><p>Esta sessão não tem apêndice, então não há derivação para puxar. O que a turma puxa numa recepção é outra coisa — e as perguntas são previsíveis o suficiente para valer resposta preparada. As seis abaixo aparecem em quase toda primeira aula.</p>
+<p><strong>"A prova é difícil?"</strong>
+A pergunta real por baixo é "dá para passar decorando?". <strong>Resposta:</strong> ela não é difícil de decorar — ela é impossível de decorar, porque oitenta e dois dos cem pontos partem de um caso que vocês não viram antes. Quem acompanha os labs e entende o que cada número mede vai bem. Quem decora derivação na véspera pega dez pontos.</p>
+<p><strong>"Preciso saber Aprendizagem de Máquina?"</strong>
+<strong>Resposta:</strong> não. Onde a disciplina precisa de perda, gradiente ou sobreajuste, eu explico em duas ou três frases no ponto em que aparece. O que eu pressuponho é Python, Álgebra Linear e Probabilidade — e Álgebra Linear é a que mais aparece, porque atenção é multiplicação de matriz.</p>
+<p><strong>"Dá para fazer o projeto sozinho?"</strong>
+<strong>Resposta:</strong> o projeto é em equipe de três a quatro, e a razão é o escopo — sistema com avaliação própria não sai em duas semanas de uma pessoa. Se houver um caso específico, falamos depois; mas a resposta padrão é não.</p>
+<p><strong>"Preciso de GPU / preciso pagar alguma coisa?"</strong>
+<strong>Resposta:</strong> não, e isso é decisão de projeto do curso, não sorte. Todos os oito labs rodam no Colab gratuito e em provedores com camada gratuita. O Lab 4 treina um adaptador numa T4 grátis, e o número que faz isso caber está no apêndice daquela aula. Se algum dia você <strong>quiser</strong> pagar por um modelo maior, é escolha sua e não muda nota.</p>
+<p><strong>"Quanto tempo por semana isso vai me custar?"</strong>
+<strong>Resposta honesta:</strong> quatro horas de aula, mais os vinte minutos antes de cada aula que eu recomendei, mais o lab que sobra da semana — em geral uma a duas horas. Na segunda metade, o projeto entra e sobe. As semanas dos marcos (27/10, 10/11, 01/12) são as pesadas, e elas estão no calendário desde hoje justamente para vocês planejarem.</p>
+<p><strong>"Vale a pena, se eu não quero pesquisar nisso?"</strong>
+A melhor pergunta que aparece nesta sessão. <strong>Resposta:</strong> o que este curso treina é provar com número que um sistema funciona — e essa é a parte que quase ninguém sabe fazer, dentro ou fora de IA. O repositório que vocês entregam em dezembro, com a avaliação por camada no topo do README, é portfólio. A parte dele que chama atenção de quem contrata não é o sistema; é a existência da medição.</p>
+<hr /></div></details><details><summary>Encerramento · 00:57–01:00</summary><div class="prose"><p><strong>[Projeto o checklist do slide 14 e vou item por item, em voz alta, com a turma respondendo]</strong></p>
+<p>Quatro coisas para sair daqui com. Ambiente rodando: Colab com GPU, Hugging Face com token, chave de API testada. Repositório criado e link entregue. O documento de uma página do contrato, salvo. E a apostila baixada, com os objetivos da seção 1 lidos antes de terça — são vinte minutos.</p>
+<p><strong>[Sobre o documento]</strong></p>
+<p>Uma coisa sobre esse terceiro item, e ela é importante. Esta sessão de hoje é extra-classe e não é obrigatória. Quem não veio vai receber o mesmo documento no canal da turma, e é <strong>nele</strong> que o contrato está por escrito — a avaliação, a composição da prova, a política de IA. A Aula 1 não vai repetir isso, porque o tempo dela vai para conteúdo.</p>
+<blockquote>
+<p>Ideia central: "Esse documento é o único registro escrito do contrato. Salvem, e leiam antes de quinta."</p>
+</blockquote>
+<p>Terça, Aula 1: panorama de LLMs e métricas de processamento de linguagem natural. E eu vou abrir com uma pergunta, para vocês pensarem até lá:</p>
+<blockquote>
+<p>Ideia central: "Um detector de fraude com noventa e nove por cento de acurácia, que nunca achou uma fraude na vida. Como isso é possível — e o que ele deveria estar medindo?"</p>
+</blockquote>
+<p>Quem não conseguiu subir alguma coisa fica dez minutos comigo agora.</p>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 0 (recepção, extra-classe) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Aula 0 — Recepção: o mapa do curso, os materiais e o ambiente</h1>
+<h2>Slide 1 · Abertura: o que vocês vão ter construído em dezembro · 00:00–00:04</h2>
+<p><strong>[Projeto a cena da última aula do semestre antes de dizer bom dia]</strong></p>
+<p>Bom dia. Eu vou começar pelo fim.</p>
+<p>Primeiro de dezembro. Cada equipe desta sala vai ter doze minutos para apresentar um sistema que construiu. Com demo ao vivo — não vídeo gravado, não captura de tela: o sistema rodando, na frente de todos, num caso difícil que a própria equipe escolheu do conjunto de teste dela.</p>
+<p><strong>[Aponto a tabela à direita]</strong></p>
+<p>E ao lado da demo, isto: uma tabela com uma linha por camada do sistema, cada linha com o número que mede aquela camada e com o <code>n</code> daquela medição. Não uma nota global. Uma linha por camada.</p>
+<p>E aí eu vou fazer uma pergunta, para uma camada que eu escolho:</p>
+<blockquote>
+<p>Ideia central: "Por que essa camada existe no sistema, e que número prova que ela funciona?"</p>
+</blockquote>
+<p>Quem não conseguir responder isso perde ponto. E eu já sei qual camada costuma travar: é aquela em que a equipe copiou código de algum lugar e nunca entendeu.</p>
+<p>Esta sessão de hoje é sobre como vocês chegam lá. O conteúdo em si começa na terça.</p>
+<hr />
+<h2>Slide 2 · Quem está nesta sala · 00:04–00:08</h2>
+<p>Antes de eu falar do curso, eu preciso saber quem está aqui. Quatro perguntas, mão levantada, e eu vou anotar.</p>
+<p><strong>[Faço as quatro na ordem, anotando a contagem]</strong></p>
+<p>Quem já cursou Aprendizagem de Máquina ou Aprendizagem Profunda? … Quem já chamou um LLM por API, escrevendo código? … Quem já treinou ou ajustou um modelo, de qualquer tamanho? … E quem já colocou alguma coisa em produção, com usuário de verdade do outro lado?</p>
+<p><strong>[Olho os números que anotei]</strong></p>
+<p>Isso muda decisões reais. Se a maioria não fez Aprendizagem de Máquina, os conceitos de perda e de gradiente ganham dois minutos extras quando aparecerem. Se muitos já chamaram API, o Lab 3 sobe o nível. Se ninguém pôs nada em produção, os slides de custo e de latência ganham peso, porque é onde a intuição falta.</p>
+<blockquote>
+<p>Ideia central: "Este curso não pressupõe Aprendizagem de Máquina. Onde ela for necessária, eu explico em duas frases no ponto em que aparece — não numa aula de revisão."</p>
+</blockquote>
+<hr />
+<h2>Slide 3 · O mapa: sete camadas, e onde cada uma é construída · 00:08–00:12</h2>
+<p><strong>[Subo a pilha com o dedo, do rodapé ao topo, enquanto falo]</strong></p>
+<p>Sete camadas. Token e representação, Aulas 2 e 3, e vocês constroem no Lab 1. Atenção e o Transformer, Aulas 5 a 8, Lab 2 — e é no Lab 2 que vocês escrevem a atenção causal à mão. Escala e decodificação, Aulas 10 a 12, Lab 3. Adaptação e alinhamento, 13 a 16, Lab 4. Recuperação, 18 e 19, Lab 5. Ferramentas e agentes, 21 a 26, Labs 6 e 7. Avaliação, Aula 27, Lab 8.</p>
+<p>Agora a propriedade que eu quero que vocês levem daqui:</p>
+<blockquote>
+<p>Ideia central: "Isto não é uma lista de tópicos da moda. É uma pilha — cada camada só faz sentido porque a de baixo existe."</p>
+</blockquote>
+<p>E tem uma consequência prática nisso. O Lab 8, o último, mede exatamente as camadas que os Labs 1 a 7 construíram. Não é um laboratório a mais no fim: é onde tudo o que veio antes ganha número.</p>
+<hr />
+<h2>Slide 4 · O que este curso não faz · 00:12–00:15</h2>
+<p>Agora a parte que quase nenhuma primeira aula tem, e que eu acho a mais importante para vocês confiarem no resto: o que este curso <strong>não</strong> faz.</p>
+<p>Pré-treino de verdade em escala: não. O Lab 2 é um mini-GPT num corpus de brinquedo. Vocês vão fazer a conta de um treino de fronteira na Aula 12, e vão entender o orçamento — mas ninguém aqui vai treinar um modelo grande.</p>
+<p>RLHF completo, com modelo de recompensa treinado: não. As Aulas 15 e 16 param na formulação e no DPO.</p>
+<p>Serving em produção, com batching contínuo e autoescala: não.</p>
+<p>Multimodalidade com as mãos: não. É fronteira na Aula 29.</p>
+<p>Segurança adversarial ofensiva, além do que a Aula 26 introduz: não.</p>
+<blockquote>
+<p>Ideia central: "Confundir 'vimos em aula' com 'sei fazer em produção' é a distância exata desta lista."</p>
+</blockquote>
+<p><strong>[Aponto o cartão da Eletiva 1]</strong></p>
+<p>E sobre a outra eletiva: quem cursou ou vai cursar Inteligência Artificial, Aprendizagem Profunda e IA Generativa encontra lá CNNs, GANs e visão computacional, que aqui não aparecem. As duas não se sobrepõem. Podem ser cursadas em qualquer ordem.</p>
+<hr />
+<h2>Slide 5 · Como vocês são avaliados · 00:15–00:19</h2>
+<p><strong>[Projeto as duas colunas]</strong></p>
+<p>Média final é a média simples de duas avaliações. Cada uma tem quarenta por cento de prática e sessenta por cento de avaliação individual.</p>
+<p>AV1, que cobre as Aulas 1 a 17: quarenta por cento são os Labs 1 a 4 mais participação, e sessenta por cento é a prova individual escrita — sem consulta e sem IA.</p>
+<p>AV2, Aulas 18 a 30: quarenta por cento são os Labs 5 a 8 mais as duas entregas parciais do projeto, e sessenta por cento é o projeto final — sistema, relatório e defesa oral.</p>
+<p><strong>[Aponto a linha do tempo do projeto]</strong></p>
+<p>Três datas para anotarem agora. Proposta do projeto: vinte e sete de outubro. Checkpoint: dez de novembro. Entrega final e apresentação: primeiro de dezembro.</p>
+<blockquote>
+<p>Ideia central: "O projeto vale mais que a prova, e ele começa na semana nove — não na última."</p>
+</blockquote>
+<p>E duas regras institucionais que valem desde hoje. Trabalho entregue fora do prazo tem nota inicial oito. E falta acima de vinte e cinco por cento da carga reprova, independentemente das notas.</p>
+<hr />
+<h2>Slide 6 · A prova, em números · 00:19–00:24</h2>
+<p>Este é o slide mais importante do que eu vou dizer hoje.</p>
+<p><strong>[Projeto as quatro barras]</strong></p>
+<p>A prova da Aula 17 tem cem pontos, e eles estão distribuídos assim. Quarenta e dois pontos de diagnóstico e interpretação: eu dou um sintoma, ou uma tabela de resultados, e vocês identificam a causa — ou dizem o que aqueles dados <strong>não</strong> permitem concluir. Quarenta pontos de justificativa de escolha: eu dou um cenário com restrição real de memória, de orçamento ou de latência, e vocês defendem uma decisão técnica com argumento. Oito pontos de conceito aplicado. E dez pontos de derivação.</p>
+<p><strong>[Aponto a soma]</strong></p>
+<p>Oitenta e dois dos cem pontos são de ler comportamento e defender decisão.</p>
+<p>E agora a consequência, que muda como vocês estudam:</p>
+<blockquote>
+<p>Ideia central: "Decorar derivações rende dez pontos. Entender o que cada derivação autoriza a afirmar rende os outros quarenta."</p>
+</blockquote>
+<p>Por quê? Porque uma defesa de escolha de arquitetura que não invoca o fundamento correto <strong>não é uma justificativa suficiente</strong>. Se eu peço para vocês escolherem entre dois paralelismos e vocês respondem "usaria o de dados" sem a conta que mostra que os estados não cabem numa GPU, isso não fecha a questão.</p>
+<p>Última coisa: as questões de diagnóstico e de justificativa <strong>aceitam hipóteses diferentes da minha</strong>, desde que fundamentadas. O gabarito declara onde isso vale. Um sintoma real quase sempre tem mais de uma causa plausível, e eu não vou penalizar quem raciocinou certo e chegou a outra hipótese defensável.</p>
+<p><strong>[Fico em silêncio por um minuto inteiro, com o slide na tela]</strong></p>
+<hr />
+<h2>Slide 7 · Os materiais, e a divisão que organiza o semestre · 00:24–00:28</h2>
+<p><strong>[Abro um deck de verdade — o da Aula 6 — no projetor]</strong></p>
+<p>Cada aula entrega um material com duas partes, e entender essa divisão muda como vocês estudam.</p>
+<p>A Parte 1 é o <strong>fluxo da aula</strong>. Ela abre por um problema real e por um comportamento que se observa. Exemplos do que vocês vão ver: um modelo que treina bem e gera texto sem sentido nenhum. Um texto que custa trinta e três por cento mais em português do que em inglês. Um modelo maior que fica pior. Quando o fundamento matemático é necessário para entender aquele comportamento, ele aparece com a fórmula na tela, lida em português, e com a justificativa de por que ela importa — mais um ponteiro para onde ela é derivada.</p>
+<p><strong>[Rolo o deck até a Parte 2 e abro o item A.2]</strong></p>
+<p>E esta é a Parte 2, o <strong>apêndice</strong>. Olhem o que é: uma página de derivação escrita. Notação declarada, premissas explícitas, nenhuma etapa pulada, casos-limite trabalhados. Isto <strong>não</strong> é projetado em aula — é distribuído com o deck, e existe para ser estudado e consultado.</p>
+<p>Os trinta decks do curso somam cento e onze itens desses.</p>
+<blockquote>
+<p>Ideia central: "A matemática não foi tirada deste curso. Ela foi escrita num lugar onde caberia escrevê-la inteira — o que um quadro de sala de aula não permite."</p>
+</blockquote>
+<hr />
+<h2>Slide 8 · Os outros materiais · 00:28–00:31</h2>
+<p>Quatro coisas mais, e o que fazer com cada uma.</p>
+<p>A <strong>apostila</strong>, cerca de trezentas páginas. É a versão escrita e mais lenta do curso, com exemplos resolvidos até o fim e exercícios com gabarito comentado — o gabarito explica o raciocínio, não só o resultado. Cada capítulo abre pela aplicação e reúne o desenvolvimento formal numa seção ao final, na mesma lógica dos decks.</p>
+<p>Os <strong>notebooks</strong> dos oito laboratórios, com solução de referência liberada depois do prazo de cada checkpoint.</p>
+<p>Os <strong>papers</strong>, um por aula, e cada um vem com uma <strong>pergunta dirigida</strong>. A pergunta é o que transforma a leitura num trabalho de quarenta minutos em vez de quatro horas.</p>
+<p>E os <strong>formulários quinzenais</strong>: seis no semestre, anônimos, e não valem nota — nem para mais, nem para menos. Servem para ajustar o curso enquanto ele está acontecendo. Na aula seguinte a cada um, eu digo o que vai mudar por causa das respostas. E digo também o que <strong>não</strong> vai mudar, e por quê.</p>
+<blockquote>
+<p>Ideia central: "Sobre os formulários: 'não abri o apêndice' é uma resposta legítima, e é a que eu mais preciso saber."</p>
+</blockquote>
+<hr />
+<h2>Slide 9 · Política de uso de IA · 00:31–00:35</h2>
+<p>Sem eufemismo, porque vocês vão perguntar de qualquer jeito.</p>
+<p>Uso de IA nos labs e no projeto é <strong>permitido e incentivado</strong>. É o objeto desta disciplina; seria estranho proibir.</p>
+<p>A condição é uma: cada entrega inclui uma <strong>declaração de uso</strong>. Qual ferramenta, o que vocês pediram, o que vocês entenderam da resposta, a avaliação crítica que fizeram do resultado, e as limitações que vocês viram.</p>
+<p>E a responsabilidade é de vocês por <strong>todo</strong> artefato que incorporarem, independentemente da origem. Qualquer entrega pode virar defesa oral, e o domínio que vocês demonstrarem sobre o que entregaram integra a nota.</p>
+<p>Vedado: usar IA na prova; fabricar dados ou resultados; treinar com dados institucionais sem aprovação. <strong>A prova é individual e sem IA.</strong></p>
+<blockquote>
+<p>Ideia central: "A régua é uma só: você tem de conseguir defender o que entrega. Como você chegou lá é problema seu. Entender o que entregou é obrigação sua."</p>
+</blockquote>
+<p>E tem uma coisa que sai disso: o bloco de uso de IA dos formulários alimenta um <strong>diário de IA</strong> da disciplina — um registro coletivo e anônimo de usos, acertos e falhas ao longo do semestre. Os melhores casos de "a IA errou e eu percebi" voltam como exemplo de aula.</p>
+<hr />
+<h2>Slide 10 · [Transição] Agora o ambiente · 00:35–00:37</h2>
+<p><strong>[Projeto o checklist de quatro itens]</strong></p>
+<p>Metade da sessão acabou. Os próximos trinta minutos são de mão na massa, e ninguém sai desta sala sem quatro coisas funcionando.</p>
+<p>Colab com GPU habilitada — sem isso os Labs 2 e 4 não rodam. Conta no Hugging Face com token de leitura — Labs 1, 4 e 5. Uma chave de API de provedor com camada gratuita — Labs 3, 6 e 7. E o repositório da disciplina criado, que é onde tudo é entregue.</p>
+<p>E a razão de fazer isso hoje, e não na Aula 4:</p>
+<blockquote>
+<p>Ideia central: "Download e permissão são o que mais atrasa laboratório. Trinta minutos hoje valem quatro laboratórios."</p>
+</blockquote>
+<p>Quem chega ao Lab 1 sem ambiente perde os primeiros quinze minutos. Quem chega ao Lab 2 sem GPU habilitada perde a aula inteira.</p>
+<hr />
+<h2>Slide 11 · Como estudar nesta disciplina · 00:37–00:40</h2>
+<p>Antes de vocês abrirem o Colab, três minutos sobre como usar o material. É a única dica de estudo que eu vou dar no semestre.</p>
+<p>Quatro momentos.</p>
+<p><strong>Antes da aula</strong>, vinte minutos: os objetivos e as caixas de conceito da seção da apostila. Vocês entram na aula com o vocabulário pronto e usam o tempo de sala para perguntar — que é justamente o que não dá para fazer sozinho.</p>
+<p><strong>Depois da aula</strong>: a seção inteira, o exemplo resolvido refeito no papel, e os exercícios do capítulo que já estiverem cobertos. O gabarito é para conferir, não para ler antes.</p>
+<p><strong>Antes do laboratório</strong>: o roteiro de prática. Quem chega sabendo o que cada checkpoint pede gasta o tempo de sala programando, não lendo enunciado.</p>
+<p><strong>Antes da prova</strong>: os objetivos de todas as seções, as caixas de erro comum, os exercícios refeitos sem o gabarito ao lado — e as seções de fundamento. Não para reproduzir derivação de memória, e sim para saber qual resultado sustenta cada decisão que a prova pedir para vocês defenderem.</p>
+<blockquote>
+<p>Ideia central: "Vinte minutos antes da aula rendem mais que duas horas depois. Se eu pudesse dar uma dica só, era essa."</p>
+</blockquote>
+<hr />
+<h2>Slide 12 · [Referência] O calendário completo · projetado durante o setup</h2>
+<p><strong>[Projeto durante o trabalho prático, sem falar sobre]</strong></p>
+<hr />
+<h2>Slide 13 · [Referência] Os oito laboratórios e o que sai de cada um · projetado durante o setup</h2>
+<p><strong>[Alterno com o slide 12 durante o trabalho prático]</strong></p>
+<hr />
+<h2>Slide 14 · [Referência] Fechamento e o que levar · 00:57–01:00</h2>
+<p>A fala deste slide está no <strong>Encerramento</strong>, ao final deste roteiro — ele é o checklist conferido item por item em voz alta, mais o recado sobre o documento de uma página e o gancho da Aula 1.</p>
+<hr />
+<h2>Parte 3 — Setup de ambiente</h2>
+<p>Trinta minutos, e é a metade mais importante da sessão. Os slides 12 a 14 ficam projetados alternadamente; a turma consulta enquanto trabalha.</p>
+<p><strong>A regra que eu digo antes de começar:</strong> quem terminar um item ajuda o vizinho. Setup é a única parte deste curso em que copiar a solução do colega é exatamente o comportamento certo.</p>
+<p><strong>1.</strong> <strong>[Lanço o item 1 — Colab com GPU, ~8 min]</strong> Abrir o Colab, criar um notebook novo, e o passo que todo mundo esquece: <code>Ambiente de execução → Alterar o tipo de ambiente de execução → T4 GPU</code>. Depois, rodar uma célula só, com <code>!nvidia-smi</code>, e confirmar que a placa aparece.</p>
+<p><strong>2.</strong> <strong>[Lanço o item 2 — Hugging Face com token, ~7 min]</strong> Criar conta, ir em <code>Settings → Access Tokens</code>, gerar um token de <strong>leitura</strong> — não de escrita — e guardar. Depois, testar no Colab com <code>from huggingface_hub import login</code>.</p>
+<p><strong>3.</strong> <strong>[Lanço o item 3 — chave de API, ~8 min]</strong> Escolher um provedor com camada gratuita, criar a chave, e fazer <strong>uma</strong> chamada de teste — a mais simples possível, pedindo uma frase.</p>
+<p><strong>4.</strong> <strong>[Lanço o item 4 — repositório, ~5 min]</strong> Criar o repositório da disciplina, com a estrutura mínima: uma pasta por laboratório, um <code>README.md</code> e um <code>.gitignore</code> que <strong>exclua arquivos de chave</strong>. Entregar o link no canal da turma.</p>
+<hr />
+<h2>Parte 4 — Se perguntarem</h2>
+<p>Esta sessão não tem apêndice, então não há derivação para puxar. O que a turma puxa numa recepção é outra coisa — e as perguntas são previsíveis o suficiente para valer resposta preparada. As seis abaixo aparecem em quase toda primeira aula.</p>
+<p><strong>"A prova é difícil?"</strong>
+A pergunta real por baixo é "dá para passar decorando?". <strong>Resposta:</strong> ela não é difícil de decorar — ela é impossível de decorar, porque oitenta e dois dos cem pontos partem de um caso que vocês não viram antes. Quem acompanha os labs e entende o que cada número mede vai bem. Quem decora derivação na véspera pega dez pontos.</p>
+<p><strong>"Preciso saber Aprendizagem de Máquina?"</strong>
+<strong>Resposta:</strong> não. Onde a disciplina precisa de perda, gradiente ou sobreajuste, eu explico em duas ou três frases no ponto em que aparece. O que eu pressuponho é Python, Álgebra Linear e Probabilidade — e Álgebra Linear é a que mais aparece, porque atenção é multiplicação de matriz.</p>
+<p><strong>"Dá para fazer o projeto sozinho?"</strong>
+<strong>Resposta:</strong> o projeto é em equipe de três a quatro, e a razão é o escopo — sistema com avaliação própria não sai em duas semanas de uma pessoa. Se houver um caso específico, falamos depois; mas a resposta padrão é não.</p>
+<p><strong>"Preciso de GPU / preciso pagar alguma coisa?"</strong>
+<strong>Resposta:</strong> não, e isso é decisão de projeto do curso, não sorte. Todos os oito labs rodam no Colab gratuito e em provedores com camada gratuita. O Lab 4 treina um adaptador numa T4 grátis, e o número que faz isso caber está no apêndice daquela aula. Se algum dia você <strong>quiser</strong> pagar por um modelo maior, é escolha sua e não muda nota.</p>
+<p><strong>"Quanto tempo por semana isso vai me custar?"</strong>
+<strong>Resposta honesta:</strong> quatro horas de aula, mais os vinte minutos antes de cada aula que eu recomendei, mais o lab que sobra da semana — em geral uma a duas horas. Na segunda metade, o projeto entra e sobe. As semanas dos marcos (27/10, 10/11, 01/12) são as pesadas, e elas estão no calendário desde hoje justamente para vocês planejarem.</p>
+<p><strong>"Vale a pena, se eu não quero pesquisar nisso?"</strong>
+A melhor pergunta que aparece nesta sessão. <strong>Resposta:</strong> o que este curso treina é provar com número que um sistema funciona — e essa é a parte que quase ninguém sabe fazer, dentro ou fora de IA. O repositório que vocês entregam em dezembro, com a avaliação por camada no topo do README, é portfólio. A parte dele que chama atenção de quem contrata não é o sistema; é a existência da medição.</p>
+<hr />
+<h2>Encerramento · 00:57–01:00</h2>
+<p><strong>[Projeto o checklist do slide 14 e vou item por item, em voz alta, com a turma respondendo]</strong></p>
+<p>Quatro coisas para sair daqui com. Ambiente rodando: Colab com GPU, Hugging Face com token, chave de API testada. Repositório criado e link entregue. O documento de uma página do contrato, salvo. E a apostila baixada, com os objetivos da seção 1 lidos antes de terça — são vinte minutos.</p>
+<p><strong>[Sobre o documento]</strong></p>
+<p>Uma coisa sobre esse terceiro item, e ela é importante. Esta sessão de hoje é extra-classe e não é obrigatória. Quem não veio vai receber o mesmo documento no canal da turma, e é <strong>nele</strong> que o contrato está por escrito — a avaliação, a composição da prova, a política de IA. A Aula 1 não vai repetir isso, porque o tempo dela vai para conteúdo.</p>
+<blockquote>
+<p>Ideia central: "Esse documento é o único registro escrito do contrato. Salvem, e leiam antes de quinta."</p>
+</blockquote>
+<p>Terça, Aula 1: panorama de LLMs e métricas de processamento de linguagem natural. E eu vou abrir com uma pergunta, para vocês pensarem até lá:</p>
+<blockquote>
+<p>Ideia central: "Um detector de fraude com noventa e nove por cento de acurácia, que nunca achou uma fraude na vida. Como isso é possível — e o que ele deveria estar medindo?"</p>
+</blockquote>
+<p>Quem não conseguiu subir alguma coisa fica dez minutos comigo agora.</p>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 0 (recepção, extra-classe) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button" href="../aula-01/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>

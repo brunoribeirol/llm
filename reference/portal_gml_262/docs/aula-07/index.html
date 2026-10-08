@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Aulas, demonstrações interativas e materiais de Grandes Modelos de Linguagem.">
+<title>Transformer II: posição, normalização e o bloco moderno · GML 2026.2</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script defer src="../assets/site.js"></script>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']]}};</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+</head><body data-lesson="7">
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<header class="topbar"><a class="brand" href="../index.html"><span class="brand-icon">G</span> GML <span class="muted">2026.2</span></a><a href="../index.html">Todas as aulas ↗</a></header>
+<main id="main"><section class="lesson-hero"><p class="eyebrow">AULA 07 / 1 — Fundamentos: do texto ao Transformer</p><h1>Transformer II: posição, normalização e o bloco moderno</h1>
+<p class="lead">Explore o mecanismo, acompanhe o passo a passo e registre suas descobertas.</p></section>
+<nav class="section-nav" aria-label="Nesta aula"><a href="#demonstracao">Demonstração</a><a href="#objetivos">Objetivos</a><a href="#leitura">Passo a passo</a><a href="#materiais">Materiais</a><a href="#caderno">Meu caderno</a></nav>
+<section id="demonstracao"><div class="section-heading"><h2>Demonstração interativa</h2><a class="button secondary" href="demo.html" target="_blank" rel="noopener">Abrir em tela inteira ↗</a></div>
+<iframe title="Demonstração da aula 07" src="demo.html" loading="lazy" allowfullscreen></iframe></section>
+<section id="objetivos" class="panel"><p class="eyebrow">AO FINAL DESTA AULA</p><h2>O que você vai aprender</h2><ul class="objectives"><li><p><strong>Reconhecer</strong> o sintoma da invariância a permutação (<code>Attention(P X) = P · Attention(X)</code>) e <strong>explicar</strong> por que a máscara causal não resolve isso e por que no encoder o problema aparece puro.</p></li><li><p><strong>Distinguir</strong> as três estratégias de codificação posicional — senoidal, aprendida e RoPE — pelo ponto exato do cálculo em que cada uma injeta a posição, e <strong>prever</strong> o modo de falha de cada uma (fundamento em A.1 e A.2).</p></li><li><p><strong>Explicar</strong> por que rotacionar Q e K faz o score depender de <code>m − n</code> e não de <code>m</code> e <code>n</code> isoladamente, <strong>justificar</strong> por que a rotação não se aplica a V, e <strong>interpretar</strong> a medição que mostra o mesmo score dentro e fora do comprimento de treino (demonstração em A.2).</p></li><li><p><strong>Justificar</strong> a conexão residual pelo termo identidade na derivada de <code>y = x + f(x)</code> e <strong>prever</strong> o que acontece com uma pilha profunda sem ela (derivação em A.3).</p></li><li><p><strong>Comparar</strong> LayerNorm com RMSNorm e pré-norm com pós-norm, apontando o que cada troca compra em estabilidade e o que ela custa (derivações em A.4 e A.5).</p></li><li><p><strong>Montar</strong> o bloco Transformer moderno na ordem correta e <strong>calcular</strong> a divisão de parâmetros entre atenção e feed-forward em função de <code>d_model</code>, incluindo o efeito de dobrar <code>d_model</code> (contagem em A.6).</p></li></ul></section>
+<section id="leitura"><h2>Passo a passo</h2><div class="reading"><details><summary>Slide 1 · O sintoma que a Aula 6 deixou na tela · 00:00–00:05</summary><div class="prose"><p>Boa noite, pessoal. Eu vou começar exatamente onde a gente parou, porque a aula passada
+terminou com um defeito na tela.</p>
+<p>Na última demo eu embaralhei os tokens da frase e rodei de novo. E a saída de cada token não
+mudou — idêntica, a menos de permutação. Vocês viram isso acontecer.</p>
+<p>Deixa eu traduzir o que aquilo custa. Do jeito como o mecanismo está, "o cachorro morde o
+homem" e "o homem morde o cachorro" produzem exatamente as mesmas representações. As mesmas.
+Não é um caso raro nem um erro de treino: é o que a fórmula faz, sempre. E isso é fatal para
+qualquer tarefa que dependa de ordem — que é praticamente toda tarefa de linguagem.</p>
+<p>Então a aula de hoje tem duas metades, e as duas são consertos. Na primeira eu conserto a
+posição: como se enfia "onde cada token está" dentro de um mecanismo que só sabe comparar
+pares. Na segunda eu conserto o treino: por que aquele bloco, empilhado quarenta vezes, não
+treinaria sem duas coisas que eu ainda não mostrei. No fim da aula o bloco moderno está
+montado, e ele é literalmente o que vocês vão implementar no Lab 2.</p>
+<blockquote>
+<p>Ideia central: "O mecanismo que a gente montou na aula passada não sabe que ordem existe. E isso não se corrige com if."</p>
+</blockquote></div></details><details><summary>Slide 2 · Por que a intuição sozinha erra aqui · 00:05–00:10</summary><div class="prose"><p>Antes de eu mostrar as soluções, deixa eu gastar a objeção que metade da sala está formulando
+agora, porque ela é boa.</p>
+<p>"Mas a máscara causal não resolve isso? Ela já não diz que o token 3 vem depois do token 1?"</p>
+<p>Não resolve, e o motivo é sutil. A máscara diz <strong>quem pode ser lido</strong> por quem — ela apaga
+metade da matriz. Ela não diz <strong>onde</strong> cada token está, nem quanta distância separa dois
+tokens que ela permitiu. Dois tokens visíveis são, entre si, indistinguíveis quanto à
+distância que os separa.</p>
+<p>E tem um caso que encerra a discussão de uma vez: no encoder não existe máscara nenhuma. Lá o
+problema aparece puro, sem nada para disfarçar.</p>
+<p>A segunda intuição errada é mais sutil: "com dados suficientes o modelo aprende a ordem". Não
+aprende. Não tem nada na entrada que codifique ordem para ele aprender — é como pedir que o
+modelo aprenda a cor de um texto que chegou em preto e branco.</p>
+<p>Então o que a gente precisa é <strong>injetar</strong> posição em algum ponto do cálculo. E o resto do
+primeiro bloco é a história de três lugares diferentes onde a área tentou injetar.</p>
+<blockquote>
+<p>Ideia central: "Máscara é sobre permissão de leitura. Posição é sobre distância. São duas coisas diferentes, e só uma delas está no mecanismo."</p>
+</blockquote></div></details><details><summary>Slide 3 · A primeira resposta: um código somado na entrada · 00:10–00:17</summary><div class="prose"><p>Primeira tentativa, a do paper original, e ela é engenhosa. Em vez de ensinar a rede a contar,
+dar a ela um código de posição pronto e somar no embedding do token, antes da primeira camada.</p>
+<p>O código é um vetor de senos e cossenos com frequências geometricamente espaçadas. Está no
+slide: seno nas dimensões pares, cosseno nas ímpares, e a frequência caindo geometricamente
+com o índice do par. A entrada da rede passa a ser o embedding do token mais o código da
+posição.</p>
+<p>A analogia que eu uso é um relógio com muitos ponteiros em velocidades diferentes. O ponteiro
+rápido distingue vizinhos imediatos; o lento distingue começo, meio e fim da frase. Combinados,
+dão um código único para cada posição.</p>
+<p>E tem uma propriedade embutida que é o motivo de a construção ser essa, e não outra: o produto
+interno entre duas codificações depende <strong>só da distância</strong> entre elas, não de onde elas estão.
+A codificação da posição 5 comparada com a da 8 dá o mesmo número que a da 1000 comparada com
+a da 1003. Isso é o que abre a porta para a rede extrair distância relativa de um código que é
+absoluto — e daqui a pouco eu vou medir isso na tela em vez de afirmar.</p>
+<p>Aí sempre vem a objeção legítima: "somar não estraga o embedding? Não seria melhor concatenar?"
+A rede aprende a usar subespaços diferentes para as duas informações. Somar é decisão de
+engenharia — custa zero dimensão extra — e não uma verdade matemática. Concatenar funciona;
+gasta dimensão.</p>
+<blockquote>
+<p>Ideia central: "Em vez de ensinar a rede a contar, o paper de 2017 deu um relógio de vários ponteiros para cada posição."</p>
+</blockquote></div></details><details><summary>Slide 4 · A segunda resposta, e o sintoma que ela produz · 00:17–00:24</summary><div class="prose"><p>Segunda tentativa, a mais óbvia de todas: em vez de calcular o código, aprender ele. Uma
+tabela de vetores, um por posição, treinada junto com o resto. A soma na entrada é idêntica;
+o que muda é que o código deixou de ser função e virou parâmetro.</p>
+<p>Funciona bem. E produz um sintoma que é bonito de diagnosticar, então deixa eu descrever ele
+como sintoma antes de dar o nome.</p>
+<p>O cenário: um modelo responde bem em prompts curtos, e a partir de um certo comprimento passa
+a produzir texto incoerente. Sempre o <strong>mesmo</strong> comprimento, em qualquer assunto. Não degrada
+suavemente: quebra. E se você tiver sorte, aparece um <code>IndexError</code> no log.</p>
+<p>A causa é que a tabela tem 4096 linhas e alguém pediu a linha 4097. Não é que o modelo fique
+ruim naquela posição — é que não existe entrada na tabela. A posição 4097 não foi treinada
+mal: ela não existe.</p>
+<p>E tem um segundo teto, mais sutil, que explica por que a extrapolação já é ruim bem antes do
+limite: não há nenhuma noção de distância embutida. O modelo tem que aprender, a partir de
+vetores arbitrários e independentes, que a posição 31 é vizinha da 30 — e ele aprende isso
+separadamente para cada par de posições que apareceu nos dados.</p>
+<p>A comparação que eu faço é régua contra gaveta de etiquetas. A senoidal é uma régua: a marca
+4097 é calculável, existe por construção, e a distância entre duas marcas é propriedade da
+régua. A aprendida é uma gaveta de etiquetas numeradas: a etiqueta 31 existe porque alguém
+imprimiu, e ela não sabe nada sobre a 30.</p>
+<p>E aqui tem uma lição que vale para além desta aula: a intuição de que "aprendido é melhor
+porque é aprendido" falhou. Neste caso, mais parâmetro comprou menos generalização.</p>
+<blockquote>
+<p>Ideia central: "Senoidal é uma régua: a marca 4097 é calculável. Aprendida é uma gaveta de etiquetas: a 4097 existe se alguém imprimiu."</p>
+</blockquote></div></details><details><summary>Slide 5 · A terceira resposta: a posição entra dentro do score · 00:24–00:35</summary><div class="prose"><p>Terceira tentativa, que é o centro da aula e o que os modelos modernos fazem. E ela começa
+com uma mudança de lugar: as duas anteriores injetam posição na <strong>entrada</strong>, antes da primeira
+camada. Esta não toca na entrada. Ela age dentro da atenção, depois da projeção, sobre Q e K —
+e não sobre V.</p>
+<p>A operação é uma rotação. Cada par de dimensões do vetor é tratado como um vetorzinho 2D, e a
+posição <code>m</code> gira esse par por um ângulo proporcional a <code>m</code>, com a velocidade angular caindo
+geometricamente com o índice do par — a mesma família de frequências das senoidais, agora
+usada como velocidade de giro em vez de valor de tabela.</p>
+<p>E agora o resultado que decide a aula, que está na terceira linha do slide: quando eu faço o
+produto interno de um vetor girado por <code>m</code> vezes theta com outro girado por <code>n</code> vezes theta,
+os ângulos absolutos <strong>se cancelam</strong> e sobra a diferença. Deixa eu dizer isso na língua da
+aula passada: o <strong>score de atenção</strong> — aquele número dentro do softmax que decide o quanto o
+token <code>m</code> presta atenção no token <code>n</code> — passa a depender de <code>m</code> menos <code>n</code>. Posição relativa
+apareceu dentro do score, sem nenhum parâmetro novo e sem tocar no conteúdo.</p>
+<p>A analogia são dois ponteiros de relógio girando em velocidades diferentes. Não interessa onde
+cada ponteiro está no mostrador. Interessa o ângulo entre eles — e o ângulo entre eles só
+depende de quantas horas separam os dois.</p>
+<p>E é por isso também que não se aplica rotação em V. V é o conteúdo que vai ser agregado e
+somado. Girar o conteúdo faria o que o token carrega depender da posição absoluta dele, e é
+exatamente isso que a gente não quer.</p>
+<p>Daqui a pouco eu meço isso. O número que vai aparecer na tela é este: o score de dois tokens
+separados por uma distância de dois vale zero vírgula seis sete seis oito seis nove quando eles
+estão nas posições 3 e 1, e vale exatamente o mesmo quando estão nas posições 5000 e 4998.</p>
+<blockquote>
+<p>Ideia central: "Não interessa onde cada ponteiro está no mostrador. Interessa o ângulo entre eles — e o ângulo só depende da distância."</p>
+</blockquote></div></details><details><summary>Slide 6 · Por que RoPE venceu, e o que ele não resolve · 00:35–00:43</summary><div class="prose"><p>Deixa eu enfileirar as quatro razões, porque juntas elas explicam por que uma ideia de 2021
+virou padrão de fato.</p>
+<p>Primeira: entrega posição <strong>relativa</strong>, e entrega dentro do score, que é justamente o lugar
+onde a comparação entre dois tokens acontece. Não é um sinal que precisa atravessar a rede
+para ser útil; ele é usado onde nasce.</p>
+<p>Segunda: custa <strong>zero parâmetro</strong> treinável. É rotação determinística, calculada na hora. Não
+tem tabela para aprender e não tem tabela para estourar — o sintoma do slide anterior
+simplesmente não existe.</p>
+<p>Terceira, e essa é subestimada: a rotação é aplicada em <strong>cada camada</strong>. Nas duas abordagens
+anteriores a posição é injetada uma vez, na entrada, e tem que sobreviver a trinta blocos de
+mistura. Aqui ela é reinjetada em todo bloco.</p>
+<p>Quarta: dá uma alavanca de engenharia para esticar a janela de contexto reescalando as
+frequências, coisa que uma tabela aprendida não permite de jeito nenhum.</p>
+<p>E agora eu preciso ser honesto sobre a quarta, porque é a parte que a internet exagera.
+Reescalar as frequências <strong>estica</strong> a janela. Não faz o modelo <em>usar</em> bem o que entrou nela.
+Janela grande e memória confiável são duas coisas diferentes, e a diferença tem nome, tem
+experimento e tem aula: é a Aula 10. Hoje a afirmação para de pé em "dá a alavanca". Não em
+"resolve contexto longo".</p>
+<blockquote>
+<p>Ideia central: "Posição relativa, zero parâmetro, reinjetada em toda camada. É difícil competir com isso — e ainda assim não é a mesma coisa que usar bem o contexto."</p>
+</blockquote></div></details><details><summary>Slide 7 · [Demo] Medir a posição · 00:43–00:55</summary><div class="prose"><p>Chega de afirmação. Doze minutos medindo as três estratégias lado a lado.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Quinze linhas de NumPy. Uma das três estratégias devolve o mesmo número dentro e fora do comprimento de treino — e é essa que os modelos modernos usam."</p>
+</blockquote></div></details><details><summary>Slide 8 · O sintoma da profundidade: a pilha que diverge · 01:05–01:12</summary><div class="prose"><p>Voltando. O Bloco 1 foi sobre posição; o Bloco 2 é sobre as peças que fazem esse bloco
+<strong>treinar</strong>. E eu vou continuar pelo mesmo caminho: sintoma primeiro.</p>
+<p>Sintoma: a mesma receita — mesmos dados, mesma taxa de aprendizado, mesmo otimizador — treina
+com doze blocos e diverge com quarenta e oito. E, antes de divergir, tem um detalhe que
+denuncia a causa: as primeiras camadas mal se movem. O sinal de erro chega lá como ruído.</p>
+<p>Isso é exatamente o problema da Aula 5, num eixo diferente. Lá o gradiente atravessava um
+produto de fatores ao longo do <strong>tempo</strong>; aqui ele atravessa um produto de fatores ao longo da
+<strong>profundidade</strong>. Com quarenta blocos e um fator típico de zero vírgula oito por bloco, o
+produto é zero vírgula oito elevado a quarenta, que é da ordem de dez elevado a menos quatro. O
+sinal que chega na primeira camada é quatro ordens de grandeza menor que o da última.</p>
+<p>A correção é uma linha, e está no slide: <code>y = x + f(x)</code>. Somar a entrada de volta.</p>
+<p>O que isso muda: a derivada da saída em relação à entrada passa a ter <strong>dois termos</strong> — um que
+atravessa o ramo <code>f</code>, e um termo <strong>identidade</strong>, que não multiplica nada e não encolhe nada. O
+gradiente tem duas rotas de volta, e uma delas é direta. Lá na Aula 5 a solução foi um gate
+multiplicativo; aqui é uma soma.</p>
+<p>E tem um efeito colateral que quase ninguém menciona e que eu acho o ponto mais bonito: com
+residual, um bloco que aprende <code>f = 0</code> é um bloco <strong>inofensivo</strong>. Ele deixa passar. E a
+possibilidade de um bloco ser inofensivo é o que permite empilhar quarenta sem medo — cada
+bloco novo é uma saída opcional, não um pedágio.</p>
+<blockquote>
+<p>Ideia central: "O gradiente ganha dois caminhos de volta, e um deles é a identidade. Esse não se dilui em quarenta camadas."</p>
+</blockquote></div></details><details><summary>Slide 9 · Qual norma: LayerNorm × RMSNorm · 01:12–01:19</summary><div class="prose"><p>Segunda peça, e ela entra também por um sintoma, só que um sintoma que o slide anterior criou.</p>
+<p>Olha o que a conexão residual faz com a escala: a cada bloco, a ativação recebe uma soma. E
+somas acumulam — a magnitude do vetor cresce ao longo da pilha. Se ninguém controla isso, o
+treino fica instável, e as camadas de cima passam a operar numa faixa numérica completamente
+diferente das de baixo.</p>
+<p>A resposta é normalizar. A LayerNorm normaliza <strong>por amostra</strong>, sobre as dimensões do próprio
+vetor: subtrai a média das dimensões, divide pelo desvio, e depois reescala e desloca com dois
+parâmetros aprendidos. Está no slide.</p>
+<p>Deixa eu cravar uma distinção que a prova cobra: isso <strong>não é BatchNorm</strong>. A estatística vem
+das dimensões de <strong>um</strong> vetor, não de exemplos diferentes do lote. Nenhuma amostra olha para
+outra — e é por isso que a norma é indiferente ao tamanho do batch e funciona igual quando eu
+gero um token só, em inferência, com lote de tamanho um. Sem essa propriedade, geração
+autorregressiva não funcionaria.</p>
+<p>E aí veio o RMSNorm, que é a LayerNorm com duas coisas removidas: a subtração da média e o
+viés. Sobra a divisão pela raiz do valor quadrático médio. O que se economiza dá para contar:
+metade dos parâmetros da norma, e uma redução a menos sobre o vetor. O que se perde: a
+invariância a deslocamento — a LayerNorm devolve o mesmo resultado se eu somar uma constante a
+todas as componentes, o RMSNorm não. E na prática a qualidade é equivalente, que é para onde
+os LLMs abertos convergiram.</p>
+<p>A leitura que eu faço: se o que atrapalhava o treino era a <em>magnitude</em> do vetor, e não onde
+estava o centro dele, então centrar era trabalho que ninguém tinha cobrado.</p>
+<blockquote>
+<p>Ideia central: "LayerNorm centra e escala. RMSNorm só escala — e descobriu-se que centrar não estava pagando a própria conta."</p>
+</blockquote></div></details><details><summary>Slide 10 · Onde a norma entra muda o treino · 01:19–01:27</summary><div class="prose"><p>Terceira peça, e essa é a que mais gente lê como detalhe de gosto sem ser.</p>
+<p>Sintoma: um time troca duas linhas de lugar e a instabilidade some. Mesmos dados, mesma taxa de
+aprendizado, mesmo tamanho de modelo. Só a ordem de duas operações mudou.</p>
+<p>As duas ordens estão no slide. No original de 2017: soma primeiro, normaliza depois — é o
+pós-norm. No moderno: normaliza a entrada do ramo, e a soma residual fica por fora — é o
+pré-norm.</p>
+<p>A diferença prática está no caminho residual. No pós-norm, a soma passa pela norma — então
+aquela autoestrada do slide anterior é reescalada a cada camada, e o gradiente que volta não
+chega tão limpo quanto o termo identidade prometia. Consequência conhecida: pilha profunda em
+pós-norm exige aquecimento cuidadoso do learning rate para não divergir nos primeiros passos.
+No pré-norm, a norma entra dentro do ramo e o caminho residual fica limpo da entrada da pilha
+até a saída. Treina com muito menos truque.</p>
+<p>O preço existe e é justo mencionar: em modelos rasos o pós-norm costuma dar um resultado
+ligeiramente melhor. Só que ninguém treina modelo raso hoje, e foi por isso que a escolha se
+inverteu quando a profundidade cresceu.</p>
+<p>E tem um detalhe que falta em quase todo diagrama que vocês vão encontrar por aí, e que vale
+anotar porque é <code>TODO</code> do Lab 2: com pré-norm é <strong>obrigatório</strong> colocar uma norma final depois
+do último bloco, antes da cabeça de saída. A razão é direta — a última soma residual não passou
+por norma nenhuma, e ela carrega a escala acumulada de quarenta blocos. Esquecida, essa norma
+faz o treino divergir sem mensagem de erro.</p>
+<blockquote>
+<p>Ideia central: "Mesmas peças, ordem diferente: uma pilha precisa de aquecimento na unha para não explodir, a outra simplesmente treina."</p>
+</blockquote></div></details><details><summary>Slide 11 · Onde estão dois terços dos pesos · 01:27–01:34</summary><div class="prose"><p>Quarta peça. Depois da atenção, cada posição passa por uma rede de duas camadas — e a palavra
+que importa é <strong>cada</strong>: o feed-forward é aplicado posição por posição, independentemente, sem
+olhar para nenhum vizinho. A divisão de trabalho do bloco é essa e vale decorar: a atenção
+<strong>mistura</strong> posições, o feed-forward <strong>transforma</strong> cada uma isolada.</p>
+<p>A versão de 2017 expande de <code>d</code> para quatro vezes <code>d</code>, aplica a não linearidade e volta. A
+moderna é o SwiGLU, que acrescenta um ramo de <strong>gating</strong>: um ramo decide <em>o quê</em>, o outro
+decide <em>quanto passa</em>, multiplicando elemento a elemento. São três matrizes em vez de duas.</p>
+<p>E agora a conta, que é a parte que fixa o slide. Na atenção existem quatro matrizes <code>d</code> por
+<code>d</code>: Q, K, V e a projeção de saída. Isso é quatro <code>d²</code>. No feed-forward de 2017, uma <code>d</code> por
+<code>4d</code> e uma <code>4d</code> por <code>d</code>: oito <code>d²</code>. Ou seja: dois terços dos parâmetros do bloco estão no
+feed-forward, a parte que não olha para nenhum vizinho. Com <code>d</code> igual a 1024, são 4,2 milhões
+na atenção contra 8,4 milhões no feed-forward, uns 12,6 milhões por bloco.</p>
+<p>Dois diagnósticos saem daí, e os dois valem mais que a conta. Primeiro: a contagem é
+<strong>quadrática</strong> em <code>d</code>. Quem dobra o modelo de 1024 para 2048 esperando dobrar os parâmetros vai
+encontrar o quádruplo. Segundo: aquele <code>8/3</code> estranho que vocês vão ver nas configurações de
+modelo é o número que faz três matrizes custarem o mesmo que duas — é o preço da terceira
+matriz do gating, pago sem inflar a contagem.</p>
+<blockquote>
+<p>Ideia central: "Dois terços dos pesos do bloco estão justamente na parte que não olha para nenhum vizinho."</p>
+</blockquote></div></details><details><summary>Slide 12 · O bloco moderno, consolidado · 01:34–01:39</summary><div class="prose"><p>Agora eu junto tudo, e este slide é a folha de referência que eu quero que vocês levem para o
+Lab 2 e para a prova. Cinco trocas entre 2017 e hoje — e reparem que cada linha da tabela tem
+uma coluna dizendo <strong>qual sintoma motivou a troca</strong>, que é o jeito de decorar sem decorar.</p>
+<p>Posição: era senoidal somada na entrada, uma vez; hoje é rotação de Q e K dentro de cada
+camada — e o sintoma foi o lixo além do comprimento de treino. Onde a norma entra: era
+pós-norm; hoje é pré-norm mais a norma final — e o sintoma foi a divergência ao empilhar. Qual
+norma: era LayerNorm; hoje é RMSNorm — e aqui o motivo foi custo, sem perda medida.
+Feed-forward: era GELU com quatro <code>d</code>; hoje é SwiGLU com oito terços de <code>d</code>. E como a pilha é
+montada: era encoder-decoder; hoje, para geração, é decoder-only — e essa última linha é a
+única que muda o que o modelo <strong>faz</strong>, o que é justamente a aula da semana que vem.</p>
+<p>O bloco inteiro cabe em duas linhas de pseudocódigo, que estão no slide. Duas normas, duas
+somas, por bloco. É isso. Quarenta desses, uma norma final, uma projeção para o vocabulário, e
+vocês têm um LLM.</p>
+<p>Agora a parte que eu acho a mais impressionante da aula. Olha o que <strong>não</strong> mudou em oito anos:
+<code>softmax(QKᵀ/√d_k)V</code>, multi-head, conexão residual e feed-forward por posição. Estão lá,
+iguais. As cinco trocas foram todas de estabilidade e de custo — nenhuma foi no mecanismo.
+Trocaram suspensão, câmbio e injeção; o motor é o de 2017.</p>
+<blockquote>
+<p>Ideia central: "Cinco trocas em oito anos e nenhuma delas foi no mecanismo. Trocaram a suspensão, não o motor."</p>
+</blockquote></div></details><details><summary>Slide 13 · [Exercício] Achar a peça errada · 01:39–01:50</summary><div class="prose"><p>Oito minutos, em dupla. Três sintomas, e para cada um eu quero a peça e a evidência.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Nenhuma das três se resolve derivando. As três se resolvem sabendo o que cada peça do bloco compra."</p>
+</blockquote></div></details><details><summary>Slide 14 · Fechamento: o bloco está pronto; falta decidir como conectá-lo · 01:50–02:00</summary><div class="prose"><p>Deixa eu fechar o arco de duas aulas.</p>
+<p>Na Aula 6 a gente construiu o <strong>mecanismo</strong>: a fórmula da atenção, as cabeças, a máscara. Hoje
+a gente construiu o <strong>bloco</strong>: posição por rotação de Q e K, duas somas residuais, duas normas,
+um feed-forward com gating. Está pronto e está completo — o que vocês têm no caderno agora é a
+peça de Lego de que todo LLM moderno é feito.</p>
+<p>E cada peça entrou aqui por um sintoma. Isso não foi estilo de aula: é assim que essas peças
+entraram na literatura. Ninguém acordou querendo inventar o pré-norm; alguém tentou empilhar e
+divergiu.</p>
+<p>É exatamente aqui que aparece a última pergunta em aberto. Se o bloco é o mesmo, o que faz um
+modelo ser bom em classificar e outro ser bom em escrever? A resposta não está no bloco. Está
+em <strong>como a pilha de blocos é conectada</strong> e no que cada arquitetura deixa cada token enxergar:
+só o passado, o texto inteiro, ou dois textos em sequência. Três formas de montar as mesmas
+peças, três coisas diferentes que o modelo sabe fazer.</p>
+<p>E tem um segundo fio para a semana que vem. A gente estabeleceu na Aula 6 que a atenção custa
+<code>O(n²)</code>. Enquanto a janela era de 512 tokens, isso era nota de rodapé; com janelas grandes,
+virou o problema central de engenharia. Aula 8: famílias de modelos e atenção eficiente.</p>
+<p>Para a semana, duas coisas. A leitura é o RoFormer, de Su e coautores, arXiv 2104.09864, as
+seções de formulação e de propriedades. A pergunta dirigida está no slide: em que ponto exato
+do cálculo do score a posição entra, e por que isso entrega posição relativa sem nenhum
+parâmetro novo? E o exercício de três linhas: um vetor de duas dimensões, girado por dois
+ângulos, conferindo à mão que o produto escalar só depende da diferença. A conta está feita em
+A.2, com os números da demo — mas fazer com a própria mão é diferente de ler.</p>
+<blockquote>
+<p>Ideia central: "O bloco está pronto. O que decide se o modelo classifica ou escreve não é o bloco — é como a gente empilha e o que cada token pode enxergar."</p>
+</blockquote>
+<hr /></div></details><details><summary>Parte 2 — Demonstração guiada</summary><div class="prose"><p>Doze minutos, quatro medições. Na V1 esta aula rodava o script da Aula 6 duas vezes para
+mostrar a invariância; na V2 essa parte encolheu para trinta segundos de retomada, e o tempo
+foi para medir <strong>as três estratégias de posição lado a lado</strong> — que é o que o Bloco 1 discute.</p>
+<p>As quinze linhas abaixo podem ser coladas num arquivo ou digitadas no REPL; dependem só de
+NumPy. <strong>Esta aula não tem pasta <code>codigo/</code> própria</strong>: a Medição 1 reaproveita
+<code>../aula-06/codigo/demo-attention.py</code>.</p>
+<p>Preparação na véspera: rodar tudo uma vez na máquina da sala, aumentar a fonte do terminal, e
+capturar as saídas em texto como reserva.</p></div></details><details><summary>Medição 1 — sem posição (30 s)</summary><div class="prose"><p><strong>1.</strong> <strong>[Rodo o script da Aula 6 com <code>--shuffle</code>]</strong> Trinta segundos só para recolocar o
+sintoma na tela: mesmo script da aula passada, tokens embaralhados, e a saída de cada token
+idêntica a menos de permutação. É o slide 1.</p></div></details><details><summary>Medição 2 — senoidal: o produto interno só depende da distância (4 min)</summary><div class="prose"><p><strong>2.</strong> <strong>[Digito e rodo]</strong> Agora a primeira estratégia, medida:</p>
+<pre><code class="language-python">import numpy as np
+d, k = 64, 3
+i = np.arange(0, d, 2)
+w = 10000.0 ** (-i / d)
+def PE(pos):
+    v = np.empty(d); v[0::2] = np.sin(w * pos); v[1::2] = np.cos(w * pos); return v
+for pos in (0, 5, 100, 1000):
+    print(f&quot;pos={pos:5d}   PE(pos) . PE(pos+{k}) = {PE(pos) @ PE(pos + k):.9f}&quot;)
+</code></pre>
+<p><strong>3.</strong> <strong>[Leio a coluna da direita]</strong> Quatro posições completamente diferentes — zero, cinco,
+cem, mil — e o mesmo número nas quatro: 25,587028547. Até a nona casa decimal. O produto
+interno entre duas codificações <strong>não sabe onde elas estão</strong>; ele só sabe que estão a três
+posições de distância. É a propriedade que eu afirmei no slide 3, medida.</p>
+<p><strong>4.</strong> <strong>[Rodo a mesma conta variando <code>k</code>]</strong> E variando a distância, com <code>pos</code> fixo: 32 para
+distância zero, 30,9 para um, 25,6 para três, 21,1 para dez, 15,7 para cinquenta, 11,4 para
+duzentos. É uma curva de similaridade que decai com a distância — e o 32 do começo é <code>d</code> sobre
+2, que é a norma ao quadrado de qualquer codificação. Todas as posições têm o mesmo tamanho;
+nenhuma é "maior" que outra.</p></div></details><details><summary>Medição 3 — aprendida: o teto que é um erro de índice (1 min)</summary><div class="prose"><p><strong>5.</strong> <strong>[Rodo três linhas]</strong> A segunda estratégia, e ela cabe em três linhas:</p>
+<pre><code class="language-python">E = np.random.default_rng(0).normal(size=(4096, 64))   # tabela treinada: uma linha por posição
+print(&quot;posição 4095:&quot;, E[4095].shape)
+print(&quot;posição 4096:&quot;, E[4096].shape)                  # IndexError
+</code></pre>
+<p><strong>6.</strong> <strong>[Mostro a exceção na tela]</strong> <code>IndexError: index 4096 is out of bounds</code>. É o sintoma do
+slide 4, sem metáfora nenhuma. A posição não é mal representada: ela não existe.</p></div></details><details><summary>Medição 4 — RoPE: o mesmo score dentro e fora do treino (6 min)</summary><div class="prose"><p><strong>7.</strong> <strong>[Digito e rodo]</strong> E a terceira, que é a que decide a aula:</p>
+<pre><code class="language-python">def rot(v, ang):
+    c, s = np.cos(ang), np.sin(ang)
+    return np.array([c*v[0] - s*v[1], s*v[0] + c*v[1]])
+
+q, kv, theta = np.array([1.0, 0.0]), np.array([0.6, 0.8]), 0.05
+print(f&quot;sem RoPE, qualquer posição:  {q @ kv:.6f}&quot;)
+for m, n in [(3, 1), (10, 8), (500, 498), (5000, 4998), (3, 2), (100, 99)]:
+    print(f&quot;m={m:5d} n={n:5d}  m-n={m-n:2d}  score={rot(q, m*theta) @ rot(kv, n*theta):.6f}&quot;)
+</code></pre>
+<p><strong>8.</strong> <strong>[Leio as quatro primeiras linhas]</strong> Olha os quatro primeiros pares. Distância dois em
+todos, e o score é 0,676869 nos quatro. Nas posições 3 e 1, e nas posições 5000 e 4998. O
+modelo foi treinado com quatro mil de contexto e a conta na posição cinco mil devolve
+exatamente o mesmo número — porque não tem tabela, tem rotação, e a rotação existe para
+qualquer ângulo.</p>
+<p><strong>9.</strong> <strong>[Aponto as duas últimas linhas]</strong> E as duas últimas, com distância um: 0,639233 nas
+duas. Distância diferente, número diferente; mesma distância, mesmo número. É literalmente a
+definição de posição relativa, e ela apareceu dentro do score.</p>
+<p><strong>10.</strong> <strong>[Comparo com a primeira linha]</strong> E a primeira linha é o contrafactual: sem rotação, o
+score é 0,6 em todos os casos. A informação de distância simplesmente não estava lá.</p>
+<hr /></div></details><details><summary>Parte 3 — Hands-on</summary><div class="prose"><p>Oito minutos de dupla, três de correção. O exercício da V1 era montar as seis peças do bloco na
+ordem certa; ele virou extensão opcional, e o obrigatório passou a ser diagnóstico — mas a
+correção termina com o bloco desenhado na ordem certa no quadro, porque é esse diagrama que vai
+para o Lab 2.</p>
+<p><strong>1.</strong> <strong>[Projeto os três sintomas e formo as duplas]</strong> Oito minutos, em dupla. Três situações,
+e para cada uma eu quero duas coisas: qual peça do bloco está no lugar errado ou ausente, e
+<strong>que evidência confirmaria</strong>. A segunda parte é a que vale.</p>
+<p>Os três sintomas:</p>
+<ol>
+<li>Uma pilha de 48 blocos diverge nos primeiros 200 passos de treino. A mesma receita, com 12
+   blocos, treina até o fim. Não há <code>NaN</code> antes da divergência, e as primeiras camadas mal se
+   movem.</li>
+<li>Um modelo responde bem em prompts curtos e produz texto incoerente assim que o prompt passa
+   de um certo comprimento — sempre o mesmo comprimento, em qualquer assunto.</li>
+<li>Um time aplicou a rotação posicional em Q, K <strong>e</strong> V. O modelo treina, e a representação de
+   uma mesma frase muda conforme ela aparece no começo ou no fim do prompt.</li>
+</ol>
+<p><em>Como recolher:</em> três minutos. Peço uma dupla para o sintoma 1 e forço a segunda parte — "como
+você confirmaria?". Corrijo o 3 com o desenho: vou ao quadro e monto o bloco pré-norm inteiro,
+com as duas normas, as duas somas, a bifurcação dupla do <code>x</code>, o RoPE marcado só sobre Q e K, e
+a norma final depois do último bloco. Esse desenho é o artefato da aula e é literalmente o
+Checkpoint 3 do Lab 2. Se ninguém marcar as duas somas, desenho <strong>errado</strong> de propósito na
+primeira tentativa — o conserto ao vivo fixa melhor que o desenho pronto.</p>
+<p><em>Extensão para quem terminar antes (opcional):</em> com <code>d_model = 1024</code>, calcular quantos
+parâmetros ficam na atenção e quantos no feed-forward, e depois refazer com <code>d_model = 2048</code>
+para ver o fator quatro. É a conta que na V1 eu fazia no quadro e aqui vira aprofundamento;
+está em A.6, com os FLOPs por token.</p>
+<hr /></div></details><details><summary>Parte 4 — Apêndice: se perguntarem</summary><div class="prose"><p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a derivação
+em aula. A regra geral é remeter ao apêndice e seguir; conduzir uma derivação só se sobrar
+tempo, e anunciando que é conteúdo de consulta.</p>
+<p><strong>Item 1 — "Prova que o produto escalar só depende de <code>m − n</code>?" (A.2, ~5 min).</strong>
+A pergunta mais provável da aula, e a mais legítima — na V1 ela era a aula. Eu escrevo o
+produto interno como produto matricial, uso que a transposta de uma rotação é a rotação
+inversa, e junto os dois ângulos numa rotação só: sobra <code>R((n−m)θ)</code>. Três linhas. Se quiserem
+número em vez de álgebra, faço com dois ângulos concretos, 30° e 50°, e mostro o produto
+escalar dando o cosseno de 20°. <strong>Nunca</strong> introduzir número complexo — o paper usa, o quadro
+não precisa, e a notação complexa perde metade da turma em trinta segundos.</p>
+<p><strong>Item 2 — "Por que seno e cosseno, e não qualquer função?" (A.1, ~6 min).</strong>
+Se perguntarem a construção senoidal. Eu escrevo o par seno/cosseno de uma frequência, aplico
+as identidades de soma de arcos e mostro que deslocar por <code>k</code> é multiplicar por uma matriz que
+depende só de <code>k</code>. Depois faço o produto interno de duas codificações e mostro que os termos
+colapsam numa soma de cossenos da diferença. É bonito e custa caro; só faço se o Bloco 1
+estiver adiantado, porque o RoPE usa a mesma ideia de forma mais limpa. Se não houver tempo, a
+Medição 2 já mostra o resultado medido.</p>
+<p><strong>Item 3 — "Como o <code>I</code> salva o gradiente?" (A.3, ~4 min).</strong>
+Vale fazer se a turma tiver Álgebra Linear fresca. Eu escrevo a derivada de um bloco, depois o
+produto sobre <code>N</code> blocos, e <strong>expando</strong> o produto: aparece um termo identidade puro, que
+atravessa a pilha sem multiplicar nada. O ponto que convence é o contrafactual: sem residual é
+um produto, e <code>0.8^40</code> é <code>10⁻⁴</code>. Se a turma não tiver a base, não fazer — "duas rotas de volta,
+uma delas direta" entrega o mesmo em quinze segundos.</p>
+<p><strong>Item 4 — "De onde vem esse 8/3?" (A.6, ~3 min).</strong>
+Barato e satisfatório. Duas matrizes de largura <code>4d</code> dão <code>8d²</code>; três matrizes de largura <code>d_ff</code>
+dão <code>3·d·d_ff</code>; igualando, <code>d_ff = 8/3·d</code>. Uma linha e meia no quadro. Se eu tiver que escolher
+um item desta parte para fazer, é este — é o de melhor razão entre convencimento e minuto.</p>
+<p><strong>Item 5 — "Por que a norma final é obrigatória?" (A.5, ~4 min).</strong>
+Se alguém perguntar no slide 10, e vale a pena porque é <code>TODO</code> do Lab 2. Eu escrevo as duas
+ordens, mostro que no pré-norm a última operação é uma soma que ninguém normalizou, e ligo com
+a variância que cresce ao longo da pilha. O argumento que mais convence é o caso-limite: com
+<code>f = 0</code>, o bloco pré-norm devolve <code>x</code> intacto e o pós-norm devolve <code>LN(x)</code> — ou seja, no
+pós-norm nem um bloco que não faz nada é inofensivo. A.5 tem os dois desenvolvimentos.</p>
+<hr /></div></details><details><summary>Encerramento · 01:50–02:00</summary><div class="prose"><p>O encerramento está redigido como fala no Slide 14 da Parte 1 — a síntese do arco de duas aulas
+(mecanismo na Aula 6, bloco na Aula 7), o fato de cada peça ter entrado por um sintoma, a
+pergunta em aberto sobre como a pilha é conectada, o fio do custo <code>O(n²)</code>, a ponte para a Aula
+8 e a leitura de Su et al. com a pergunta dirigida.</p>
+<blockquote>
+<p>Ideia central: "Hoje a gente terminou a peça de Lego. Semana que vem a gente descobre que existem três jeitos de montar as mesmas peças — e que eles produzem modelos que fazem coisas diferentes."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 7 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></div></details></div></section>
+<section id="materiais" class="panel"><h2>Materiais de estudo</h2><div class="actions"><a class="button secondary" download href="guia-estudo.md">↓ Guia de estudo da aula</a><a class="button secondary" download href="demo.html">↓ Demonstração offline</a></div>
+<details><summary>Ler o guia de estudo</summary><article class="prose"><h1>Transformer II: posição, normalização e o bloco moderno</h1>
+<h2>Slide 1 · O sintoma que a Aula 6 deixou na tela · 00:00–00:05</h2>
+<p>Boa noite, pessoal. Eu vou começar exatamente onde a gente parou, porque a aula passada
+terminou com um defeito na tela.</p>
+<p>Na última demo eu embaralhei os tokens da frase e rodei de novo. E a saída de cada token não
+mudou — idêntica, a menos de permutação. Vocês viram isso acontecer.</p>
+<p>Deixa eu traduzir o que aquilo custa. Do jeito como o mecanismo está, "o cachorro morde o
+homem" e "o homem morde o cachorro" produzem exatamente as mesmas representações. As mesmas.
+Não é um caso raro nem um erro de treino: é o que a fórmula faz, sempre. E isso é fatal para
+qualquer tarefa que dependa de ordem — que é praticamente toda tarefa de linguagem.</p>
+<p>Então a aula de hoje tem duas metades, e as duas são consertos. Na primeira eu conserto a
+posição: como se enfia "onde cada token está" dentro de um mecanismo que só sabe comparar
+pares. Na segunda eu conserto o treino: por que aquele bloco, empilhado quarenta vezes, não
+treinaria sem duas coisas que eu ainda não mostrei. No fim da aula o bloco moderno está
+montado, e ele é literalmente o que vocês vão implementar no Lab 2.</p>
+<blockquote>
+<p>Ideia central: "O mecanismo que a gente montou na aula passada não sabe que ordem existe. E isso não se corrige com if."</p>
+</blockquote>
+<h2>Slide 2 · Por que a intuição sozinha erra aqui · 00:05–00:10</h2>
+<p>Antes de eu mostrar as soluções, deixa eu gastar a objeção que metade da sala está formulando
+agora, porque ela é boa.</p>
+<p>"Mas a máscara causal não resolve isso? Ela já não diz que o token 3 vem depois do token 1?"</p>
+<p>Não resolve, e o motivo é sutil. A máscara diz <strong>quem pode ser lido</strong> por quem — ela apaga
+metade da matriz. Ela não diz <strong>onde</strong> cada token está, nem quanta distância separa dois
+tokens que ela permitiu. Dois tokens visíveis são, entre si, indistinguíveis quanto à
+distância que os separa.</p>
+<p>E tem um caso que encerra a discussão de uma vez: no encoder não existe máscara nenhuma. Lá o
+problema aparece puro, sem nada para disfarçar.</p>
+<p>A segunda intuição errada é mais sutil: "com dados suficientes o modelo aprende a ordem". Não
+aprende. Não tem nada na entrada que codifique ordem para ele aprender — é como pedir que o
+modelo aprenda a cor de um texto que chegou em preto e branco.</p>
+<p>Então o que a gente precisa é <strong>injetar</strong> posição em algum ponto do cálculo. E o resto do
+primeiro bloco é a história de três lugares diferentes onde a área tentou injetar.</p>
+<blockquote>
+<p>Ideia central: "Máscara é sobre permissão de leitura. Posição é sobre distância. São duas coisas diferentes, e só uma delas está no mecanismo."</p>
+</blockquote>
+<h2>Slide 3 · A primeira resposta: um código somado na entrada · 00:10–00:17</h2>
+<p>Primeira tentativa, a do paper original, e ela é engenhosa. Em vez de ensinar a rede a contar,
+dar a ela um código de posição pronto e somar no embedding do token, antes da primeira camada.</p>
+<p>O código é um vetor de senos e cossenos com frequências geometricamente espaçadas. Está no
+slide: seno nas dimensões pares, cosseno nas ímpares, e a frequência caindo geometricamente
+com o índice do par. A entrada da rede passa a ser o embedding do token mais o código da
+posição.</p>
+<p>A analogia que eu uso é um relógio com muitos ponteiros em velocidades diferentes. O ponteiro
+rápido distingue vizinhos imediatos; o lento distingue começo, meio e fim da frase. Combinados,
+dão um código único para cada posição.</p>
+<p>E tem uma propriedade embutida que é o motivo de a construção ser essa, e não outra: o produto
+interno entre duas codificações depende <strong>só da distância</strong> entre elas, não de onde elas estão.
+A codificação da posição 5 comparada com a da 8 dá o mesmo número que a da 1000 comparada com
+a da 1003. Isso é o que abre a porta para a rede extrair distância relativa de um código que é
+absoluto — e daqui a pouco eu vou medir isso na tela em vez de afirmar.</p>
+<p>Aí sempre vem a objeção legítima: "somar não estraga o embedding? Não seria melhor concatenar?"
+A rede aprende a usar subespaços diferentes para as duas informações. Somar é decisão de
+engenharia — custa zero dimensão extra — e não uma verdade matemática. Concatenar funciona;
+gasta dimensão.</p>
+<blockquote>
+<p>Ideia central: "Em vez de ensinar a rede a contar, o paper de 2017 deu um relógio de vários ponteiros para cada posição."</p>
+</blockquote>
+<h2>Slide 4 · A segunda resposta, e o sintoma que ela produz · 00:17–00:24</h2>
+<p>Segunda tentativa, a mais óbvia de todas: em vez de calcular o código, aprender ele. Uma
+tabela de vetores, um por posição, treinada junto com o resto. A soma na entrada é idêntica;
+o que muda é que o código deixou de ser função e virou parâmetro.</p>
+<p>Funciona bem. E produz um sintoma que é bonito de diagnosticar, então deixa eu descrever ele
+como sintoma antes de dar o nome.</p>
+<p>O cenário: um modelo responde bem em prompts curtos, e a partir de um certo comprimento passa
+a produzir texto incoerente. Sempre o <strong>mesmo</strong> comprimento, em qualquer assunto. Não degrada
+suavemente: quebra. E se você tiver sorte, aparece um <code>IndexError</code> no log.</p>
+<p>A causa é que a tabela tem 4096 linhas e alguém pediu a linha 4097. Não é que o modelo fique
+ruim naquela posição — é que não existe entrada na tabela. A posição 4097 não foi treinada
+mal: ela não existe.</p>
+<p>E tem um segundo teto, mais sutil, que explica por que a extrapolação já é ruim bem antes do
+limite: não há nenhuma noção de distância embutida. O modelo tem que aprender, a partir de
+vetores arbitrários e independentes, que a posição 31 é vizinha da 30 — e ele aprende isso
+separadamente para cada par de posições que apareceu nos dados.</p>
+<p>A comparação que eu faço é régua contra gaveta de etiquetas. A senoidal é uma régua: a marca
+4097 é calculável, existe por construção, e a distância entre duas marcas é propriedade da
+régua. A aprendida é uma gaveta de etiquetas numeradas: a etiqueta 31 existe porque alguém
+imprimiu, e ela não sabe nada sobre a 30.</p>
+<p>E aqui tem uma lição que vale para além desta aula: a intuição de que "aprendido é melhor
+porque é aprendido" falhou. Neste caso, mais parâmetro comprou menos generalização.</p>
+<blockquote>
+<p>Ideia central: "Senoidal é uma régua: a marca 4097 é calculável. Aprendida é uma gaveta de etiquetas: a 4097 existe se alguém imprimiu."</p>
+</blockquote>
+<h2>Slide 5 · A terceira resposta: a posição entra dentro do score · 00:24–00:35</h2>
+<p>Terceira tentativa, que é o centro da aula e o que os modelos modernos fazem. E ela começa
+com uma mudança de lugar: as duas anteriores injetam posição na <strong>entrada</strong>, antes da primeira
+camada. Esta não toca na entrada. Ela age dentro da atenção, depois da projeção, sobre Q e K —
+e não sobre V.</p>
+<p>A operação é uma rotação. Cada par de dimensões do vetor é tratado como um vetorzinho 2D, e a
+posição <code>m</code> gira esse par por um ângulo proporcional a <code>m</code>, com a velocidade angular caindo
+geometricamente com o índice do par — a mesma família de frequências das senoidais, agora
+usada como velocidade de giro em vez de valor de tabela.</p>
+<p>E agora o resultado que decide a aula, que está na terceira linha do slide: quando eu faço o
+produto interno de um vetor girado por <code>m</code> vezes theta com outro girado por <code>n</code> vezes theta,
+os ângulos absolutos <strong>se cancelam</strong> e sobra a diferença. Deixa eu dizer isso na língua da
+aula passada: o <strong>score de atenção</strong> — aquele número dentro do softmax que decide o quanto o
+token <code>m</code> presta atenção no token <code>n</code> — passa a depender de <code>m</code> menos <code>n</code>. Posição relativa
+apareceu dentro do score, sem nenhum parâmetro novo e sem tocar no conteúdo.</p>
+<p>A analogia são dois ponteiros de relógio girando em velocidades diferentes. Não interessa onde
+cada ponteiro está no mostrador. Interessa o ângulo entre eles — e o ângulo entre eles só
+depende de quantas horas separam os dois.</p>
+<p>E é por isso também que não se aplica rotação em V. V é o conteúdo que vai ser agregado e
+somado. Girar o conteúdo faria o que o token carrega depender da posição absoluta dele, e é
+exatamente isso que a gente não quer.</p>
+<p>Daqui a pouco eu meço isso. O número que vai aparecer na tela é este: o score de dois tokens
+separados por uma distância de dois vale zero vírgula seis sete seis oito seis nove quando eles
+estão nas posições 3 e 1, e vale exatamente o mesmo quando estão nas posições 5000 e 4998.</p>
+<blockquote>
+<p>Ideia central: "Não interessa onde cada ponteiro está no mostrador. Interessa o ângulo entre eles — e o ângulo só depende da distância."</p>
+</blockquote>
+<h2>Slide 6 · Por que RoPE venceu, e o que ele não resolve · 00:35–00:43</h2>
+<p>Deixa eu enfileirar as quatro razões, porque juntas elas explicam por que uma ideia de 2021
+virou padrão de fato.</p>
+<p>Primeira: entrega posição <strong>relativa</strong>, e entrega dentro do score, que é justamente o lugar
+onde a comparação entre dois tokens acontece. Não é um sinal que precisa atravessar a rede
+para ser útil; ele é usado onde nasce.</p>
+<p>Segunda: custa <strong>zero parâmetro</strong> treinável. É rotação determinística, calculada na hora. Não
+tem tabela para aprender e não tem tabela para estourar — o sintoma do slide anterior
+simplesmente não existe.</p>
+<p>Terceira, e essa é subestimada: a rotação é aplicada em <strong>cada camada</strong>. Nas duas abordagens
+anteriores a posição é injetada uma vez, na entrada, e tem que sobreviver a trinta blocos de
+mistura. Aqui ela é reinjetada em todo bloco.</p>
+<p>Quarta: dá uma alavanca de engenharia para esticar a janela de contexto reescalando as
+frequências, coisa que uma tabela aprendida não permite de jeito nenhum.</p>
+<p>E agora eu preciso ser honesto sobre a quarta, porque é a parte que a internet exagera.
+Reescalar as frequências <strong>estica</strong> a janela. Não faz o modelo <em>usar</em> bem o que entrou nela.
+Janela grande e memória confiável são duas coisas diferentes, e a diferença tem nome, tem
+experimento e tem aula: é a Aula 10. Hoje a afirmação para de pé em "dá a alavanca". Não em
+"resolve contexto longo".</p>
+<blockquote>
+<p>Ideia central: "Posição relativa, zero parâmetro, reinjetada em toda camada. É difícil competir com isso — e ainda assim não é a mesma coisa que usar bem o contexto."</p>
+</blockquote>
+<h2>Slide 7 · [Demo] Medir a posição · 00:43–00:55</h2>
+<p>Chega de afirmação. Doze minutos medindo as três estratégias lado a lado.</p>
+<p><em>[A demonstração completa está na Parte 2 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Quinze linhas de NumPy. Uma das três estratégias devolve o mesmo número dentro e fora do comprimento de treino — e é essa que os modelos modernos usam."</p>
+</blockquote>
+<h2>Slide 8 · O sintoma da profundidade: a pilha que diverge · 01:05–01:12</h2>
+<p>Voltando. O Bloco 1 foi sobre posição; o Bloco 2 é sobre as peças que fazem esse bloco
+<strong>treinar</strong>. E eu vou continuar pelo mesmo caminho: sintoma primeiro.</p>
+<p>Sintoma: a mesma receita — mesmos dados, mesma taxa de aprendizado, mesmo otimizador — treina
+com doze blocos e diverge com quarenta e oito. E, antes de divergir, tem um detalhe que
+denuncia a causa: as primeiras camadas mal se movem. O sinal de erro chega lá como ruído.</p>
+<p>Isso é exatamente o problema da Aula 5, num eixo diferente. Lá o gradiente atravessava um
+produto de fatores ao longo do <strong>tempo</strong>; aqui ele atravessa um produto de fatores ao longo da
+<strong>profundidade</strong>. Com quarenta blocos e um fator típico de zero vírgula oito por bloco, o
+produto é zero vírgula oito elevado a quarenta, que é da ordem de dez elevado a menos quatro. O
+sinal que chega na primeira camada é quatro ordens de grandeza menor que o da última.</p>
+<p>A correção é uma linha, e está no slide: <code>y = x + f(x)</code>. Somar a entrada de volta.</p>
+<p>O que isso muda: a derivada da saída em relação à entrada passa a ter <strong>dois termos</strong> — um que
+atravessa o ramo <code>f</code>, e um termo <strong>identidade</strong>, que não multiplica nada e não encolhe nada. O
+gradiente tem duas rotas de volta, e uma delas é direta. Lá na Aula 5 a solução foi um gate
+multiplicativo; aqui é uma soma.</p>
+<p>E tem um efeito colateral que quase ninguém menciona e que eu acho o ponto mais bonito: com
+residual, um bloco que aprende <code>f = 0</code> é um bloco <strong>inofensivo</strong>. Ele deixa passar. E a
+possibilidade de um bloco ser inofensivo é o que permite empilhar quarenta sem medo — cada
+bloco novo é uma saída opcional, não um pedágio.</p>
+<blockquote>
+<p>Ideia central: "O gradiente ganha dois caminhos de volta, e um deles é a identidade. Esse não se dilui em quarenta camadas."</p>
+</blockquote>
+<h2>Slide 9 · Qual norma: LayerNorm × RMSNorm · 01:12–01:19</h2>
+<p>Segunda peça, e ela entra também por um sintoma, só que um sintoma que o slide anterior criou.</p>
+<p>Olha o que a conexão residual faz com a escala: a cada bloco, a ativação recebe uma soma. E
+somas acumulam — a magnitude do vetor cresce ao longo da pilha. Se ninguém controla isso, o
+treino fica instável, e as camadas de cima passam a operar numa faixa numérica completamente
+diferente das de baixo.</p>
+<p>A resposta é normalizar. A LayerNorm normaliza <strong>por amostra</strong>, sobre as dimensões do próprio
+vetor: subtrai a média das dimensões, divide pelo desvio, e depois reescala e desloca com dois
+parâmetros aprendidos. Está no slide.</p>
+<p>Deixa eu cravar uma distinção que a prova cobra: isso <strong>não é BatchNorm</strong>. A estatística vem
+das dimensões de <strong>um</strong> vetor, não de exemplos diferentes do lote. Nenhuma amostra olha para
+outra — e é por isso que a norma é indiferente ao tamanho do batch e funciona igual quando eu
+gero um token só, em inferência, com lote de tamanho um. Sem essa propriedade, geração
+autorregressiva não funcionaria.</p>
+<p>E aí veio o RMSNorm, que é a LayerNorm com duas coisas removidas: a subtração da média e o
+viés. Sobra a divisão pela raiz do valor quadrático médio. O que se economiza dá para contar:
+metade dos parâmetros da norma, e uma redução a menos sobre o vetor. O que se perde: a
+invariância a deslocamento — a LayerNorm devolve o mesmo resultado se eu somar uma constante a
+todas as componentes, o RMSNorm não. E na prática a qualidade é equivalente, que é para onde
+os LLMs abertos convergiram.</p>
+<p>A leitura que eu faço: se o que atrapalhava o treino era a <em>magnitude</em> do vetor, e não onde
+estava o centro dele, então centrar era trabalho que ninguém tinha cobrado.</p>
+<blockquote>
+<p>Ideia central: "LayerNorm centra e escala. RMSNorm só escala — e descobriu-se que centrar não estava pagando a própria conta."</p>
+</blockquote>
+<h2>Slide 10 · Onde a norma entra muda o treino · 01:19–01:27</h2>
+<p>Terceira peça, e essa é a que mais gente lê como detalhe de gosto sem ser.</p>
+<p>Sintoma: um time troca duas linhas de lugar e a instabilidade some. Mesmos dados, mesma taxa de
+aprendizado, mesmo tamanho de modelo. Só a ordem de duas operações mudou.</p>
+<p>As duas ordens estão no slide. No original de 2017: soma primeiro, normaliza depois — é o
+pós-norm. No moderno: normaliza a entrada do ramo, e a soma residual fica por fora — é o
+pré-norm.</p>
+<p>A diferença prática está no caminho residual. No pós-norm, a soma passa pela norma — então
+aquela autoestrada do slide anterior é reescalada a cada camada, e o gradiente que volta não
+chega tão limpo quanto o termo identidade prometia. Consequência conhecida: pilha profunda em
+pós-norm exige aquecimento cuidadoso do learning rate para não divergir nos primeiros passos.
+No pré-norm, a norma entra dentro do ramo e o caminho residual fica limpo da entrada da pilha
+até a saída. Treina com muito menos truque.</p>
+<p>O preço existe e é justo mencionar: em modelos rasos o pós-norm costuma dar um resultado
+ligeiramente melhor. Só que ninguém treina modelo raso hoje, e foi por isso que a escolha se
+inverteu quando a profundidade cresceu.</p>
+<p>E tem um detalhe que falta em quase todo diagrama que vocês vão encontrar por aí, e que vale
+anotar porque é <code>TODO</code> do Lab 2: com pré-norm é <strong>obrigatório</strong> colocar uma norma final depois
+do último bloco, antes da cabeça de saída. A razão é direta — a última soma residual não passou
+por norma nenhuma, e ela carrega a escala acumulada de quarenta blocos. Esquecida, essa norma
+faz o treino divergir sem mensagem de erro.</p>
+<blockquote>
+<p>Ideia central: "Mesmas peças, ordem diferente: uma pilha precisa de aquecimento na unha para não explodir, a outra simplesmente treina."</p>
+</blockquote>
+<h2>Slide 11 · Onde estão dois terços dos pesos · 01:27–01:34</h2>
+<p>Quarta peça. Depois da atenção, cada posição passa por uma rede de duas camadas — e a palavra
+que importa é <strong>cada</strong>: o feed-forward é aplicado posição por posição, independentemente, sem
+olhar para nenhum vizinho. A divisão de trabalho do bloco é essa e vale decorar: a atenção
+<strong>mistura</strong> posições, o feed-forward <strong>transforma</strong> cada uma isolada.</p>
+<p>A versão de 2017 expande de <code>d</code> para quatro vezes <code>d</code>, aplica a não linearidade e volta. A
+moderna é o SwiGLU, que acrescenta um ramo de <strong>gating</strong>: um ramo decide <em>o quê</em>, o outro
+decide <em>quanto passa</em>, multiplicando elemento a elemento. São três matrizes em vez de duas.</p>
+<p>E agora a conta, que é a parte que fixa o slide. Na atenção existem quatro matrizes <code>d</code> por
+<code>d</code>: Q, K, V e a projeção de saída. Isso é quatro <code>d²</code>. No feed-forward de 2017, uma <code>d</code> por
+<code>4d</code> e uma <code>4d</code> por <code>d</code>: oito <code>d²</code>. Ou seja: dois terços dos parâmetros do bloco estão no
+feed-forward, a parte que não olha para nenhum vizinho. Com <code>d</code> igual a 1024, são 4,2 milhões
+na atenção contra 8,4 milhões no feed-forward, uns 12,6 milhões por bloco.</p>
+<p>Dois diagnósticos saem daí, e os dois valem mais que a conta. Primeiro: a contagem é
+<strong>quadrática</strong> em <code>d</code>. Quem dobra o modelo de 1024 para 2048 esperando dobrar os parâmetros vai
+encontrar o quádruplo. Segundo: aquele <code>8/3</code> estranho que vocês vão ver nas configurações de
+modelo é o número que faz três matrizes custarem o mesmo que duas — é o preço da terceira
+matriz do gating, pago sem inflar a contagem.</p>
+<blockquote>
+<p>Ideia central: "Dois terços dos pesos do bloco estão justamente na parte que não olha para nenhum vizinho."</p>
+</blockquote>
+<h2>Slide 12 · O bloco moderno, consolidado · 01:34–01:39</h2>
+<p>Agora eu junto tudo, e este slide é a folha de referência que eu quero que vocês levem para o
+Lab 2 e para a prova. Cinco trocas entre 2017 e hoje — e reparem que cada linha da tabela tem
+uma coluna dizendo <strong>qual sintoma motivou a troca</strong>, que é o jeito de decorar sem decorar.</p>
+<p>Posição: era senoidal somada na entrada, uma vez; hoje é rotação de Q e K dentro de cada
+camada — e o sintoma foi o lixo além do comprimento de treino. Onde a norma entra: era
+pós-norm; hoje é pré-norm mais a norma final — e o sintoma foi a divergência ao empilhar. Qual
+norma: era LayerNorm; hoje é RMSNorm — e aqui o motivo foi custo, sem perda medida.
+Feed-forward: era GELU com quatro <code>d</code>; hoje é SwiGLU com oito terços de <code>d</code>. E como a pilha é
+montada: era encoder-decoder; hoje, para geração, é decoder-only — e essa última linha é a
+única que muda o que o modelo <strong>faz</strong>, o que é justamente a aula da semana que vem.</p>
+<p>O bloco inteiro cabe em duas linhas de pseudocódigo, que estão no slide. Duas normas, duas
+somas, por bloco. É isso. Quarenta desses, uma norma final, uma projeção para o vocabulário, e
+vocês têm um LLM.</p>
+<p>Agora a parte que eu acho a mais impressionante da aula. Olha o que <strong>não</strong> mudou em oito anos:
+<code>softmax(QKᵀ/√d_k)V</code>, multi-head, conexão residual e feed-forward por posição. Estão lá,
+iguais. As cinco trocas foram todas de estabilidade e de custo — nenhuma foi no mecanismo.
+Trocaram suspensão, câmbio e injeção; o motor é o de 2017.</p>
+<blockquote>
+<p>Ideia central: "Cinco trocas em oito anos e nenhuma delas foi no mecanismo. Trocaram a suspensão, não o motor."</p>
+</blockquote>
+<h2>Slide 13 · [Exercício] Achar a peça errada · 01:39–01:50</h2>
+<p>Oito minutos, em dupla. Três sintomas, e para cada um eu quero a peça e a evidência.</p>
+<p><em>[O enunciado e a condução completa estão na Parte 3 deste roteiro.]</em></p>
+<blockquote>
+<p>Ideia central: "Nenhuma das três se resolve derivando. As três se resolvem sabendo o que cada peça do bloco compra."</p>
+</blockquote>
+<h2>Slide 14 · Fechamento: o bloco está pronto; falta decidir como conectá-lo · 01:50–02:00</h2>
+<p>Deixa eu fechar o arco de duas aulas.</p>
+<p>Na Aula 6 a gente construiu o <strong>mecanismo</strong>: a fórmula da atenção, as cabeças, a máscara. Hoje
+a gente construiu o <strong>bloco</strong>: posição por rotação de Q e K, duas somas residuais, duas normas,
+um feed-forward com gating. Está pronto e está completo — o que vocês têm no caderno agora é a
+peça de Lego de que todo LLM moderno é feito.</p>
+<p>E cada peça entrou aqui por um sintoma. Isso não foi estilo de aula: é assim que essas peças
+entraram na literatura. Ninguém acordou querendo inventar o pré-norm; alguém tentou empilhar e
+divergiu.</p>
+<p>É exatamente aqui que aparece a última pergunta em aberto. Se o bloco é o mesmo, o que faz um
+modelo ser bom em classificar e outro ser bom em escrever? A resposta não está no bloco. Está
+em <strong>como a pilha de blocos é conectada</strong> e no que cada arquitetura deixa cada token enxergar:
+só o passado, o texto inteiro, ou dois textos em sequência. Três formas de montar as mesmas
+peças, três coisas diferentes que o modelo sabe fazer.</p>
+<p>E tem um segundo fio para a semana que vem. A gente estabeleceu na Aula 6 que a atenção custa
+<code>O(n²)</code>. Enquanto a janela era de 512 tokens, isso era nota de rodapé; com janelas grandes,
+virou o problema central de engenharia. Aula 8: famílias de modelos e atenção eficiente.</p>
+<p>Para a semana, duas coisas. A leitura é o RoFormer, de Su e coautores, arXiv 2104.09864, as
+seções de formulação e de propriedades. A pergunta dirigida está no slide: em que ponto exato
+do cálculo do score a posição entra, e por que isso entrega posição relativa sem nenhum
+parâmetro novo? E o exercício de três linhas: um vetor de duas dimensões, girado por dois
+ângulos, conferindo à mão que o produto escalar só depende da diferença. A conta está feita em
+A.2, com os números da demo — mas fazer com a própria mão é diferente de ler.</p>
+<blockquote>
+<p>Ideia central: "O bloco está pronto. O que decide se o modelo classifica ou escreve não é o bloco — é como a gente empilha e o que cada token pode enxergar."</p>
+</blockquote>
+<hr />
+<h2>Parte 2 — Demonstração guiada</h2>
+<p>Doze minutos, quatro medições. Na V1 esta aula rodava o script da Aula 6 duas vezes para
+mostrar a invariância; na V2 essa parte encolheu para trinta segundos de retomada, e o tempo
+foi para medir <strong>as três estratégias de posição lado a lado</strong> — que é o que o Bloco 1 discute.</p>
+<p>As quinze linhas abaixo podem ser coladas num arquivo ou digitadas no REPL; dependem só de
+NumPy. <strong>Esta aula não tem pasta <code>codigo/</code> própria</strong>: a Medição 1 reaproveita
+<code>../aula-06/codigo/demo-attention.py</code>.</p>
+<p>Preparação na véspera: rodar tudo uma vez na máquina da sala, aumentar a fonte do terminal, e
+capturar as saídas em texto como reserva.</p>
+<h2>Medição 1 — sem posição (30 s)</h2>
+<p><strong>1.</strong> <strong>[Rodo o script da Aula 6 com <code>--shuffle</code>]</strong> Trinta segundos só para recolocar o
+sintoma na tela: mesmo script da aula passada, tokens embaralhados, e a saída de cada token
+idêntica a menos de permutação. É o slide 1.</p>
+<h2>Medição 2 — senoidal: o produto interno só depende da distância (4 min)</h2>
+<p><strong>2.</strong> <strong>[Digito e rodo]</strong> Agora a primeira estratégia, medida:</p>
+<pre><code class="language-python">import numpy as np
+d, k = 64, 3
+i = np.arange(0, d, 2)
+w = 10000.0 ** (-i / d)
+def PE(pos):
+    v = np.empty(d); v[0::2] = np.sin(w * pos); v[1::2] = np.cos(w * pos); return v
+for pos in (0, 5, 100, 1000):
+    print(f&quot;pos={pos:5d}   PE(pos) . PE(pos+{k}) = {PE(pos) @ PE(pos + k):.9f}&quot;)
+</code></pre>
+<p><strong>3.</strong> <strong>[Leio a coluna da direita]</strong> Quatro posições completamente diferentes — zero, cinco,
+cem, mil — e o mesmo número nas quatro: 25,587028547. Até a nona casa decimal. O produto
+interno entre duas codificações <strong>não sabe onde elas estão</strong>; ele só sabe que estão a três
+posições de distância. É a propriedade que eu afirmei no slide 3, medida.</p>
+<p><strong>4.</strong> <strong>[Rodo a mesma conta variando <code>k</code>]</strong> E variando a distância, com <code>pos</code> fixo: 32 para
+distância zero, 30,9 para um, 25,6 para três, 21,1 para dez, 15,7 para cinquenta, 11,4 para
+duzentos. É uma curva de similaridade que decai com a distância — e o 32 do começo é <code>d</code> sobre
+2, que é a norma ao quadrado de qualquer codificação. Todas as posições têm o mesmo tamanho;
+nenhuma é "maior" que outra.</p>
+<h2>Medição 3 — aprendida: o teto que é um erro de índice (1 min)</h2>
+<p><strong>5.</strong> <strong>[Rodo três linhas]</strong> A segunda estratégia, e ela cabe em três linhas:</p>
+<pre><code class="language-python">E = np.random.default_rng(0).normal(size=(4096, 64))   # tabela treinada: uma linha por posição
+print(&quot;posição 4095:&quot;, E[4095].shape)
+print(&quot;posição 4096:&quot;, E[4096].shape)                  # IndexError
+</code></pre>
+<p><strong>6.</strong> <strong>[Mostro a exceção na tela]</strong> <code>IndexError: index 4096 is out of bounds</code>. É o sintoma do
+slide 4, sem metáfora nenhuma. A posição não é mal representada: ela não existe.</p>
+<h2>Medição 4 — RoPE: o mesmo score dentro e fora do treino (6 min)</h2>
+<p><strong>7.</strong> <strong>[Digito e rodo]</strong> E a terceira, que é a que decide a aula:</p>
+<pre><code class="language-python">def rot(v, ang):
+    c, s = np.cos(ang), np.sin(ang)
+    return np.array([c*v[0] - s*v[1], s*v[0] + c*v[1]])
+
+q, kv, theta = np.array([1.0, 0.0]), np.array([0.6, 0.8]), 0.05
+print(f&quot;sem RoPE, qualquer posição:  {q @ kv:.6f}&quot;)
+for m, n in [(3, 1), (10, 8), (500, 498), (5000, 4998), (3, 2), (100, 99)]:
+    print(f&quot;m={m:5d} n={n:5d}  m-n={m-n:2d}  score={rot(q, m*theta) @ rot(kv, n*theta):.6f}&quot;)
+</code></pre>
+<p><strong>8.</strong> <strong>[Leio as quatro primeiras linhas]</strong> Olha os quatro primeiros pares. Distância dois em
+todos, e o score é 0,676869 nos quatro. Nas posições 3 e 1, e nas posições 5000 e 4998. O
+modelo foi treinado com quatro mil de contexto e a conta na posição cinco mil devolve
+exatamente o mesmo número — porque não tem tabela, tem rotação, e a rotação existe para
+qualquer ângulo.</p>
+<p><strong>9.</strong> <strong>[Aponto as duas últimas linhas]</strong> E as duas últimas, com distância um: 0,639233 nas
+duas. Distância diferente, número diferente; mesma distância, mesmo número. É literalmente a
+definição de posição relativa, e ela apareceu dentro do score.</p>
+<p><strong>10.</strong> <strong>[Comparo com a primeira linha]</strong> E a primeira linha é o contrafactual: sem rotação, o
+score é 0,6 em todos os casos. A informação de distância simplesmente não estava lá.</p>
+<hr />
+<h2>Parte 3 — Hands-on</h2>
+<p>Oito minutos de dupla, três de correção. O exercício da V1 era montar as seis peças do bloco na
+ordem certa; ele virou extensão opcional, e o obrigatório passou a ser diagnóstico — mas a
+correção termina com o bloco desenhado na ordem certa no quadro, porque é esse diagrama que vai
+para o Lab 2.</p>
+<p><strong>1.</strong> <strong>[Projeto os três sintomas e formo as duplas]</strong> Oito minutos, em dupla. Três situações,
+e para cada uma eu quero duas coisas: qual peça do bloco está no lugar errado ou ausente, e
+<strong>que evidência confirmaria</strong>. A segunda parte é a que vale.</p>
+<p>Os três sintomas:</p>
+<ol>
+<li>Uma pilha de 48 blocos diverge nos primeiros 200 passos de treino. A mesma receita, com 12
+   blocos, treina até o fim. Não há <code>NaN</code> antes da divergência, e as primeiras camadas mal se
+   movem.</li>
+<li>Um modelo responde bem em prompts curtos e produz texto incoerente assim que o prompt passa
+   de um certo comprimento — sempre o mesmo comprimento, em qualquer assunto.</li>
+<li>Um time aplicou a rotação posicional em Q, K <strong>e</strong> V. O modelo treina, e a representação de
+   uma mesma frase muda conforme ela aparece no começo ou no fim do prompt.</li>
+</ol>
+<p><em>Como recolher:</em> três minutos. Peço uma dupla para o sintoma 1 e forço a segunda parte — "como
+você confirmaria?". Corrijo o 3 com o desenho: vou ao quadro e monto o bloco pré-norm inteiro,
+com as duas normas, as duas somas, a bifurcação dupla do <code>x</code>, o RoPE marcado só sobre Q e K, e
+a norma final depois do último bloco. Esse desenho é o artefato da aula e é literalmente o
+Checkpoint 3 do Lab 2. Se ninguém marcar as duas somas, desenho <strong>errado</strong> de propósito na
+primeira tentativa — o conserto ao vivo fixa melhor que o desenho pronto.</p>
+<p><em>Extensão para quem terminar antes (opcional):</em> com <code>d_model = 1024</code>, calcular quantos
+parâmetros ficam na atenção e quantos no feed-forward, e depois refazer com <code>d_model = 2048</code>
+para ver o fator quatro. É a conta que na V1 eu fazia no quadro e aqui vira aprofundamento;
+está em A.6, com os FLOPs por token.</p>
+<hr />
+<h2>Parte 4 — Apêndice: se perguntarem</h2>
+<p>Esta parte <strong>não é fala planejada</strong>. É contingência: o que eu faço se a turma pedir a derivação
+em aula. A regra geral é remeter ao apêndice e seguir; conduzir uma derivação só se sobrar
+tempo, e anunciando que é conteúdo de consulta.</p>
+<p><strong>Item 1 — "Prova que o produto escalar só depende de <code>m − n</code>?" (A.2, ~5 min).</strong>
+A pergunta mais provável da aula, e a mais legítima — na V1 ela era a aula. Eu escrevo o
+produto interno como produto matricial, uso que a transposta de uma rotação é a rotação
+inversa, e junto os dois ângulos numa rotação só: sobra <code>R((n−m)θ)</code>. Três linhas. Se quiserem
+número em vez de álgebra, faço com dois ângulos concretos, 30° e 50°, e mostro o produto
+escalar dando o cosseno de 20°. <strong>Nunca</strong> introduzir número complexo — o paper usa, o quadro
+não precisa, e a notação complexa perde metade da turma em trinta segundos.</p>
+<p><strong>Item 2 — "Por que seno e cosseno, e não qualquer função?" (A.1, ~6 min).</strong>
+Se perguntarem a construção senoidal. Eu escrevo o par seno/cosseno de uma frequência, aplico
+as identidades de soma de arcos e mostro que deslocar por <code>k</code> é multiplicar por uma matriz que
+depende só de <code>k</code>. Depois faço o produto interno de duas codificações e mostro que os termos
+colapsam numa soma de cossenos da diferença. É bonito e custa caro; só faço se o Bloco 1
+estiver adiantado, porque o RoPE usa a mesma ideia de forma mais limpa. Se não houver tempo, a
+Medição 2 já mostra o resultado medido.</p>
+<p><strong>Item 3 — "Como o <code>I</code> salva o gradiente?" (A.3, ~4 min).</strong>
+Vale fazer se a turma tiver Álgebra Linear fresca. Eu escrevo a derivada de um bloco, depois o
+produto sobre <code>N</code> blocos, e <strong>expando</strong> o produto: aparece um termo identidade puro, que
+atravessa a pilha sem multiplicar nada. O ponto que convence é o contrafactual: sem residual é
+um produto, e <code>0.8^40</code> é <code>10⁻⁴</code>. Se a turma não tiver a base, não fazer — "duas rotas de volta,
+uma delas direta" entrega o mesmo em quinze segundos.</p>
+<p><strong>Item 4 — "De onde vem esse 8/3?" (A.6, ~3 min).</strong>
+Barato e satisfatório. Duas matrizes de largura <code>4d</code> dão <code>8d²</code>; três matrizes de largura <code>d_ff</code>
+dão <code>3·d·d_ff</code>; igualando, <code>d_ff = 8/3·d</code>. Uma linha e meia no quadro. Se eu tiver que escolher
+um item desta parte para fazer, é este — é o de melhor razão entre convencimento e minuto.</p>
+<p><strong>Item 5 — "Por que a norma final é obrigatória?" (A.5, ~4 min).</strong>
+Se alguém perguntar no slide 10, e vale a pena porque é <code>TODO</code> do Lab 2. Eu escrevo as duas
+ordens, mostro que no pré-norm a última operação é uma soma que ninguém normalizou, e ligo com
+a variância que cresce ao longo da pilha. O argumento que mais convence é o caso-limite: com
+<code>f = 0</code>, o bloco pré-norm devolve <code>x</code> intacto e o pós-norm devolve <code>LN(x)</code> — ou seja, no
+pós-norm nem um bloco que não faz nada é inofensivo. A.5 tem os dois desenvolvimentos.</p>
+<hr />
+<h2>Encerramento · 01:50–02:00</h2>
+<p>O encerramento está redigido como fala no Slide 14 da Parte 1 — a síntese do arco de duas aulas
+(mecanismo na Aula 6, bloco na Aula 7), o fato de cada peça ter entrado por um sintoma, a
+pergunta em aberto sobre como a pilha é conectada, o fio do custo <code>O(n²)</code>, a ponte para a Aula
+8 e a leitura de Su et al. com a pergunta dirigida.</p>
+<blockquote>
+<p>Ideia central: "Hoje a gente terminou a peça de Lego. Semana que vem a gente descobre que existem três jeitos de montar as mesmas peças — e que eles produzem modelos que fazem coisas diferentes."</p>
+</blockquote>
+<hr />
+<p><em>Roteiro do Instrutor · Aula 7 de 30 (V2) · Grandes Modelos de Linguagem: do Transformer aos Agentes de IA · 60h · Eletiva de Graduação em Ciência da Computação · CESAR</em></p></article></details></section>
+<section id="caderno" class="panel"><p class="eyebrow">MEU CADERNO</p><h2>O que mudou na sua compreensão?</h2>
+<label for="notes">Registre sua hipótese, o resultado observado e as dúvidas que ficaram.</label><textarea id="notes" rows="7" placeholder="Minha hipótese era… Ao alterar o controle, observei…"></textarea>
+<p class="muted">As anotações ficam neste navegador. Exporte uma cópia para guardar ou levar a outro dispositivo.</p>
+<div class="actions"><button id="export-notes">Exportar caderno</button><label class="button secondary" for="import-notes">Importar caderno</label><input id="import-notes" type="file" accept="application/json,.json"><span id="save-status" role="status"></span></div></section>
+<nav class="actions neighbors" aria-label="Navegar entre aulas"><a class="button secondary" href="../aula-06/index.html">← Aula anterior</a><a class="button" href="../aula-08/index.html">Próxima aula →</a></nav></main>
+<footer>Grandes Modelos de Linguagem · Do Transformer aos Agentes de IA<br>Materiais de estudo e demonstrações interativas.</footer>
+</body></html>
