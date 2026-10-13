@@ -11,8 +11,8 @@ _Last updated: 2026-10-13_
 - AV1 deliverable: `av1/final/avaliacao01_bruno_ribeiro.pdf` (5 A4 pages, selectable text,
   built 2026-10-12 18:27 from `av1/final/avaliacao01_bruno_ribeiro.html` with
   `scripts/build_av1_pdf.sh`). The user reported on 2026-10-13 that it was handed in.
-- `main` holds the work up to PR #2 (merge commit `02dbd3d`, 2026-10-07). The 2026-10-12 work
-  goes through branch `feat/av1-final-dossier` and its pull request.
+- All work up to the AV1 close-out is on `main`: PR #3 (`feat/av1-final-dossier`) was merged on
+  2026-10-13 as merge commit `91222e7`.
 
 ## Recently changed
 
@@ -79,9 +79,11 @@ Run on 2026-10-12:
   on the slide differs (noted in each page's header).
 - Lesson 4 has no slide deck (it is Lab 1); the page cites the lab notebook and the portal guide.
 - `reference/teacher-only/` is git-ignored by design: those files exist only on this machine.
-- Inside the agent sandbox, commits (GPG signing), `gh`, network access to GitHub, headless
-  Chrome, writes to the Obsidian vault, PR merges and branch switches that touch
-  `.claude/skills/` or `.claude/agents/` fail; the user runs those with the `!` prefix.
+- Inside the agent sandbox, commits (GPG signing), `gh`, headless Chrome, writes to the
+  Obsidian vault and branch switches that touch `.claude/skills/` or `.claude/agents/` fail;
+  the user runs those with the `!` prefix. `git fetch` works when the command is allowed to
+  reach `github.com`, and a pull request can be merged through the user's Chrome (done for
+  PR #3 on 2026-10-13).
 
 ## Next steps
 
