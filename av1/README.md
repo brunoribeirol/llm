@@ -3,6 +3,23 @@
 Assessment 01 of *Grandes Modelos de Linguagem* (lessons 1–8). Statement:
 [`avaliacao-01-dossie-conceitual.pdf`](avaliacao-01-dossie-conceitual.pdf).
 
+## Status
+
+Handed in on 2026-10-13, as reported by the student:
+[`final/avaliacao01_bruno_ribeiro.pdf`](final/avaliacao01_bruno_ribeiro.pdf), 5 A4 pages, built
+on 2026-10-12. Grade and professor's feedback: pending.
+
+| File | Role |
+|---|---|
+| `final/avaliacao01_bruno_ribeiro.pdf` | The deliverable |
+| `final/avaliacao01_bruno_ribeiro.html` | Its print source; frozen since the hand-in |
+| `draft/dossie.md` | Cases 1 and 2 in the student's own words, from the coaching sessions |
+| `ai-usage-log.md` | Row-by-row record of every AI-assisted step |
+
+The PDF was built from the repository root with `scripts/build_av1_pdf.sh`, which needs Google
+Chrome and must run outside the agent sandbox. Do not rebuild it now: `final/` should stay as it
+was handed in.
+
 ## Facts
 
 | Item | Value |
@@ -16,9 +33,9 @@ Assessment 01 of *Grandes Modelos de Linguagem* (lessons 1–8). Statement:
 | Suggested file name | `avaliacao01_nome_sobrenome.pdf` |
 | Required headings | `Caso 1` … `Caso 8`, `Variação 1`, `Variação 2`; full name, class and title at the top |
 
-**To confirm with the professor:** the class announcement says *printed, on 13/10*; the PDF
-statement says *a single PDF with selectable text, submitted through the class channel by 23:59*.
-Check whether it is one, the other, or both.
+**Hand-in channel:** the class announcement says *printed, on 13/10*; the PDF statement says
+*a single PDF with selectable text, submitted through the class channel by 23:59*. Which of the
+two the student used on 13/10 was not recorded here.
 
 ## Rubric
 
@@ -72,6 +89,22 @@ responsible for the content. The final text is individual. In this repository th
   statement is accurate. Required wording: *"Utilizei [ferramenta] para [finalidade]. Conferi
   ou alterei [partes] com base em [materiais]."*
 
+### What happened in AV1
+
+The plan above held for cases 1 and 2 only.
+
+- Cases 1 and 2 went through the coaching flow; the student's answers are in `draft/dossie.md`.
+- With the deadline one day away and a job interview on the same day, the student had claude.ai
+  draft the full dossier and chose that text as the deliverable.
+- In this repository Claude Code reviewed that draft against the rubric and the lessons,
+  corrected one clause of case 8 at the student's request (window attention reduces the compared
+  position pairs, as in lesson 8), and formatted the PDF.
+- The AI-use statement in the deliverable says this: Claude drafted the initial answers, and
+  Claude Code supported study, review and formatting.
+
+For AV2, start earlier and agree on the time budget before the first case; see the pacing notes
+in `.agents/skills/assessment-coach/SKILL.md`.
+
 ## Suggested schedule
 
 | Day | Work |
@@ -95,11 +128,13 @@ responsible for the content. The final text is individual. In this repository th
 
 ## Final checklist
 
-- [ ] Full name, class and title at the top
-- [ ] Eight cases answered, every sub-question covered
-- [ ] One variation from cases 1–4 and one from cases 5–8, each with: origin case, new condition, what changes, what stays, how to check
-- [ ] A specific reference in every case (`Aula N — trecho`)
-- [ ] No invented references or experiments
-- [ ] AI-use statement at the end
-- [ ] PDF readable, selectable text, no cut pages
-- [ ] Printed copy ready
+Checked against `final/avaliacao01_bruno_ribeiro.pdf` on 2026-10-12:
+
+- [x] Full name, class and title at the top
+- [x] Eight cases answered, every sub-question covered
+- [x] One variation from cases 1–4 (case 1) and one from cases 5–8 (case 6), each with: origin case, new condition, what changes, what stays, how to check
+- [x] A specific reference in every case (written as `Aula N: trecho`)
+- [ ] No invented references or experiments: the twelve external sources were not opened during the review; the student confirms them
+- [x] AI-use statement at the end, in the two-sentence format
+- [x] PDF readable, selectable text, no cut pages
+- [x] Handed in on 2026-10-13 (reported by the student; paper or PDF upload not recorded)

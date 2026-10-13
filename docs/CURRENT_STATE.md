@@ -1,18 +1,37 @@
 # Current State
 
-_Last updated: 2026-10-07_
+_Last updated: 2026-10-13_
 
 ## Last confirmed working state
 
 - `study/index.html` (hub) and `study/aula-01.html` … `aula-08.html` pass `scripts/check_study_pages.py`.
 - `reference/portal_gml_262/` mirrors the professor's portal at upstream commit `389264e`.
   The 8 teacher-only files are stored apart in `reference/teacher-only/portal_gml_262/`.
-  `scripts/professor_sync.py --check` reports up to date.
-- The session's work is committed on branch `feat/study-workspace` (local: not pushed, not
-  merged). `main` is still at `af71f91` (2026-09-06).
+  Not re-synced on 2026-10-12: the agent sandbox had no network access to GitHub.
+- AV1 deliverable: `av1/final/avaliacao01_bruno_ribeiro.pdf` (5 A4 pages, selectable text,
+  built 2026-10-12 18:27 from `av1/final/avaliacao01_bruno_ribeiro.html` with
+  `scripts/build_av1_pdf.sh`). The user reported on 2026-10-13 that it was handed in.
+- `main` holds the work up to PR #2 (merge commit `02dbd3d`, 2026-10-07). The 2026-10-12 work
+  goes through branch `feat/av1-final-dossier` and its pull request.
 
 ## Recently changed
 
+- 2026-10-13: AV1 handed in, as reported by the user. Whether it went on paper, as a PDF
+  upload or both was not recorded. Grade and feedback are pending.
+- 2026-10-12: AV1 closed. The user tried the coaching route for cases 1 and 2 (their answers,
+  assembled in `av1/draft/dossie.md`), then, short on time before a job interview, had claude.ai
+  draft the full dossier and chose that text as the deliverable. In this repository the agent
+  reviewed that draft against the rubric and the course material, typeset it word for word as
+  `av1/final/avaliacao01_bruno_ribeiro.html`, and at the user's request added the class line,
+  corrected one clause of case 8 (window attention reduces the compared position pairs, as in
+  lesson 8, instead of bounding the cache), replaced the em dashes in headings and reference
+  lines with colons, and inserted the AI-use statement the user wrote. The statement says that
+  Claude drafted the initial answers and Claude Code supported study, review and formatting.
+- 2026-10-12: added `scripts/build_av1_pdf.sh` (headless Chrome, A4, page numbers). It has to
+  run outside the agent sandbox, which blocks Chrome's local socket.
+- 2026-10-12: removed iCloud conflict copies: 202 `name 2` files, 35 empty `name 2` folders,
+  `.git/index 2`, `.git/index 3` and one stale `avaliacao01_bruno_ribeiro 2.pdf`. Every removed
+  file was byte-identical to its original, except the PDF, which was an older render.
 - 2026-10-07: study pages for lessons 2–8 written in the lesson 1 format; hub and
   `av1/README.md` case map updated; AI-usage log extended.
 - 2026-10-07: at the user's request the sync script now keeps teacher-only files
@@ -25,47 +44,58 @@ _Last updated: 2026-10-07_
 
 ## Current objective
 
-AV1 (*Dossiê de diagnóstico conceitual*, lessons 1–8), due **2026-10-13**, printed. All eight
-lessons now have a study page with a bridge to their case. The next step is the user's: study,
-then draft the eight cases and two variations in `av1/draft/dossie.md`. Plan and checklist:
-`av1/README.md`.
+AV1 is handed in. The workspace is back to its standing job: a study page for each new lesson
+(9 onward). The AV1 grade and feedback get recorded in `av1/README.md` when they arrive.
 
 ## Validation evidence
 
-- `python3 scripts/check_study_pages.py` → 9 pages `ok` (balanced tags, 240 links and anchors,
-  inline scripts via `node --check`, self-test counts against the hub).
-- Scratch smoke test (Node, DOM stub built from each page's markup): every page's scripts ran
-  and every event handler fired without exceptions; computed values match the professor's
-  numbers (e.g. accuracy 0,9090 for the aggressive detector, 10,9 pages at fertility 1,5,
-  KV cache 4,0 GiB per 8.192-token conversation).
-- `python3 scripts/professor_sync.py` and `--check` → mirror up to date, site HTTP 200.
-- `ruff check scripts/` and `ruff format scripts/` → clean.
-- **Not verified:** the pages were never rendered in a browser in this session. The sandbox
-  blocks `open` and local port binding, and the Chrome extension refuses `file://` URLs.
-  Layout and visual quality are unreviewed.
+Run on 2026-10-12:
+
+- `python3 scripts/check_study_pages.py` → 9 pages `ok`.
+- `ruff check scripts/` and `ruff format --check scripts/` → clean.
+- `sh -n scripts/build_av1_pdf.sh` → syntax ok; the user ran the script three times outside the
+  sandbox, and the last two runs ended with `wrote …pdf` and `Pages: 5`.
+- Final PDF inspected: 5 pages, page 1 (identification) and pages 4–5 viewed, text extracted
+  with `pdftotext`; class line, case 8 correction and AI-use statement present; no em dashes.
+- Print HTML compared word by word with the claude.ai PDF by a scratch script before the
+  requested edits: the only differences were the header lines.
+- **Not verified:** the twelve external references in the dossier were not opened in this
+  session; they exist to the agent's knowledge. `shellcheck` is not installed. The study pages
+  were still not reviewed in a browser by the agent.
 
 ## Known risks and constraints
 
+- The AI-use statement declares that Claude drafted the initial answers. The AV1 statement
+  allows AI for study, organizing ideas and review and requires an individual final text; how
+  the professor treats this is unknown.
+- Every case in the dossier is longer than the suggested 100–180 words (221–319). The AV1
+  statement says the limits do not trigger an automatic penalty.
+- The repository sits in iCloud-synced `~/Documents`. Bulk writes and regenerated files leave
+  `name 2` conflict copies, including inside `.git/`. Check with
+  `find . \( -name '* 2' -o -name '* 2.*' \)` after large write sessions.
 - Lesson 8 has no slide PDF in `class/slides/`; its page is built from the portal guide and
   its slide numbers follow the guide. Recheck citations when the PDF arrives.
 - Slide numbers on the pages are PDF page numbers. For lessons 5, 6 and 7 the number printed
   on the slide differs (noted in each page's header).
 - Lesson 4 has no slide deck (it is Lab 1); the page cites the lab notebook and the portal guide.
-- The AV1 announcement says printed; the statement PDF says PDF upload by 23:59. Unconfirmed.
-- 2026-10-12 is a national holiday: printing must be arranged earlier.
-- `feat/study-workspace` is not pushed: the new material still exists only on this machine.
-  `reference/teacher-only/` is git-ignored by design and never leaves it.
+- `reference/teacher-only/` is git-ignored by design: those files exist only on this machine.
+- Inside the agent sandbox, commits (GPG signing), `gh`, network access to GitHub, headless
+  Chrome, writes to the Obsidian vault, PR merges and branch switches that touch
+  `.claude/skills/` or `.claude/agents/` fail; the user runs those with the `!` prefix.
 
 ## Next steps
 
-1. User reviews the pages in a browser and reports format or content problems.
-2. User drafts the cases; review with `assessment-coach` / `draft-reviewer`.
-3. Push `feat/study-workspace` and open a pull request into `main`.
-4. Get the lesson 8 slides and recheck that page's citations.
-5. Lessons 9–30: build each page as the course reaches it (the portal mirror already has the guides).
+1. User fills the "checked by me" column of `av1/ai-usage-log.md` (every row is still
+   `pending`).
+2. Record the AV1 grade and the professor's feedback in `av1/README.md` when they arrive.
+3. Get the lesson 8 slides and recheck that page's citations.
+4. Lessons 9–30: build each page as the course reaches it (the portal mirror already has the
+   guides). Run `python3 scripts/professor_sync.py` first, from outside the sandbox.
+5. Consider moving the repository out of `~/Documents` to stop the iCloud conflict copies.
 
 ## Do not touch without explicit scope
 
+- `av1/final/`: the deliverable as handed in on 2026-10-13. Do not edit or rebuild it.
 - `av1/draft/dossie.md`: the user's own text. Review it; do not write or rewrite answers in it.
 - `reference/teacher-only/`: kept for the user's after-the-fact checking. Do not open unless
   the user explicitly asks for a specific file.

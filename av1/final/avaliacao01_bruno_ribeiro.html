@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Avaliação 01: Dossiê de diagnóstico conceitual</title>
+    <!-- Print source for the AV1 deliverable. The answer text is transcribed verbatim from the
+     student's claude.ai document; only the header and the layout were changed here.
+     Build (outside the agent sandbox, which blocks Chrome's local socket):
+     scripts/build_av1_pdf.sh -->
+    <style>
+      @page {
+        size: A4;
+        margin: 17mm 18mm 17mm 18mm;
+        @bottom-center {
+          content: counter(page) " / " counter(pages);
+          font:
+            8pt "Helvetica Neue",
+            Helvetica,
+            Arial,
+            sans-serif;
+          color: #666;
+        }
+      }
+      html {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body {
+        margin: 0;
+        font:
+          10pt/1.38 "Helvetica Neue",
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: #1a1a1a;
+      }
+      h1 {
+        font-size: 17pt;
+        line-height: 1.2;
+        color: #1f3a5f;
+        margin: 0 0 5pt;
+      }
+      .meta {
+        margin: 0 0 1pt;
+        font-size: 9.5pt;
+        text-align: left;
+      }
+      h2 {
+        font-size: 11.5pt;
+        color: #1f3a5f;
+        margin: 12pt 0 4pt;
+        padding-bottom: 2pt;
+        border-bottom: 0.5pt solid #c9d3df;
+        break-after: avoid;
+      }
+      h3 {
+        font-size: 10pt;
+        margin: 6pt 0 3pt;
+        break-after: avoid;
+      }
+      p {
+        margin: 0 0 4pt;
+        text-align: justify;
+        hyphens: auto;
+        orphans: 2;
+        widows: 2;
+      }
+      p:has(+ ul) {
+        break-after: avoid;
+      } /* keep a list label on the same page as its list */
+      ul {
+        margin: 0 0 4pt;
+        padding-left: 14pt;
+      }
+      li {
+        margin: 0 0 2pt;
+        text-align: justify;
+        hyphens: auto;
+      }
+      .ref {
+        font-size: 8.8pt;
+        color: #4a4a4a;
+      }
+      .sources li {
+        font-size: 8.8pt;
+        text-align: left;
+        hyphens: manual;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Avaliação 01: Dossiê de diagnóstico conceitual</h1>
+    <p class="meta">
+      <strong>Nome completo:</strong> Bruno Ribeiro Lima Lins de Araújo
+    </p>
+    <p class="meta"><strong>Turma:</strong> 8º período</p>
+    <p class="meta">
+      <strong>Disciplina:</strong> Grandes Modelos de Linguagem: do Transformer
+      aos Agentes de IA (V2) · Aulas 1 a 8
+    </p>
+
+    <h2>Caso 1: Acerta muito, mas perde as urgências</h2>
+    <p>
+      <strong>Problema central.</strong> As classes são desbalanceadas, e o
+      objetivo real (priorizar urgências) não é medido pela acurácia.
+    </p>
+    <p>
+      <strong>1. Por que a acurácia engana.</strong> A acurácia conta acertos
+      sobre o total. Como quase todas as solicitações são comuns, um
+      classificador que responde "comum" para tudo acerta quase sempre e, mesmo
+      assim, não detecta nenhuma urgência. O número alto reflete a distribuição
+      das classes, não a capacidade de cumprir a tarefa.
+    </p>
+    <p>
+      <strong>2. Erro prioritário e métrica.</strong> O erro crítico é o falso
+      negativo: uma urgência rotulada como comum, que deixa um caso grave sem
+      prioridade. A métrica pertinente é a revocação (recall) da classe
+      "urgente": entre as urgências reais, quantas o sistema encontra. Ela expõe
+      exatamente o que a acurácia esconde; a matriz de confusão por classe
+      complementa a leitura.
+    </p>
+    <p>
+      <strong>3. Excesso de falsos positivos.</strong> Se muitas solicitações
+      comuns forem marcadas como urgentes, a fila prioritária incha, as
+      urgências reais disputam atenção com alarmes falsos e a equipe passa a
+      desconfiar do sistema. Por isso a decisão não é maximizar só a revocação:
+      acompanha-se também a precisão da classe urgente e escolhe-se o limiar
+      conforme o custo de cada erro e a capacidade da equipe.
+    </p>
+    <p class="ref">
+      <strong>Fundamento.</strong> Aula 1: trecho sobre métricas de
+      classificação (acurácia, precisão, revocação e matriz de confusão).
+      Externo: Jurafsky e Martin, <em>Speech and Language Processing</em>, seção
+      sobre avaliação de classificadores.
+    </p>
+
+    <h2>Caso 2: Mesmo conteúdo, mais tokens</h2>
+    <p>
+      <strong>Problema central.</strong> O número de tokens depende do
+      vocabulário do tokenizador, não da quantidade de conteúdo do texto.
+    </p>
+    <p>
+      <strong>1. Origem da diferença.</strong> Tokenizadores de subpalavras
+      (como BPE) constroem o vocabulário a partir das sequências mais frequentes
+      no corpus de treino. O que é frequente vira um token inteiro; o que é raro
+      é quebrado em pedaços. Se o corpus foi dominado pelo inglês, palavras
+      inglesas tendem a ocupar um token, enquanto palavras portuguesas com
+      flexões ("cantávamos"), acentos e clíticos são fragmentadas em várias
+      subpalavras. Em tokenizadores por bytes, letras acentuadas ainda ocupam
+      mais bytes.
+    </p>
+    <p>
+      <strong>2. Consequências.</strong> O texto em português consome mais da
+      janela de contexto: cabe menos histórico ou documento, e cresce o risco de
+      truncamento. Num serviço cobrado por token, a mesma informação custa mais
+      e gera mais latência, tanto na entrada quanto na saída.
+    </p>
+    <p>
+      <strong>3. Limites do resultado.</strong> Não se pode concluir que o
+      português sempre exige mais tokens: houve um par de textos e um único
+      tokenizador. Um tokenizador treinado com mais português pode reduzir ou
+      inverter a diferença, e o domínio, o estilo e a tradução também influem.
+      Uma comparação mais representativa usaria um corpus paralelo amplo, de
+      vários domínios, com vários tokenizadores, medindo a razão de tokens PT/EN
+      por par de sentenças e relatando a distribuição, não um caso isolado.
+    </p>
+    <p class="ref">
+      <strong>Fundamento.</strong> Aula 2: trecho sobre tokenização por
+      subpalavras; Aula 4: interpretação do laboratório. Externo: Petrov et al.
+      (2023), que comparam o comprimento de traduções equivalentes em 17
+      tokenizadores.
+    </p>
+
+    <h2>Caso 3: Uma palavra, dois contextos</h2>
+    <p>
+      <strong>Problema central.</strong> Um único vetor por palavra não
+      acompanha a mudança de sentido entre frases.
+    </p>
+    <p>
+      <strong>1. Limitação do vetor estático.</strong> No Word2Vec, cada palavra
+      do vocabulário corresponde a uma linha de uma tabela de embeddings,
+      consultada pela identidade da palavra, não pela frase. As duas ocorrências
+      de "banco" recebem exatamente o mesmo vetor, que mistura os sentidos de
+      assento e de instituição financeira na proporção em que aparecem no
+      corpus. Olhando só esse vetor, não há como saber qual sentido está em
+      jogo.
+    </p>
+    <p>
+      <strong>2. O que a representação contextual muda.</strong> Num modelo
+      contextual, como um encoder Transformer do tipo BERT, o vetor de cada
+      ocorrência é calculado a partir das palavras ao redor. "Sentou" e "praça"
+      levam "banco" a uma região diferente daquela produzida por "abriu" e
+      "conta". A mesma palavra passa a ter uma representação por ocorrência, o
+      que permite distinguir os sentidos.
+    </p>
+    <p>
+      <strong>3. Relação com a aprendizagem pelo contexto.</strong> As duas
+      abordagens partem da hipótese distribucional: o significado se aprende
+      pelos contextos de uso. O Word2Vec aplica essa ideia só no treino e resume
+      todos os contextos de "banco" num único vetor. O modelo contextual
+      aplica-a também no uso: o contexto da frase atual entra no cálculo de cada
+      representação.
+    </p>
+    <p class="ref">
+      <strong>Fundamento.</strong> Aula 3: trecho sobre Word2Vec e hipótese
+      distribucional. Externos: Mikolov et al. (2013); Devlin et al. (2019).
+    </p>
+
+    <h2>Caso 4: O gráfico convenceu a equipe</h2>
+    <p>
+      <strong>Problema central.</strong> Uma projeção visual e um corpus pequeno
+      não sustentam uma conclusão sobre compreensão e generalização.
+    </p>
+    <p><strong>1. Duas limitações.</strong></p>
+    <ul>
+      <li>
+        <strong>Visualização:</strong> o t-SNE é uma projeção não linear que
+        preserva sobretudo vizinhanças locais. Distâncias entre grupos e
+        tamanhos de agrupamentos não são confiáveis, e o desenho muda com a
+        perplexidade e a semente aleatória. Algumas palavras próximas,
+        escolhidas a olho, podem ser artefato ou seleção.
+      </li>
+      <li>
+        <strong>Dados:</strong> um corpus pequeno produz vetores ruidosos,
+        sobretudo para palavras raras, e só reflete o vocabulário e os usos
+        daquele domínio. Não há evidência para "qualquer domínio", e proximidade
+        estatística não equivale a compreensão.
+      </li>
+    </ul>
+    <p>
+      <strong>2. Verificação adicional.</strong> Avaliar no espaço original, não
+      na projeção: comparar a similaridade de cosseno entre pares de palavras
+      com julgamentos humanos de similaridade, usando uma lista definida antes
+      de olhar os resultados; repetir o treino com sementes diferentes para
+      checar estabilidade; e testar os embeddings numa tarefa do domínio-alvo e
+      de outro domínio, contra uma linha de base.
+    </p>
+    <p>
+      <strong>3. O que apoiaria e o que não se conclui.</strong> Apoiaria a
+      análise: boa concordância com os julgamentos humanos, vizinhos estáveis
+      entre execuções e ganho sobre a linha de base. Mesmo assim, só se conclui
+      que o espaço capta regularidades de coocorrência daquele corpus, para as
+      palavras e tarefas testadas. Não se conclui compreensão, nem bom
+      desempenho em qualquer domínio.
+    </p>
+    <p class="ref">
+      <strong>Fundamento.</strong> Aulas 3 e 4: trechos sobre visualização de
+      embeddings e interpretação do laboratório. Externo: Wattenberg, Viégas e
+      Johnson (2016), sobre as armadilhas de leitura do t-SNE.
+    </p>
+
+    <h2>Caso 5: O começo da frase se perdeu</h2>
+    <p>
+      <strong>Problema central.</strong> Toda a entrada precisa passar por um
+      único vetor de tamanho fixo.
+    </p>
+    <p>
+      <strong>1. O gargalo.</strong> No seq2seq clássico, o encoder recorrente
+      lê a frase token a token e entrega ao decoder apenas o último estado
+      oculto. Uma frase de 5 ou de 50 palavras precisa caber na mesma dimensão.
+      Como o estado é reescrito a cada passo, detalhes do início vão sendo
+      diluídos ou sobrescritos, e o decoder não tem outro acesso à entrada. O
+      caminho de gradiente entre a saída e o início da frase também é longo, o
+      que dificulta aprender essas dependências.
+    </p>
+    <p>
+      <strong>2. Como a atenção ajuda.</strong> Com atenção, o encoder mantém
+      todos os seus estados, um por posição. A cada passo de geração, o decoder
+      compara seu estado atual com cada estado do encoder, transforma essas
+      pontuações em pesos e monta um vetor de contexto próprio daquele passo. Ao
+      traduzir o começo da frase, pode dar peso alto aos primeiros estados, sem
+      depender de que eles sobrevivam num vetor final.
+    </p>
+    <p>
+      <strong>3. LSTM e processamento sequencial.</strong> Não elimina. As
+      portas e a célula de memória da LSTM ajudam a preservar informação e
+      atenuam o desaparecimento do gradiente. Mas o estado no passo t continua
+      dependendo do passo t−1, então o processamento segue sequencial e não
+      paraleliza entre posições. Sem atenção, o gargalo do vetor final também
+      permanece.
+    </p>
+    <p class="ref">
+      <strong>Fundamento.</strong> Aula 5: trecho sobre seq2seq, LSTM e
+      atenção. Externos: Sutskever, Vinyals e Le (2014); Bahdanau, Cho e Bengio
+      (2015).
+    </p>
+
+    <h2>Caso 6: Bom no treinamento, ruim na geração</h2>
+    <p>
+      <strong>Problema central.</strong> Vazamento de informação: o treino deu
+      ao modelo acesso a algo que não existe na geração.
+    </p>
+    <p>
+      <strong>1. Treino, geração e máscara causal.</strong> No treino descrito,
+      cada posição podia consultar tokens posteriores, inclusive o próprio alvo.
+      O modelo aprendeu a copiar a resposta, por isso o resultado parecia
+      excelente. Na geração autorregressiva, o futuro ainda não existe: o modelo
+      produz um token por vez vendo só o que já foi gerado. O atalho some e a
+      qualidade cai. A máscara causal impede, dentro da atenção, que a posição i
+      consulte posições j &gt; i, atribuindo peso zero a elas. Assim, o treino
+      usa só o prefixo, como na geração, sem perder o processamento em paralelo.
+    </p>
+    <p>
+      <strong>2. Papéis de Q, K e V.</strong> Cada token é projetado por três
+      matrizes aprendidas: a Query representa o que a posição procura; a Key,
+      como cada posição se apresenta para ser encontrada; o Value, o conteúdo
+      que será repassado. A compatibilidade entre Q e K define os pesos, e a
+      saída é a combinação ponderada dos V. Na self-attention, as três vêm da
+      mesma sequência porque ela consulta a si mesma; como as projeções são
+      diferentes, um token pode buscar uma coisa e oferecer outra.
+    </p>
+    <p>
+      <strong>3. Múltiplas cabeças.</strong> Cada cabeça tem suas próprias
+      projeções, então a mesma posição pode combinar, em paralelo, informação de
+      padrões diferentes, como vizinhança, concordância ou referência. Essas
+      especializações emergem do treino e podem ser parciais, redundantes ou
+      difíceis de interpretar; nenhuma cabeça tem função fixa garantida.
+    </p>
+    <p class="ref">
+      <strong>Fundamento.</strong> Aula 6: trecho sobre self-attention, Q/K/V,
+      múltiplas cabeças e máscara causal. Externo: Vaswani et al. (2017).
+    </p>
+
+    <h2>Caso 7: As peças do Transformer</h2>
+    <p>
+      <strong>Problema central.</strong> Sem informação de posição, a
+      self-attention trata a frase como um conjunto de palavras.
+    </p>
+    <p>
+      <strong>1. Por que a ordem se perde.</strong> Os pesos da atenção dependem
+      só do conteúdo dos tokens (comparação entre Q e K), não de onde estão. As
+      duas frases têm as mesmas palavras e, com atenção bidirecional, cada
+      palavra vê o mesmo conjunto de vizinhos nas duas. Logo, "cachorro" recebe
+      a mesma representação como sujeito e como objeto, e o modelo não tem como
+      saber quem morde quem. Reordenar a entrada apenas reordena as saídas.
+    </p>
+    <p><strong>2. Funções de cada peça.</strong></p>
+    <ul>
+      <li>
+        <strong>Informação posicional:</strong> indica onde cada token está
+        (embeddings posicionais absolutos, senoidais ou relativos), tornando a
+        ordem visível ao cálculo.
+      </li>
+      <li>
+        <strong>Conexão residual:</strong> soma a entrada de uma subcamada à sua
+        saída, preservando a informação original e facilitando a passagem do
+        gradiente em pilhas profundas.
+      </li>
+      <li>
+        <strong>Normalização:</strong> reescala as ativações de cada posição,
+        estabilizando o treino.
+      </li>
+      <li>
+        <strong>Feed-forward:</strong> transforma, de forma não linear, cada
+        posição separadamente, depois que a atenção misturou informação entre
+        posições.
+      </li>
+    </ul>
+    <p>
+      <strong>3. Por que não se substituem.</strong> Cada peça resolve um
+      problema diferente. Residual e normalização estabilizam o treino, mas não
+      criam informação de ordem; o feed-forward atua posição por posição e não
+      troca informação entre tokens; a atenção troca informação, mas é cega à
+      ordem. A informação posicional diz onde cada token está; a máscara diz
+      quem pode consultar quem. Este encoder não usa máscara e ainda assim
+      precisa de posição; e uma máscara causal restringe o acesso, mas não
+      informa explicitamente a posição de cada token.
+    </p>
+    <p class="ref">
+      <strong>Fundamento.</strong> Aula 7: trecho sobre codificação posicional
+      e componentes do bloco Transformer; Aula 6: trecho sobre máscara.
+      Externo: Vaswani et al. (2017).
+    </p>
+
+    <h2>Caso 8: Escolher e sustentar o modelo</h2>
+    <p>
+      <strong>Problema central.</strong> Duas tarefas com formatos de saída
+      diferentes, e um gargalo de memória que cresce com o uso, não com os
+      pesos.
+    </p>
+    <p><strong>1. Famílias candidatas.</strong></p>
+    <ul>
+      <li>
+        <strong>Classificação em categorias fixas:</strong> encoder-only
+        (família BERT) com uma camada de classificação. A saída é um rótulo de
+        um conjunto fechado, produzido de uma vez a partir da representação da
+        mensagem inteira, com atenção bidirecional e custo baixo e previsível.
+        Condições: haver exemplos rotulados para ajuste fino, categorias
+        estáveis e mensagens que caibam na janela. Sem rótulos, um decoder com
+        instruções seria alternativa, com mais custo e saída a validar.
+      </li>
+      <li>
+        <strong>Assistente com respostas abertas:</strong> decoder-only (família
+        GPT/LLaMA), que gera texto token a token, cada um condicionado ao
+        prefixo. Condições: aceitar o custo da geração e de uma memória
+        proporcional ao contexto.
+      </li>
+    </ul>
+    <p>
+      <strong>2. Memória e KV cache.</strong> Para não recalcular a atenção
+      sobre todo o histórico a cada novo token, o modelo guarda as chaves e
+      valores (K, V) dos tokens já processados, em cada camada e cabeça. Esse
+      cache cresce com o comprimento do histórico e existe para cada conversa
+      ativa. Os pesos são fixos e compartilhados; o que cresce é o estado por
+      conversa. Mais conversas simultâneas com históricos mais longos esgotam a
+      memória.
+    </p>
+    <p><strong>3. Três propostas.</strong></p>
+    <ul>
+      <li>
+        <strong>Compartilhar K/V entre cabeças (MQA/GQA):</strong> reduz o
+        tamanho do cache por token. Limitação: pode perder qualidade e costuma
+        exigir treinar ou adaptar o modelo.
+      </li>
+      <li>
+        <strong>Atenção em janelas:</strong> limita quantos tokens anteriores
+        cada posição consulta, o que reduz o número de pares de posições
+        comparados: o custo da atenção deixa de ser quadrático no comprimento do
+        histórico. Limitação: referências antigas, fora da janela, não são
+        consultadas diretamente.
+      </li>
+      <li>
+        <strong>Destilação:</strong> treina um modelo menor para imitar o maior,
+        reduzindo parâmetros, memória dos pesos e custo por token. Limitação: o
+        modelo menor pode perder capacidade em tarefas difíceis.
+      </li>
+    </ul>
+    <p class="ref">
+      <strong>Fundamento.</strong> Aula 8: trecho sobre famílias de modelos e
+      eficiência na inferência. Externos: Shazeer (2019); Ainslie et al. (2023);
+      Beltagy, Peters e Cohan (2020); Hinton, Vinyals e Dean (2015).
+    </p>
+
+    <h2>Variação 1: Caso 1 com falso positivo de alto custo</h2>
+    <p>
+      <strong>Caso de origem.</strong> Caso 1: classificador de solicitações
+      comuns e urgentes.
+    </p>
+    <p>
+      <strong>Nova condição.</strong> Marcar uma solicitação como "urgente"
+      passa a despachar automaticamente uma equipe de campo, e a central tem só
+      duas equipes por turno. Mantêm-se: poucas urgências entre muitas
+      solicitações comuns, o mesmo classificador e uma urgência perdida ainda
+      vai para a fila comum.
+    </p>
+    <p>
+      <strong>O que muda.</strong> Na resposta original, o falso positivo
+      custava atenção da equipe; agora consome um recurso escasso e pode deixar
+      uma urgência real sem equipe. A precisão da classe urgente deixa de ser só
+      acompanhamento e vira restrição: os despachos esperados por turno precisam
+      caber na capacidade. A decisão passa de um limiar único para três faixas:
+      alta confiança despacha; confiança intermediária vai para confirmação
+      humana rápida; baixa confiança segue para a fila comum.
+    </p>
+    <p>
+      <strong>O que permanece.</strong> A acurácia continua enganosa, porque o
+      desbalanceamento não mudou. O falso negativo continua grave, e a avaliação
+      continua exigindo métricas por classe e matriz de confusão.
+    </p>
+    <p>
+      <strong>Como verificar.</strong> Num conjunto de validação rotulado, com a
+      proporção real de classes, levantar precisão e revocação da classe urgente
+      em vários limiares e estimar os despachos por turno de cada um. Apoia a
+      nova conclusão: existir uma faixa em que a revocação atinge o mínimo
+      exigido, os despachos cabem nas duas equipes e o volume intermediário é
+      absorvido pela triagem humana. Põe em dúvida: se, para alcançar revocação
+      aceitável, os despachos falsos excederem a capacidade, o despacho
+      automático não é viável e toda urgência deveria passar por confirmação
+      humana.
+    </p>
+
+    <h2>Variação 2: Caso 6 com classificação da frase inteira</h2>
+    <p>
+      <strong>Caso de origem.</strong> Caso 6: modelo que, no treino,
+      consultava tokens posteriores.
+    </p>
+    <p>
+      <strong>Nova condição.</strong> O mesmo modelo passa a classificar a
+      mensagem inteira em categorias fixas; em produção, a frase completa está
+      sempre disponível antes da decisão. Mantêm-se: self-attention com
+      múltiplas cabeças, informação de posição e rótulo ausente do texto de
+      entrada.
+    </p>
+    <p>
+      <strong>O que muda.</strong> Consultar tokens posteriores deixa de ser
+      vazamento, pois a informação disponível no treino e no uso agora coincide:
+      a frase inteira. A máscara causal deixa de ser necessária e passa a
+      atrapalhar, porque cada posição veria só o prefixo, e palavras do fim não
+      poderiam informar as do começo. A atenção bidirecional, típica de encoder,
+      passa a ser a escolha adequada. Um bom resultado no treino deixa de ser,
+      por si, sinal desse tipo de vazamento.
+    </p>
+    <p>
+      <strong>O que permanece.</strong> O princípio de fundo: treinar só com a
+      informação que existirá no uso e nunca expor o alvo. Se o rótulo
+      aparecesse na entrada (por exemplo, uma marca "[URGENTE]" que originou a
+      anotação), o mesmo problema voltaria por outra via. Os papéis de Q, K e V
+      e das múltiplas cabeças não mudam.
+    </p>
+    <p>
+      <strong>Como verificar.</strong> Treinar duas versões, com máscara causal
+      e bidirecional, e compará-las num conjunto de validação separado, nas
+      mesmas condições de uso. Apoia: a versão bidirecional igual ou superior,
+      sem grande distância entre treino e validação. Põe em dúvida: desempenho
+      quase perfeito no treino com queda forte na validação (vazamento por outra
+      fonte ou sobreajuste), ou ausência de ganho do bidirecional (o contexto à
+      direita não ajudaria nesta tarefa).
+    </p>
+
+    <h2>Referências</h2>
+    <p class="ref">
+      <strong>Materiais da disciplina</strong> (Grandes Modelos de Linguagem: do
+      Transformer aos Agentes de IA, V2): Aula 1: tarefas e métricas; Aula 2: tokenização; Aula 3: embeddings e Word2Vec; Aula 4: interpretação do
+      laboratório; Aula 5: recorrência, LSTM e atenção; Aula 6: self-attention
+      e máscara causal; Aula 7: posição e bloco Transformer; Aula 8: famílias
+      de modelos e eficiência.
+    </p>
+    <h3>Fontes externas</h3>
+    <ul class="sources">
+      <li>
+        Ainslie, J. et al. (2023).
+        <em
+          >GQA: Training Generalized Multi-Query Transformer Models from
+          Multi-Head Checkpoints</em
+        >. arxiv.org/abs/2305.13245
+      </li>
+      <li>
+        Bahdanau, D.; Cho, K.; Bengio, Y. (2015).
+        <em
+          >Neural Machine Translation by Jointly Learning to Align and
+          Translate</em
+        >. arxiv.org/abs/1409.0473
+      </li>
+      <li>
+        Beltagy, I.; Peters, M.; Cohan, A. (2020).
+        <em>Longformer: The Long-Document Transformer</em>.
+        arxiv.org/abs/2004.05150
+      </li>
+      <li>
+        Devlin, J. et al. (2019).
+        <em
+          >BERT: Pre-training of Deep Bidirectional Transformers for Language
+          Understanding</em
+        >. arxiv.org/abs/1810.04805
+      </li>
+      <li>
+        Hinton, G.; Vinyals, O.; Dean, J. (2015).
+        <em>Distilling the Knowledge in a Neural Network</em>.
+        arxiv.org/abs/1503.02531
+      </li>
+      <li>
+        Jurafsky, D.; Martin, J. H. <em>Speech and Language Processing</em> (3ª
+        ed., rascunho). Stanford University. web.stanford.edu/~jurafsky/slp3
+      </li>
+      <li>
+        Mikolov, T. et al. (2013).
+        <em>Efficient Estimation of Word Representations in Vector Space</em>.
+        arxiv.org/abs/1301.3781
+      </li>
+      <li>
+        Petrov, A.; La Malfa, E.; Torr, P.; Bibi, A. (2023).
+        <em>Language Model Tokenizers Introduce Unfairness Between Languages</em
+        >. NeurIPS 2023. arxiv.org/abs/2305.15425
+      </li>
+      <li>
+        Shazeer, N. (2019).
+        <em>Fast Transformer Decoding: One Write-Head is All You Need</em>.
+        arxiv.org/abs/1911.02150
+      </li>
+      <li>
+        Sutskever, I.; Vinyals, O.; Le, Q. (2014).
+        <em>Sequence to Sequence Learning with Neural Networks</em>.
+        arxiv.org/abs/1409.3215
+      </li>
+      <li>
+        Vaswani, A. et al. (2017). <em>Attention Is All You Need</em>.
+        arxiv.org/abs/1706.03762
+      </li>
+      <li>
+        Wattenberg, M.; Viégas, F.; Johnson, I. (2016).
+        <em>How to Use t-SNE Effectively</em>. Distill.
+        distill.pub/2016/misread-tsne
+      </li>
+    </ul>
+
+    <h2>Declaração de uso de IA</h2>
+    <p>
+      Utilizei Claude (claude.ai) para redigir a versão inicial das respostas
+      dos oito casos e das duas variações a partir do enunciado, e Claude Code
+      para apoiar o estudo dos casos, revisar o texto contra o material da
+      disciplina e formatar o documento. Conferi os oito casos, as duas
+      variações e as linhas de fundamentação com base nos materiais das Aulas 1
+      a 8 (slides das aulas e portal da disciplina) e nas fontes externas
+      listadas em Referências.
+    </p>
+  </body>
+</html>
