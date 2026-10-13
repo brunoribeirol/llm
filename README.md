@@ -14,7 +14,7 @@ Start here: open [`study/index.html`](study/index.html) in a browser.
 | `class/` | Material received from the professor: `slides/`, `notebooks/`, `articles/`, `html/` |
 | `booklet/` | Course booklet (`apostila.pdf`, 302 pages) |
 | `labs/` | Graded labs, one folder per lab |
-| `av1/` | Assessment 1: statement, plan and checklist, AI-usage log, the student's draft |
+| `av1/` | Assessment 1: statement, plan and checklist, AI-usage log, the student's draft, and the final deliverable in `av1/final/` |
 | `reference/portal_gml_262/` | Offline mirror of the professor's portal, kept by `scripts/professor_sync.py` |
 | `reference/teacher-only/` | Teacher-only files from the portal repository; git-ignored, local only |
 | `scripts/` | Workspace tooling (standard-library Python) |
@@ -27,9 +27,11 @@ Start here: open [`study/index.html`](study/index.html) in a browser.
 python3 scripts/professor_sync.py            # sync the portal mirror, check the professor's GitHub profile
 python3 scripts/professor_sync.py --check    # same report, writes nothing
 python3 scripts/check_study_pages.py         # validate study pages (tags, links, inline scripts)
+scripts/build_av1_pdf.sh                     # render av1/final/*.html to PDF
 ```
 
-Both scripts need only Python 3 plus `git` and `curl` on the PATH.
+The Python scripts need only Python 3 plus `git` and `curl` on the PATH. The PDF script needs
+Google Chrome and runs from the repository root.
 
 ## How the study pages work
 

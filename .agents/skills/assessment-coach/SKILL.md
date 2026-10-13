@@ -45,8 +45,32 @@ the other conditions are stated, and that the four required fields are present. 
 check must name the result that would support the new conclusion and the one that would cast
 doubt on it, without executing anything or inventing results.
 
+## Pacing
+
+Learned in AV1 (2026-10-12), when a question-and-retry loop cost the user more time than they had.
+
+- Ask for the deadline and the time budget before the first case, and size the plan to it.
+- Explain the mechanism first, tied to the scenario, then ask. A question the user cannot
+  answer yet costs a full round.
+- One pass per case: keep what is right in the user's answer, name what is missing in one
+  line, and move on. Go back for depth only if time is left.
+- Cover every case before polishing any. An unanswered case scores zero.
+
+## Externally drafted text
+
+If the user brings a text drafted elsewhere (another AI tool, a classmate's document):
+
+- Review it like any draft: rubric, sub-questions, claims against the course material, references.
+- Never take content from a classmate's answers.
+- Check that the AI-use statement matches `ai-usage-log.md`. Say so plainly when it does not,
+  and do not edit the statement into something the log contradicts.
+- Record the external tool in the log.
+
 ## Record
 
 Add a row to the assessment's `ai-usage-log.md` for every assisted step, describing what the
 AI did. The user fills in what they checked. Before the deadline, walk the final checklist in
 the README with the user.
+
+The deliverable's print source lives in the assessment's `final/` folder. For AV1 the PDF is
+rendered with `scripts/build_av1_pdf.sh`, which the user runs outside the agent sandbox.
