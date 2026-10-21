@@ -7,7 +7,8 @@ Assessment 01 of *Grandes Modelos de Linguagem* (lessons 1–8). Statement:
 
 Handed in on 2026-10-13, as reported by the student:
 [`final/avaliacao01_bruno_ribeiro.pdf`](final/avaliacao01_bruno_ribeiro.pdf), 5 A4 pages, built
-on 2026-10-12. Grade and professor's feedback: pending.
+on 2026-10-12. Grade: 9.93, as reported by the student on 2026-10-20. Professor's feedback:
+not recorded yet.
 
 | File | Role |
 |---|---|
