@@ -12,12 +12,13 @@ _Last updated: 2026-10-20_
   built 2026-10-12 18:27 from `av1/final/avaliacao01_bruno_ribeiro.html` with
   `scripts/build_av1_pdf.sh`). The user reported on 2026-10-13 that it was handed in.
 - All work up to the AV1 close-out is on `main`: PR #3 (`feat/av1-final-dossier`) was merged on
-  2026-10-13 as merge commit `91222e7`.
+  2026-10-13 as merge commit `91222e7`; the grade followed in PR #5 (`docs/av1-grade`), merged
+  on 2026-10-20 as `2161177`.
 
 ## Recently changed
 
-- 2026-10-20: AV1 graded 9.93, as reported by the user. Recorded in `av1/README.md`;
-  the professor's feedback is not recorded yet.
+- 2026-10-20: AV1 graded 9.93, as reported by the user; the professor gave no feedback.
+  Recorded in `av1/README.md`, and the study hub's AV1 block now shows it.
 - 2026-10-13: AV1 handed in, as reported by the user. Whether it went on paper, as a PDF
   upload or both was not recorded. Grade and feedback are pending.
 - 2026-10-12: AV1 closed. The user tried the coaching route for cases 1 and 2 (their answers,
@@ -47,9 +48,12 @@ _Last updated: 2026-10-20_
 ## Current objective
 
 AV1 is handed in. The workspace is back to its standing job: a study page for each new lesson
-(9 onward). AV1 is graded (9.93); the professor's feedback, if any, goes in `av1/README.md`.
+(9 onward). AV1 is closed: graded 9.93, no feedback from the professor.
 
 ## Validation evidence
+
+Run on 2026-10-20, after the hub's AV1 line changed: `python3 scripts/check_study_pages.py` →
+9 pages `ok`. The hub was not opened in a browser.
 
 Run on 2026-10-12:
 
@@ -67,11 +71,9 @@ Run on 2026-10-12:
 
 ## Known risks and constraints
 
-- The AI-use statement declares that Claude drafted the initial answers. The AV1 statement
-  allows AI for study, organizing ideas and review and requires an individual final text; how
-  the professor treats this is unknown.
-- Every case in the dossier is longer than the suggested 100–180 words (221–319). The AV1
-  statement says the limits do not trigger an automatic penalty.
+- AV1's dossier declared that Claude drafted the initial answers and ran past the suggested
+  length in every case (221–319 words against 100–180). It was graded 9.93 with no feedback, so
+  neither point can be read as accepted or penalized in general. Read the AV2 statement on both.
 - The repository sits in iCloud-synced `~/Documents`. Bulk writes and regenerated files leave
   `name 2` conflict copies, including inside `.git/`. Check with
   `find . \( -name '* 2' -o -name '* 2.*' \)` after large write sessions.
@@ -91,11 +93,10 @@ Run on 2026-10-12:
 
 1. User fills the "checked by me" column of `av1/ai-usage-log.md` (every row is still
    `pending`).
-2. Record the professor's AV1 feedback in `av1/README.md` if it arrives (grade recorded).
-3. Get the lesson 8 slides and recheck that page's citations.
-4. Lessons 9–30: build each page as the course reaches it (the portal mirror already has the
+2. Get the lesson 8 slides and recheck that page's citations.
+3. Lessons 9–30: build each page as the course reaches it (the portal mirror already has the
    guides). Run `python3 scripts/professor_sync.py` first, from outside the sandbox.
-5. Consider moving the repository out of `~/Documents` to stop the iCloud conflict copies.
+4. Consider moving the repository out of `~/Documents` to stop the iCloud conflict copies.
 
 ## Do not touch without explicit scope
 
