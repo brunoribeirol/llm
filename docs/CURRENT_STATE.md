@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-10-13_
+_Last updated: 2026-10-20_
 
 ## Last confirmed working state
 
@@ -16,6 +16,8 @@ _Last updated: 2026-10-13_
 
 ## Recently changed
 
+- 2026-10-20: AV1 graded 9.93, as reported by the user. Recorded in `av1/README.md`;
+  the professor's feedback is not recorded yet.
 - 2026-10-13: AV1 handed in, as reported by the user. Whether it went on paper, as a PDF
   upload or both was not recorded. Grade and feedback are pending.
 - 2026-10-12: AV1 closed. The user tried the coaching route for cases 1 and 2 (their answers,
@@ -45,7 +47,7 @@ _Last updated: 2026-10-13_
 ## Current objective
 
 AV1 is handed in. The workspace is back to its standing job: a study page for each new lesson
-(9 onward). The AV1 grade and feedback get recorded in `av1/README.md` when they arrive.
+(9 onward). AV1 is graded (9.93); the professor's feedback, if any, goes in `av1/README.md`.
 
 ## Validation evidence
 
@@ -89,7 +91,7 @@ Run on 2026-10-12:
 
 1. User fills the "checked by me" column of `av1/ai-usage-log.md` (every row is still
    `pending`).
-2. Record the AV1 grade and the professor's feedback in `av1/README.md` when they arrive.
+2. Record the professor's AV1 feedback in `av1/README.md` if it arrives (grade recorded).
 3. Get the lesson 8 slides and recheck that page's citations.
 4. Lessons 9–30: build each page as the course reaches it (the portal mirror already has the
    guides). Run `python3 scripts/professor_sync.py` first, from outside the sandbox.
